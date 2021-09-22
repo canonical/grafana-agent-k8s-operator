@@ -3,32 +3,50 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""A  juju charm for Grafana Agent on Kubernetes."""
+
 import logging
 
 import yaml
+from charms.prometheus_k8s.v0.prometheus import MetricsEndpointConsumer
+from charms.prometheus_k8s.v0.prometheus_remote_write import (
+    PrometheusRemoteWriteConsumer,
+)
 from ops.charm import CharmBase
 from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus
+from ops.pebble import PathError
+from requests import post
 
 logger = logging.getLogger(__name__)
 
+CONFIG_PATH = "/etc/agent/agent.yaml"
+
 
 class GrafanaAgentOperatorCharm(CharmBase):
-    """Grafana Agent Charm"""
+    """Grafana Agent Charm."""
 
     def __init__(self, *args):
         super().__init__(*args)
+
+        self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
+        self._scrape = MetricsEndpointConsumer(self, "scrape")
+
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
+        self.framework.observe(
+            self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
+        )
+        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
 
     def on_pebble_ready(self, event: EventBase) -> None:
-        """Event handler for the pebble ready event
+        """Event handler for the pebble ready event.
 
         Args:
             event: The event object of the pebble ready event
         """
         container = event.workload
-        container.push("/etc/agent/agent.yaml", self._config_file())
+        container.push(CONFIG_PATH, self._config_file())
         pebble_layer = {
             "summary": "agent layer",
             "description": "pebble config layer for Grafana Agent",
@@ -45,8 +63,31 @@ class GrafanaAgentOperatorCharm(CharmBase):
         container.autostart()
         self.unit.status = ActiveStatus()
 
+    def on_remote_write_changed(self, _) -> None:
+        """Event handler for the remote write changed event."""
+        self._update_config()
+
+    def on_scrape_targets_changed(self, _) -> None:
+        """Event handler for the scrape targets changed event."""
+        self._update_config()
+
+    def _update_config(self):
+        container = self.unit.get_container("agent")
+        if not container.can_connect():
+            # Pebble is not ready yet so no need to update config
+            return
+        config = self._config_file()
+        try:
+            old_config = container.pull(CONFIG_PATH)
+        except PathError:
+            # If the file does not yet exist, pebble_ready has not run yet
+            pass
+        if yaml.safe_load(config) != yaml.safe_load(old_config):
+            container.push(CONFIG_PATH, config)
+            self._reload_config()
+
     def _cli_args(self) -> str:
-        """Return the cli arguments to pass to agent
+        """Return the cli arguments to pass to agent.
 
         Returns:
             The arguments as a string
@@ -54,7 +95,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
 
     def _config_file(self) -> str:
-        """Put all the config sections together and return the main config file
+        """Put all the config sections together and return the main config file.
 
         Returns:
             The config file contents
@@ -71,7 +112,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         return yaml.dump(config)
 
     def _server_config(self) -> dict:
-        """Return the server section of the config
+        """Return the server section of the config.
 
         Returns:
             The dict representing the config
@@ -79,28 +120,53 @@ class GrafanaAgentOperatorCharm(CharmBase):
         return {"log_level": "info"}
 
     def _integrations_config(self) -> dict:
-        """Return the integrations section of the config
+        """Return the integrations section of the config.
 
         Returns:
             The dict representing the config
         """
-        return {"agent": {"enabled": True}}
+        return {
+            "agent": {"enabled": True},
+            "prometheus_remote_write": list(self._remote_write.configs),
+        }
 
     def _prometheus_config(self) -> dict:
-        """Return the prometheus section of the config
+        """Return the prometheus section of the config.
 
         Returns:
             The dict representing the config
         """
-        return {}
+        return {
+            "configs": [
+                {
+                    "name": "agent_scraper",
+                    "scrape_configs": self._scrape.jobs(),
+                    "remote_write": list(self._remote_write.configs),
+                }
+            ]
+        }
 
     def _loki_config(self) -> dict:
-        """Return the loki section of the config
+        """Return the loki section of the config.
 
         Returns:
             The dict representing the config
         """
         return {}
+
+    def _reload_config(self, attempts: int = 10) -> None:
+        """Reload the config file.
+
+        Args:
+            attempts: number of attempts to reload
+        """
+        url = "http://localhost/-/reload"
+        for _ in range(attempts):
+            response = post(url)
+            if response.status_code == 200:
+                break
+        else:
+            raise Exception("Error: Could not reload config.")
 
 
 if __name__ == "__main__":

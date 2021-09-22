@@ -20,6 +20,12 @@ resources:
     type: oci-image
     description: OCI image for Grafana Agent
 
+requires:
+  prometheus-remote-write:
+    interface: prometheus_remote_write
+  scrape:
+    interface: prometheus_scrape
+
 
 storage:
   data:
