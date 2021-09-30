@@ -9,7 +9,6 @@ import logging
 
 import yaml
 from charms.loki_k8s.v0.loki import LokiConsumer
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -17,13 +16,23 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import PathError
-from requests import post
+from requests import Session
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
+
+
+class GrafanaAgentReloadError(Exception):
+    """Custom exception to indicate that grafana agent config couldn't be reloaded."""
+
+    def __init__(self, message="Error: Could not reload config"):
+        self.message = message
+        super().__init__(self.message)
 
 
 class GrafanaAgentOperatorCharm(CharmBase):
@@ -38,7 +47,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
-        self._scrape = MetricsEndpointConsumer(self)
+        self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
         self._loki = LokiConsumer(self, "logging")
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
@@ -115,9 +124,14 @@ class GrafanaAgentOperatorCharm(CharmBase):
         except PathError:
             # If the file does not yet exist, pebble_ready has not run yet
             pass
-        if yaml.safe_load(config) != yaml.safe_load(old_config):
-            self._container.push(CONFIG_PATH, config)
-            self._reload_config()
+
+        try:
+            if yaml.safe_load(config) != yaml.safe_load(old_config):
+                self._container.push(CONFIG_PATH, config)
+                self._reload_config()
+                self.unit.status = ActiveStatus()
+        except GrafanaAgentReloadError as e:
+            self.unit.status = BlockedStatus(str(e))
 
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
@@ -231,23 +245,25 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         if loki_push_api := self._loki.loki_push_api:
             config = {
-                "configs": [{
-                    "name": "promtail",
-                    "clients": [{"url": f"{loki_push_api}"}],
-                    "positions": {"filename": f"{self._promtail_positions}"},
-                    "scrape_configs": [{
-                        "job_name": "loki",
-                        "loki_push_api": {
-                            "server": {
-                                "http_listen_port": self._http_listen_port,
-                                "grpc_listen_port": self._grpc_listen_port,
-                            },
-                            "labels": {
-                                "pushserver": "loki"
-                            },
-                        },
-                    }]
-                }]
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": [{"url": f"{loki_push_api}"}],
+                        "positions": {"filename": f"{self._promtail_positions}"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": self._http_listen_port,
+                                        "grpc_listen_port": self._grpc_listen_port,
+                                    },
+                                    "labels": {"pushserver": "loki"},
+                                },
+                            }
+                        ],
+                    }
+                ]
             }
 
         return config
@@ -258,13 +274,17 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Args:
             attempts: number of attempts to reload
         """
-        url = "http://localhost/-/reload"
-        for _ in range(attempts):
-            response = post(url)
-            if response.status_code == 200:
-                break
-        else:
-            raise Exception("Error: Could not reload config.")
+        try:
+            self.unit.status = MaintenanceStatus("Reloading Grafana agent config")
+            url = "http://localhost/-/reload"
+            errors = list(range(400, 452)) + list(range(500, 513))
+            s = Session()
+            retries = Retry(total=attempts, backoff_factor=0.1, status_forcelist=errors)
+            s.mount("http://", HTTPAdapter(max_retries=retries))
+            s.post(url)
+        except Exception as e:
+            message = f"Error: Could not reload config. - {str(e)}"
+            raise GrafanaAgentReloadError(message)
 
 
 if __name__ == "__main__":
