@@ -25,7 +25,8 @@ requires:
     interface: prometheus_remote_write
   scrape:
     interface: prometheus_scrape
-
+  logging:
+    interface: loki_push_api
 
 storage:
   data:
