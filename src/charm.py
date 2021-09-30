@@ -74,8 +74,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 }
             },
         }
-        container.add_layer("agent", pebble_layer, combine=True)
-        container.autostart()
+        self._container.add_layer(self._name, pebble_layer, combine=True)
+        self._container.autostart()
         self.unit.status = ActiveStatus()
 
     def on_remote_write_changed(self, _) -> None:
@@ -87,18 +87,19 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._update_config()
 
     def _update_config(self):
-        container = self.unit.get_container("agent")
-        if not container.can_connect():
+
+        if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
+            self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
         config = self._config_file()
         try:
-            old_config = container.pull(CONFIG_PATH)
+            old_config = self._container.pull(CONFIG_PATH)
         except PathError:
             # If the file does not yet exist, pebble_ready has not run yet
             pass
         if yaml.safe_load(config) != yaml.safe_load(old_config):
-            container.push(CONFIG_PATH, config)
+            self._container.push(CONFIG_PATH, config)
             self._reload_config()
 
     def _cli_args(self) -> str:
