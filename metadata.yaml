@@ -23,9 +23,8 @@ resources:
 requires:
   prometheus-remote-write:
     interface: prometheus_remote_write
-  scrape:
+  metrics-endpoint:
     interface: prometheus_scrape
-
 
 storage:
   data:

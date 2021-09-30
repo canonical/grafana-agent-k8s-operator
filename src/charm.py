@@ -8,14 +8,14 @@
 import logging
 
 import yaml
-from charms.prometheus_k8s.v0.prometheus import MetricsEndpointConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from ops.charm import CharmBase
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase
 from ops.main import main
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import PathError
 from requests import post
 
@@ -31,7 +31,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
 
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
-        self._scrape = MetricsEndpointConsumer(self, "scrape")
+        self._scrape = MetricsEndpointConsumer(self, "metrics-endpoint")
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
@@ -56,20 +56,36 @@ class GrafanaAgentOperatorCharm(CharmBase):
                     "summary": "agent",
                     "command": f"/bin/agent {self._cli_args()}",
                     "startup": "enabled",
-                }
+                },
             },
         }
         container.add_layer("agent", pebble_layer, combine=True)
         container.autostart()
-        self.unit.status = ActiveStatus()
 
-    def on_remote_write_changed(self, _) -> None:
-        """Event handler for the remote write changed event."""
-        self._update_config()
+        self._update_status()
 
     def on_scrape_targets_changed(self, _) -> None:
         """Event handler for the scrape targets changed event."""
         self._update_config()
+        self._update_status()
+
+    def on_remote_write_changed(self, _: RelationChangedEvent) -> None:
+        """Event handler for the remote write changed event."""
+        self._update_config()
+        self._update_status()
+
+    def _update_status(self) -> None:
+        """Update the status to reflect the status quo."""
+        if len(self.model.relations["metrics-endpoint"]):
+            if not len(self.model.relations["prometheus-remote-write"]):
+                self.unit.status = BlockedStatus("no related Prometheus remote-write")
+                return
+
+        if not self.unit.get_container("agent").can_connect():
+            self.unit.status = WaitingStatus("waiting for the agent container to start")
+            return
+
+        self.unit.status = ActiveStatus()
 
     def _update_config(self):
         container = self.unit.get_container("agent")
@@ -125,8 +141,50 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The dict representing the config
         """
+        juju_model = self.model.name
+        juju_model_uuid = self.model.uuid
+        juju_application = self.model.app.name
+        juju_unit = self.unit.name
+
+        instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
+
         return {
-            "agent": {"enabled": True},
+            "agent": {
+                "enabled": True,
+                # Align the "instance" able with the rest of the Juju-collected metrics
+                "relabel_configs": [
+                    {
+                        "target_label": "instance",
+                        "regex": "(.*)",
+                        "replacement": instance_value,
+                    },
+                    {  # To add a label, we create a relabelling that replaces a built-in
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_charm",
+                        "replacement": self.meta.name,
+                    },
+                    {  # To add a label, we create a relabelling that replaces a built-in
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_model",
+                        "replacement": juju_model,
+                    },
+                    {
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_model_uuid",
+                        "replacement": juju_model_uuid,
+                    },
+                    {
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_application",
+                        "replacement": juju_application,
+                    },
+                    {
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_unit",
+                        "replacement": juju_unit,
+                    },
+                ],
+            },
             "prometheus_remote_write": list(self._remote_write.configs),
         }
 
@@ -152,6 +210,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The dict representing the config
         """
+        # TODO Implement
         return {}
 
     def _reload_config(self, attempts: int = 10) -> None:
