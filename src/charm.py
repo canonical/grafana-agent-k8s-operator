@@ -174,18 +174,18 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if loki_push_api := self._loki.loki_push_api:
             config = {
                 "configs": [{
-                    "name": "promtail_conf",
+                    "name": "promtail",
                     "clients": [{"url": f"{loki_push_api}"}],
                     "positions": {"filename": f"{self._promtail_positions}"},
                     "scrape_configs": [{
-                        "job_name": "loki-push",
+                        "job_name": "loki",
                         "loki_push_api": {
                             "server": {
                                 "http_listen_port": self._http_listen_port,
                                 "grpc_listen_port": self._grpc_listen_port,
                             },
                             "labels": {
-                                "pushserver": "loki-push"
+                                "pushserver": "loki"
                             },
                         },
                     }]
