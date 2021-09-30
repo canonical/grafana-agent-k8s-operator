@@ -163,6 +163,21 @@ each job must be given a unique name. For example
 It is also possible to configure other scrape related parameters using
 these job specifications as described by the Prometheus
 [documentation](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config).
+The permissible subset of job specific scrape configuration parameters
+supported in a `MetricsEndpointProvider` job specification are:
+
+- `job_name`
+- `metrics_path`
+- `static_configs`
+- `scrape_interval`
+- `scrape_timeout`
+- `proxy_url`
+- `relabel_configs`
+- `metrics_relabel_configs`
+- `sample_limit`
+- `label_limit`
+- `label_name_length_limit`
+- `label_value_lenght_limit`
 
 ## Consumer Library Usage
 
@@ -285,6 +300,7 @@ from pathlib import Path
 
 import yaml
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.model import ModelError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bc84295fef5f4049878f07b131968ee2"
@@ -294,27 +310,55 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 8
 
 
 logger = logging.getLogger(__name__)
 
 
+ALLOWED_KEYS = {
+    "job_name",
+    "metrics_path",
+    "static_configs",
+    "scrape_interval",
+    "scrape_timeout",
+    "proxy_url",
+    "relabel_configs",
+    "metrics_relabel_configs",
+    "sample_limit",
+    "label_limit",
+    "label_name_length_limit",
+    "label_value_lenght_limit",
+}
+DEFAULT_JOB = {
+    "metrics_path": "/metrics",
+    "static_configs": [{"targets": ["*:80"]}],
+}
+
+
 def _sanitize_scrape_configuration(job) -> dict:
     """Restrict permissible scrape configuration options.
 
+    If job is empty then a default job is returned. The
+    default job is
+
+    ```
+    {
+        "metrics_path": "/metrics",
+        "static_configs": [{"targets": ["*:80"]}],
+    }
+    ```
+
     Args:
-        job: a dict containing a single Prometheus job_name
+        job: a dict containing a single Prometheus job
             specification.
 
     Returns:
         a dictionary containing a sanitized job specification.
     """
-    return {
-        "job_name": job.get("job_name"),
-        "metrics_path": job.get("metrics_path", "/metrics"),
-        "static_configs": job.get("static_configs", [{"targets": ["*:80"]}]),
-    }
+    sanitized_job = DEFAULT_JOB.copy()
+    sanitized_job.update({key: value for key, value in job.items() if key in ALLOWED_KEYS})
+    return sanitized_job
 
 
 class TargetsChangedEvent(EventBase):
@@ -548,12 +592,13 @@ class MetricsEndpointConsumer(Object):
         name = job.get("job_name")
         job_name = f"{job_name_prefix}_{name}" if name else job_name_prefix
 
-        config = {"job_name": job_name, "metrics_path": job["metrics_path"]}
+        labeled_job = job.copy()
+        labeled_job["job_name"] = job_name
 
         static_configs = job.get("static_configs")
-        config["static_configs"] = []
+        labeled_job["static_configs"] = []
 
-        relabel_config = {
+        instance_relabel_config = {
             "source_labels": ["juju_model", "juju_model_uuid", "juju_application"],
             "separator": "_",
             "target_label": "instance",
@@ -583,20 +628,23 @@ class MetricsEndpointConsumer(Object):
                 unitless_config = self._labeled_unitless_config(
                     unitless_targets, labels, scrape_metadata
                 )
-                config["static_configs"].append(unitless_config)
+                labeled_job["static_configs"].append(unitless_config)
 
             # label scrape targets that do have unit labels
             for host_name, host_address in hosts.items():
                 static_config = self._labeled_unit_config(
                     host_name, host_address, ports, labels, scrape_metadata
                 )
-                config["static_configs"].append(static_config)
-                if "juju_unit" not in relabel_config["source_labels"]:
-                    relabel_config["source_labels"].append("juju_unit")
+                labeled_job["static_configs"].append(static_config)
+                if "juju_unit" not in instance_relabel_config["source_labels"]:
+                    instance_relabel_config["source_labels"].append("juju_unit")
 
-        config["relabel_configs"] = [relabel_config]
+        # ensure topology relabeling of instance label is last in order of relabelings
+        relabel_configs = job.get("relabel_configs", [])
+        relabel_configs.append(instance_relabel_config)
+        labeled_job["relabel_configs"] = relabel_configs
 
-        return config
+        return labeled_job
 
     def _set_juju_labels(self, labels, scrape_metadata) -> dict:
         """Create a copy of metric labels with Juju topology information.
@@ -685,69 +733,161 @@ class MetricsEndpointProvider(Object):
     def __init__(
         self,
         charm,
-        name,
-        service_event,
+        relation_name=None,
         jobs=[],
-        alert_rules_path="src/prometheus_alert_rules",
+        alert_rules_path=None,
     ):
         """Construct a metrics provider for a Prometheus charm.
 
-        The `MetricsEndpointProvider` object provides scrape configurations
-        to a Prometheus charm. A charm instantiating this object has
-        metrics from each of its units scraped by the related Prometheus
+        If your charm exposes a Prometheus metrics endpoint, the
+        `MetricsEndpointProvider` object enables your charm to easily
+        communicate to a consumer how to reach that metrics endpoint.
+
+        A charm instantiating this object has the metrics endpoints
+        of each of its units scraped by the related Prometheus
         charms. The scraped metrics are automatically tagged by the
         Prometheus charms with Juju topology data via the
         `juju_model_name`, `juju_model_uuid`, `juju_application_name`
         and `juju_unit` labels.
 
-        The `MetricsEndpointProvider` can be instantiated as follows:
+        In case of a charm exposing the metrics endpoint for each of its
+        units on port 8080 and the `/metrics` path, the
+        `MetricsEndpointProvider` can be instantiated as follows:
 
-            self.prometheus = MetricsEndpointProvider(self, "metrics-endpoint",
-                                                 self.container_name_pebble_ready)
+            self.prometheus = MetricsEndpointProvider(
+                self,
+                jobs=[{
+                    "static_configs": [{"targets": ["*:8080"]}],
+                }])
 
-        In response to relation joined events this metrics provider object
-        will set the following relation data required by the Prometheus charm.
-        - `scrape_metadata`
-        - `scrape_jobs`
-        - `alert_rules`
+        The notation `*:<port>` means "scrape each unit of this charm on port
+        `<port>`.
 
-        The `alert_rules` are read from `*.rule` files in the `src/prometheus_alert_rules`
-        directory. If the syntax of these rules is invalid `MetricsEndpointProvider` logs
-        an error and does not load the particular rule.
+        In case the metrics endpoints are not on the standard `/metrics` path,
+        a custom path can be specified as follows:
+
+            self.prometheus = MetricsEndpointProvider(
+                self,
+                jobs=[{
+                    "metrics_path": "/my/strange/metrics/path",
+                    "static_configs": [{"targets": ["*:8080"]}],
+                }])
+
+        Notice how the `jobs` argument is actually a list: this allows you
+        to expose multiple combinations of paths "metrics_path" and "static_configs"
+        in case you charm exposes multiple endpoints, which could happen, for example,
+        when you have multiple workload containers, with applications in each needing
+        to be scraped.
+
+        It is also possible to specify alert rules. By default, this library will look
+        into the `<charm_parent_dir>/prometheus_alert_rules`, which in standard charm
+        layouts resolves to `src/prometheus_alert_rules`. Each alert rule goes into a
+        separate `*.rule` file. If the syntax of a rule is invalid,
+        the  `MetricsEndpointProvider` logs an error and does not load the particular
+        rule.
+
+        To avoid false positives and negatives in the evaluation of your alert rules,
+        you must always add the `%%juju_topology%%` token as label filters in the
+        PromQL expression, e.g.:
+
+            alert: UnitUnavailable
+            expr: up{%%juju_topology%%} < 1
+            for: 0m
+            labels:
+                severity: critical
+            annotations:
+              summary: Unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} unavailable
+              description: >
+                The unit {{ $labels.juju_model }} {{ $labels.juju_unit }} is unavailable
+
+        The `%%juju_topology%%` will be replaced with label filters ensuring that the
+        only timeseries evaluated are those scraped from this charm, and no other.
+        Failing to ensure that the `%%juju_topology%%` token is applied to each and every
+        of the queries timeseries will lead to unpredictable alert rule evaluation
+        if your charm is deployed multiple times and various of its instances are
+        monitored by the same Prometheus.
 
         Args:
             charm: a `CharmBase` object that manages this
                 `MetricsEndpointProvider` object. Typically this is
                 `self` in the instantiating class.
-            name: a string name of the relation between `charm` and
-                the Prometheus charmed service.
-            service_event: a `CharmEvent` in response to which each charm unit
-                must advertise its scrape endpoint host address.
+            relation_name: an optional string name of the relation between `charm`
+                and the Prometheus charmed service. You will need to specify this
+                parameter only if your charm provides more than one relation with
+                `prometheus_scrape` as interface, which is very uncommon: if your
+                charm has multiple metrics endpoints, you can expose them over
+                one relation as separate entries in the `jobs` list.
+                If `relation_name` is not specified, the
+                `MetricsEndpointProvider` will look for the existence of precisely
+                one relation provided by the charm and using the `prometheus_scrape`
+                interface and, if none or multiple are found, it will raise a
+                ops.model.ModelError exception.
             jobs: an optional list of dictionaries where each
                 dictionary represents the Prometheus scrape
                 configuration for a single job. When not provided, a
                 default scrape configuration is provided for the
-                `/metrics` endpoint pooling using port `80`.
+                `/metrics` endpoint pooling all units of this charm on port `80`.
             alert_rules_path: an optional path for the location of alert rules
-                files.  Defaults to "src/prometheus_alert_rules" at the top level
-                of the charm repository.
+                files.  Defaults to "./prometheus_alert_rules",
+                resolved from the directory hosting the charm entry file.
+                The alert rules are automatically update on charm upgrade.
         """
-        super().__init__(charm, name)
+        if not relation_name:
+            # Check if there is just one relation with the right interface
+            prometheus_scrape_relations = [
+                relation_name
+                for relation_name, relation_meta in charm.meta.provides.items()
+                if relation_meta.interface_name == "prometheus_scrape"
+            ]
+
+            if len(prometheus_scrape_relations) == 1:
+                relation_name = prometheus_scrape_relations[0]
+            elif len(prometheus_scrape_relations) == 0:
+                raise ModelError(
+                    "No provided relation with the 'prometheus_scrape' interface found"
+                )
+            else:
+                raise ModelError(
+                    "Multiple relations with the 'prometheus_scrape' interface found: "
+                    f" {prometheus_scrape_relations}"
+                )
+
+        if not alert_rules_path:
+            import sys
+
+            charm_file = sys.path[0]
+
+            import pathlib
+
+            default_alerts_dir = pathlib.Path(charm_file).joinpath("prometheus_alert_rules")
+
+            if default_alerts_dir.exists() and default_alerts_dir.is_dir:
+                alert_rules_path = str(default_alerts_dir.absolute())
+
+        super().__init__(charm, relation_name)
 
         self._charm = charm
         self._ALERT_RULES_PATH = alert_rules_path
-        self._service_event = service_event
-        self._relation_name = name
+        self._relation_name = relation_name
         # Sanitize job configurations to the supported subset of parameters
         self._jobs = [_sanitize_scrape_configuration(job) for job in jobs]
 
         events = self._charm.on[self._relation_name]
-        self.framework.observe(events.relation_joined, self._set_scrape_metadata)
-        self.framework.observe(events.relation_changed, self._set_scrape_metadata)
-        self.framework.observe(self._service_event, self._set_unit_ip)
+        self.framework.observe(events.relation_created, self._set_scrape_job_spec)
+        self.framework.observe(events.relation_changed, self._set_scrape_job_spec)
 
-    def _set_scrape_metadata(self, event):
-        """Ensure scrape targets metadata is made available to Prometheus.
+        # Set the ip address when the containers start (as a workaround for
+        # not being able to lookup the pod ip)
+        for container_name in charm.unit.containers:
+            self.framework.observe(
+                charm.on[container_name].pebble_ready,
+                self._set_unit_ip,
+            )
+
+        self.framework.observe(self._charm.on.upgrade_charm, self._set_scrape_job_spec)
+
+    def _set_scrape_job_spec(self, event):
+        """Ensure scrape target information is made available to Prometheus.
 
         When a metrics provider charm is related to a Prometheus charm, the
         metrics provider sets metadata related to its own scrape
@@ -755,35 +895,33 @@ class MetricsEndpointProvider(Object):
         data.  In addition each of the consumer units also sets its own
         host address in Juju unit relation data.
 
-        Args:
-            event: a `CharmEvent` in response to which `MetricsEndpointProvider` will
-                forward scrape jobs, alert rules, metrics endpoint host addresses
-                and related metadata to the Prometheus charm.
+        All args are ignored. This is a commodity to enable this method to be
+        used as an event handler, without having to care about the event that
+        could be passed.
         """
-        event.relation.data[self._charm.unit]["prometheus_scrape_host"] = str(
-            self._charm.model.get_binding(event.relation).network.bind_address
-        )
+        self._set_unit_ip(event)
 
         if not self._charm.unit.is_leader():
             return
 
-        event.relation.data[self._charm.app]["scrape_metadata"] = json.dumps(self._scrape_metadata)
-        event.relation.data[self._charm.app]["scrape_jobs"] = json.dumps(self._scrape_jobs)
+        for relation in self._charm.model.relations[self._relation_name]:
+            relation.data[self._charm.app]["scrape_metadata"] = json.dumps(self._scrape_metadata)
+            relation.data[self._charm.app]["scrape_jobs"] = json.dumps(self._scrape_jobs)
 
-        if alert_groups := self._labeled_alert_groups:
-            event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
-                {"groups": alert_groups}
-            )
+            if alert_groups := self._labeled_alert_groups:
+                relation.data[self._charm.app]["alert_rules"] = json.dumps(
+                    {"groups": alert_groups}
+                )
 
-    def _set_unit_ip(self, event):
+    def _set_unit_ip(self, _):
         """Set unit host address.
 
         Each time a metrics provider charm container is restarted it updates its own
         host address in the unit relation data for the Prometheus charm.
 
-        Args:
-            event: a `CharmEvent` in response to which each metrics
-                endpoint will update its host address.
+        The only argument specified is ignored. This is for expediency to be able to
+        use this method as an event handler, although no access to the event is actually
+        needed.
         """
         for relation in self._charm.model.relations[self._relation_name]:
             relation.data[self._charm.unit]["prometheus_scrape_host"] = str(

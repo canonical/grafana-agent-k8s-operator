@@ -8,6 +8,8 @@
 import logging
 
 import yaml
+from charms.loki_k8s.v0.loki import LokiConsumer
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -27,17 +29,31 @@ CONFIG_PATH = "/etc/agent/agent.yaml"
 class GrafanaAgentOperatorCharm(CharmBase):
     """Grafana Agent Charm."""
 
+    _name = "agent"
+    _promtail_positions = "/tmp/positions.yaml"
+    _http_listen_port = 3500
+    _grpc_listen_port = 3600
+
     def __init__(self, *args):
         super().__init__(*args)
-
+        self._container = self.unit.get_container(self._name)
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
-        self._scrape = MetricsEndpointConsumer(self, "metrics-endpoint")
+        self._scrape = MetricsEndpointConsumer(self)
+        self._loki = LokiConsumer(self, "logging")
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
             self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+
+        self.framework.observe(
+            self.on["logging"].relation_changed, self._on_logging_relation_changed
+        )
+
+    def _on_logging_relation_changed(self, event):
+        logging.warning(event)
+        self._update_config()
 
     def on_pebble_ready(self, event: EventBase) -> None:
         """Event handler for the pebble ready event.
@@ -210,8 +226,30 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The dict representing the config
         """
-        # TODO Implement
-        return {}
+        config = {}
+
+        if loki_push_api := self._loki.loki_push_api:
+            config = {
+                "configs": [{
+                    "name": "promtail_conf",
+                    "clients": [{"url": f"{loki_push_api}"}],
+                    "positions": {"filename": f"{self._promtail_positions}"},
+                    "scrape_configs": [{
+                        "job_name": "loki-push",
+                        "loki_push_api": {
+                            "server": {
+                                "http_listen_port": self._http_listen_port,
+                                "grpc_listen_port": self._grpc_listen_port,
+                            },
+                            "labels": {
+                                "pushserver": "loki-push"
+                            },
+                        },
+                    }]
+                }]
+            }
+
+        return config
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
