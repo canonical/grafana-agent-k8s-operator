@@ -23,6 +23,8 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
+from kubernetes_service import K8sServicePatch, PatchFailed
+
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
@@ -131,8 +133,16 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:
             service_ports = [
-                (f"{self.app.name}-http-listen-port", self._http_listen_port, self._http_listen_port),
-                (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port, self._grpc_listen_port),
+                (
+                    f"{self.app.name}-http-listen-port",
+                    self._http_listen_port,
+                    self._http_listen_port,
+                ),
+                (
+                    f"{self.app.name}-grpc-listen-port",
+                    self._grpc_listen_port,
+                    self._grpc_listen_port,
+                ),
             ]
             try:
                 K8sServicePatch.set_ports(self.app.name, service_ports)

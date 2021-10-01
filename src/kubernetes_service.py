@@ -62,6 +62,7 @@ class K8sServicePatch:
         Args:
             app: app name
             service_ports: a list of tuples (name, port, target_port) for every service port.
+
         Returns:
             kubernetes.client.V1Service: A Kubernetes Service with correctly annotated metadata and
             ports.
@@ -90,16 +91,21 @@ class K8sServicePatch:
         """Patch the Kubernetes service created by Juju to map the correct port.
 
         Currently, Juju uses port 65535 for all endpoints. This can be observed via:
+
             kubectl describe services -n <model_name> | grep Port -C 2
+
         At runtime, pebble watches which ports are bound and we need to patch the gap for pebble
         not telling Juju to fix the K8S Service definition.
+
         Typical usage example from within charm code (e.g. on_install):
+
             service_ports = [("my-app-api", 9093, 9093), ("my-app-ha", 9094, 9094)]
             K8sServicePatch.set_ports(self.app.name, service_ports)
 
         Args:
             app: app name
             service_ports: a list of tuples (name, port, target_port) for every service port.
+
         Raises:
             PatchFailed: if patching fails.
         """
