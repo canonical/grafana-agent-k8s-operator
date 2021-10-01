@@ -13,15 +13,16 @@ from charms.prometheus_k8s.v0.prometheus import MetricsEndpointConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from kubernetes_service import K8sServicePatch, PatchFailed
 from ops.charm import CharmBase
 from ops.framework import EventBase, StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import PathError
-from requests import post, Session
+from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+
+from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,8 @@ CONFIG_PATH = "/etc/agent/agent.yaml"
 
 
 class GrafanaAgentReloadError(Exception):
-    """Custom exception to indicate that grafana agent config couldn't be reloaded"""
+    """Custom exception to indicate that grafana agent config couldn't be reloaded."""
+
     def __init__(self, message="Error: Could not reload config"):
         self.message = message
         super().__init__(self.message)
@@ -114,8 +116,16 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:
             service_ports = [
-                (f"{self.app.name}-http-listen-port", self._http_listen_port, self._http_listen_port),
-                (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port, self._grpc_listen_port),
+                (
+                    f"{self.app.name}-http-listen-port",
+                    self._http_listen_port,
+                    self._http_listen_port,
+                ),
+                (
+                    f"{self.app.name}-grpc-listen-port",
+                    self._grpc_listen_port,
+                    self._grpc_listen_port,
+                ),
             ]
             try:
                 K8sServicePatch.set_ports(self.app.name, service_ports)
@@ -212,7 +222,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The dict representing the config
         """
-
         config = {}
 
         if self._stored.remove_loki_config:
@@ -221,23 +230,25 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         if loki_push_api := self._loki.loki_push_api:
             config = {
-                "configs": [{
-                    "name": "promtail",
-                    "clients": [{"url": f"{loki_push_api}"}],
-                    "positions": {"filename": f"{self._promtail_positions}"},
-                    "scrape_configs": [{
-                        "job_name": "loki",
-                        "loki_push_api": {
-                            "server": {
-                                "http_listen_port": self._http_listen_port,
-                                "grpc_listen_port": self._grpc_listen_port,
-                            },
-                            "labels": {
-                                "pushserver": "loki"
-                            },
-                        },
-                    }]
-                }]
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": [{"url": f"{loki_push_api}"}],
+                        "positions": {"filename": f"{self._promtail_positions}"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": self._http_listen_port,
+                                        "grpc_listen_port": self._grpc_listen_port,
+                                    },
+                                    "labels": {"pushserver": "loki"},
+                                },
+                            }
+                        ],
+                    }
+                ]
             }
 
         return config
@@ -254,7 +265,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             errors = list(range(400, 452)) + list(range(500, 513))
             s = Session()
             retries = Retry(total=attempts, backoff_factor=0.1, status_forcelist=errors)
-            s.mount('http://', HTTPAdapter(max_retries=retries))
+            s.mount("http://", HTTPAdapter(max_retries=retries))
             s.post(url)
         except Exception as e:
             message = f"Error: Could not reload config. - {str(e)}"
