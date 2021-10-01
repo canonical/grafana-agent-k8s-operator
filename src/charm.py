@@ -13,8 +13,9 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from kubernetes_service import K8sServicePatch, PatchFailed
 from ops.charm import CharmBase, RelationChangedEvent
-from ops.framework import EventBase
+from ops.framework import EventBase, StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import PathError
@@ -38,6 +39,7 @@ class GrafanaAgentReloadError(Exception):
 class GrafanaAgentOperatorCharm(CharmBase):
     """Grafana Agent Charm."""
 
+    _stored = StoredState()
     _name = "agent"
     _promtail_positions = "/tmp/positions.yaml"
     _http_listen_port = 3500
@@ -46,23 +48,36 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+        self._stored.set_default(k8s_service_patched=False, config="")
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
         self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
         self._loki = LokiConsumer(self, "logging")
 
+        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
             self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
-
         self.framework.observe(
             self.on["logging"].relation_changed, self._on_logging_relation_changed
         )
+        self.framework.observe(
+            self.on["logging"].relation_departed, self._on_logging_relation_departed
+        )
 
-    def _on_logging_relation_changed(self, event):
-        logging.warning(event)
+    def _on_install(self, _):
+        """Handler for the install event during which we will update the K8s service."""
+        self._patch_k8s_service()
+
+    def _on_logging_relation_changed(self, _):
+        """Event handler for the logging relation changed event."""
         self._update_config()
+
+    def _on_logging_relation_departed(self, _):
+        """Event handler for the logging relation reparted event."""
+        # Implement it
+        pass
 
     def on_pebble_ready(self, event: EventBase) -> None:
         """Event handler for the pebble ready event.
@@ -111,6 +126,21 @@ class GrafanaAgentOperatorCharm(CharmBase):
             return
 
         self.unit.status = ActiveStatus()
+
+    def _patch_k8s_service(self):
+        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+            service_ports = [
+                (f"{self.app.name}-http-listen-port", self._http_listen_port, self._http_listen_port),
+                (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port, self._grpc_listen_port),
+            ]
+            try:
+                K8sServicePatch.set_ports(self.app.name, service_ports)
+            except PatchFailed as e:
+                logger.error("Unable to patch the Kubernetes service: %s", str(e))
+            else:
+                self._stored.k8s_service_patched = True
+                logger.info("Successfully patched the Kubernetes service!")
 
     def _update_config(self):
 
