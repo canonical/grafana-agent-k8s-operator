@@ -13,7 +13,6 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
-from kubernetes_service import K8sServicePatch, PatchFailed
 from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase, StoredState
 from ops.main import main

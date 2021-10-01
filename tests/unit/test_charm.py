@@ -3,13 +3,14 @@
 
 import json
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import responses
-from ops.model import ActiveStatus, BlockedStatus, Container
+import yaml
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.testing import Harness
 
-from charm import GrafanaAgentOperatorCharm
+from charm import GrafanaAgentOperatorCharm, GrafanaAgentReloadError
 
 
 def pull_empty_fake_file(self, _):
@@ -44,6 +45,7 @@ class TestCharm(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(GrafanaAgentOperatorCharm)
         self.addCleanup(self.harness.cleanup)
+        self.harness.set_model_info(name="lma", uuid="1234567890")
         self.harness.begin_with_initial_hooks()
 
     @responses.activate
@@ -117,3 +119,177 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(
             self.harness.model.unit.status, BlockedStatus("no related Prometheus remote-write")
         )
+
+    def test__cli_args(self):
+        expected = "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
+        self.assertEqual(self.harness.charm._cli_args(), expected)
+
+    def test__loki_config_empty(self):
+        self.harness.charm._stored.remove_loki_config = True
+        self.assertEqual(self.harness.charm._loki_config(), {})
+
+        self.harness.charm._stored.remove_loki_config = False
+        self.assertEqual(self.harness.charm._loki_config(), {})
+
+    def test__loki_config_non_empty(self):
+        self.harness.charm._loki = Mock()
+        self.harness.charm._loki.loki_push_api = "http://loki:3100:/loki/api/v1/push"
+
+        expected = {
+            "configs": [
+                {
+                    "name": "promtail",
+                    "clients": [{"url": "http://loki:3100:/loki/api/v1/push"}],
+                    "positions": {"filename": "/tmp/positions.yaml"},
+                    "scrape_configs": [
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": 3500,
+                                    "grpc_listen_port": 3600,
+                                },
+                                "labels": {"pushserver": "loki"},
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+
+        self.assertDictEqual(self.harness.charm._loki_config(), expected)
+
+    def test__config_file_without_loki(self):
+        self.maxDiff = None
+        expected = {
+            "integrations": {
+                "agent": {
+                    "enabled": True,
+                    "relabel_configs": [
+                        {
+                            "target_label": "instance",
+                            "regex": "(.*)",
+                            "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_charm",
+                            "replacement": "grafana-agent-k8s",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model",
+                            "replacement": "lma",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model_uuid",
+                            "replacement": "1234567890",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_application",
+                            "replacement": "grafana-agent-k8s",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_unit",
+                            "replacement": "grafana-agent-k8s/0",
+                        },
+                    ],
+                },
+                "prometheus_remote_write": [],
+            },
+            "prometheus": {
+                "configs": [{"name": "agent_scraper", "remote_write": [], "scrape_configs": []}]
+            },
+            "server": {"log_level": "info"},
+        }
+        self.assertDictEqual(yaml.safe_load(self.harness.charm._config_file()), expected)
+
+    def test__config_file_with_loki(self):
+        self.harness.charm._loki = Mock()
+        self.harness.charm._loki.loki_push_api = "http://loki:3100:/loki/api/v1/push"
+        expected = {
+            "integrations": {
+                "agent": {
+                    "enabled": True,
+                    "relabel_configs": [
+                        {
+                            "target_label": "instance",
+                            "regex": "(.*)",
+                            "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_charm",
+                            "replacement": "grafana-agent-k8s",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model",
+                            "replacement": "lma",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model_uuid",
+                            "replacement": "1234567890",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_application",
+                            "replacement": "grafana-agent-k8s",
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_unit",
+                            "replacement": "grafana-agent-k8s/0",
+                        },
+                    ],
+                },
+                "prometheus_remote_write": [],
+            },
+            "prometheus": {
+                "configs": [{"name": "agent_scraper", "remote_write": [], "scrape_configs": []}]
+            },
+            "server": {"log_level": "info"},
+            "loki": {
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": [{"url": "http://loki:3100:/loki/api/v1/push"}],
+                        "positions": {"filename": "/tmp/positions.yaml"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": 3500,
+                                        "grpc_listen_port": 3600,
+                                    },
+                                    "labels": {"pushserver": "loki"},
+                                },
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+        self.assertDictEqual(expected, yaml.safe_load(self.harness.charm._config_file()))
+
+    def test__update_config_pebble_not_ready(self):
+        self.harness.charm._container.can_connect = Mock(return_value=False)
+        self.harness.charm._update_config()
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+    def test__update_config_pebble_ready(self):
+        self.harness.charm._container.can_connect = Mock(return_value=True)
+        self.harness.charm._container.pull = Mock(return_value="")
+        self.harness.charm._container.push = Mock(return_value=True)
+        self.harness.charm._reload_config = Mock(return_value=True)
+        self.harness.charm._update_config()
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+        self.harness.charm._reload_config = Mock(side_effect=GrafanaAgentReloadError)
+        self.harness.charm._update_config()
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
