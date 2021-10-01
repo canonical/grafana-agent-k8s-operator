@@ -48,7 +48,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(k8s_service_patched=False, config="")
+        self._stored.set_default(k8s_service_patched=False, config="", remove_loki_config=False)
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
         self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
         self._loki = LokiConsumer(self, "logging")
@@ -76,8 +76,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
     def _on_logging_relation_departed(self, _):
         """Event handler for the logging relation reparted event."""
-        # Implement it
-        pass
+        self._stored.remove_loki_config = True
+        self._update_config()
 
     def on_pebble_ready(self, event: EventBase) -> None:
         """Event handler for the pebble ready event.
@@ -272,6 +272,10 @@ class GrafanaAgentOperatorCharm(CharmBase):
             The dict representing the config
         """
         config = {}
+
+        if self._stored.remove_loki_config:
+            self._stored.remove_loki_config = False
+            return {}
 
         if loki_push_api := self._loki.loki_push_api:
             config = {
