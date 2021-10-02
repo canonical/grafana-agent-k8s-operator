@@ -40,6 +40,39 @@ SCRAPE_JOBS = [
     },
 ]
 
+REWRITE_CONFIGS = [
+    {
+        "target_label": "instance",
+        "regex": "(.*)",
+        "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
+    },
+    {
+        "source_labels": ["__address__"],
+        "target_label": "juju_charm",
+        "replacement": "grafana-agent-k8s",
+    },
+    {
+        "source_labels": ["__address__"],
+        "target_label": "juju_model",
+        "replacement": "lma",
+    },
+    {
+        "source_labels": ["__address__"],
+        "target_label": "juju_model_uuid",
+        "replacement": "1234567890",
+    },
+    {
+        "source_labels": ["__address__"],
+        "target_label": "juju_application",
+        "replacement": "grafana-agent-k8s",
+    },
+    {
+        "source_labels": ["__address__"],
+        "target_label": "juju_unit",
+        "replacement": "grafana-agent-k8s/0",
+    },
+]
+
 
 class TestCharm(unittest.TestCase):
     def setUp(self):
@@ -82,9 +115,36 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        # Two configs pushed out, one per unit added
-        self.assertEqual(2, len(mock_push.mock_calls))
-        # TODO Check content pushed
+        path, content = mock_push.call_args[0]
+        self.assertEqual(path, "/etc/agent/agent.yaml")
+        self.assertEqual(
+            yaml.load(content, Loader=yaml.FullLoader),
+            {
+                "integrations": {
+                    "agent": {
+                        "enabled": True,
+                        "relabel_configs": REWRITE_CONFIGS,
+                    },
+                    "prometheus_remote_write": [
+                        {"url": "http://1.1.1.2:9090/api/v1/write"},
+                        {"url": "http://1.1.1.1:9090/api/v1/write"},
+                    ],
+                },
+                "prometheus": {
+                    "configs": [
+                        {
+                            "name": "agent_scraper",
+                            "remote_write": [
+                                {"url": "http://1.1.1.2:9090/api/v1/write"},
+                                {"url": "http://1.1.1.1:9090/api/v1/write"},
+                            ],
+                            "scrape_configs": [],
+                        }
+                    ]
+                },
+                "server": {"log_level": "info"},
+            },
+        )
 
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
@@ -112,9 +172,30 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        # One config pushed out
-        self.assertEqual(1, len(mock_push.mock_calls))
-        # TODO Check content pushed
+        path, content = mock_push.call_args[0]
+        self.assertEqual(path, "/etc/agent/agent.yaml")
+        self.assertEqual(
+            yaml.load(content, Loader=yaml.FullLoader),
+            {
+                "integrations": {
+                    "agent": {
+                        "enabled": True,
+                        "relabel_configs": REWRITE_CONFIGS,
+                    },
+                    "prometheus_remote_write": [],
+                },
+                "prometheus": {
+                    "configs": [
+                        {
+                            "name": "agent_scraper",
+                            "remote_write": [],
+                            "scrape_configs": [],
+                        }
+                    ]
+                },
+                "server": {"log_level": "info"},
+            },
+        )
 
         self.assertEqual(
             self.harness.model.unit.status, BlockedStatus("no related Prometheus remote-write")
@@ -165,38 +246,7 @@ class TestCharm(unittest.TestCase):
             "integrations": {
                 "agent": {
                     "enabled": True,
-                    "relabel_configs": [
-                        {
-                            "target_label": "instance",
-                            "regex": "(.*)",
-                            "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_charm",
-                            "replacement": "grafana-agent-k8s",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model",
-                            "replacement": "lma",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model_uuid",
-                            "replacement": "1234567890",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_application",
-                            "replacement": "grafana-agent-k8s",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_unit",
-                            "replacement": "grafana-agent-k8s/0",
-                        },
-                    ],
+                    "relabel_configs": REWRITE_CONFIGS,
                 },
                 "prometheus_remote_write": [],
             },
@@ -214,38 +264,7 @@ class TestCharm(unittest.TestCase):
             "integrations": {
                 "agent": {
                     "enabled": True,
-                    "relabel_configs": [
-                        {
-                            "target_label": "instance",
-                            "regex": "(.*)",
-                            "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_charm",
-                            "replacement": "grafana-agent-k8s",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model",
-                            "replacement": "lma",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model_uuid",
-                            "replacement": "1234567890",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_application",
-                            "replacement": "grafana-agent-k8s",
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_unit",
-                            "replacement": "grafana-agent-k8s/0",
-                        },
-                    ],
+                    "relabel_configs": REWRITE_CONFIGS,
                 },
                 "prometheus_remote_write": [],
             },
