@@ -117,7 +117,7 @@ class TestCharm(unittest.TestCase):
 
         path, content = mock_push.call_args[0]
         self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertEqual(
+        self.assertDictEqual(
             yaml.load(content, Loader=yaml.FullLoader),
             {
                 "integrations": {
