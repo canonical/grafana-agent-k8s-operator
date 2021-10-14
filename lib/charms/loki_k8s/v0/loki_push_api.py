@@ -4,7 +4,7 @@
 #
 # Learn more at: https://juju.is/docs/sdk
 
-"""## Overview.
+r"""## Overview.
 
 This document explains how to integrate with the Loki charm.
 It also explains how alternative implementations of the Loki charm
@@ -19,19 +19,36 @@ provide a scrape target for Loki.
 This object may be used by Loki charms to manage relations
 with their clients.
 For this purposes a Loki charm needs to instantiate the
-`LokiProvider` object providing it with two pieces
+`LokiPushApiProvider` object providing it with two pieces
 of information:
 
 - A reference to the parent (Loki) charm.
 
-- Name of the relation that the Loki charm uses to interact with
-  its clients. This relation name must match the one used in `metadata.yaml`
-  for the `loki_push_api` interface.
+- Optionally, the name of the relation that the Loki charm uses to interact
+  with its clients. If provided, this relation name must match a provided
+  relation in metadata.yaml with the `loki_push_api` interface.
+  This argument is not required if your metadata.yaml has precisely one
+  provided relation in metadata.yaml with the `loki_push_api` interface, as the
+  lib will automatically resolve the relation name inspecting the using the
+  meta information of the charm.
+
+An example of this in `metadata.yaml` file should have the following section:
+
+    provides:
+      logging:
+        interface: loki_push_api
+
+If you would like to use relation name other than `logging`,
+you will need to specify the relation name via the `relation_name`
+argument when instantiating the :class:`LokiPushApiProvider` object.
+However, it is strongly advised to keep the the default relation name,
+so that people deploying your charm will have a consistent experience
+with all other charms that provide Loki Push API.
 
 For example a Loki charm may instantiate the
-`LokiProvider` in its constructor as follows
+`LokiPushApiProvider` in its constructor as follows
 
-    from charms.loki_k8s.v0.loki import LokiProvider
+    from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
     from loki_server import LokiServer
     ...
 
@@ -47,7 +64,7 @@ For example a Loki charm may instantiate the
         def _provide_loki(self):
             try:
                 version = self._loki_server.version
-                self.loki_provider = LokiProvider(self, "logging")
+                self.loki_provider = LokiPushApiProvider(self)
                 logger.debug("Loki Provider is available. Loki version: %s", version)
             except LokiServerNotReadyError as e:
                 self.unit.status = MaintenanceStatus(str(e))
@@ -55,7 +72,7 @@ For example a Loki charm may instantiate the
                 self.unit.status = BlockedStatus(str(e))
 
 
-The `LokiProvider` object has two main responsabilities:
+The `LokiPushApiProvider` object has two main responsabilities:
 
 1.- Be in charge of setting the Loki Push API Address into
 relation data so clients can use it to send logs. Every time a unit joins
@@ -114,7 +131,7 @@ And has this aspect:
      }'
 
 
-Once these alert rules are sent over relation data, the `LokiProvider` object
+Once these alert rules are sent over relation data, the `LokiPushApiProvider` object
 stores these files in the directory `/loki/rules` inside the Loki charm container.
 
 
@@ -122,35 +139,38 @@ stores these files in the directory `/loki/rules` inside the Loki charm containe
 
 This Loki charm interacts with its clients using the Loki
 charm library. Charms seeking to send log to Loki,
-must do so using the `LokiConsumer` object from this charm library.
-For the simplest use cases, using the `LokiConsumer` object only requires
+must do so using the `LokiPushApiConsumer` object from this charm library.
+For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
-    from charms.loki_k8s.v0.loki import LokiConsumer
+    from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 
     class LokiClientCharm(CharmBase):
 
         def __init__(self, *args):
             super().__init__(*args)
             ...
-            self.loki = LokiConsumer(self, "logging")
+            self.loki_consumer = LokiPushApiConsumer(self)
 
 
-The `LokiConsumer` constructor requires two things:
+The `LokiPushApiConsumer` constructor requires two things:
 
 - A reference to the parent (LokiClientCharm) charm.
 
-- Name of the relation that the Loki charm uses to interact with
-  its clients. This relation name must match the relation in metadata.yaml
-  used for the `loki_push_api` interface.
-
+- Optionally, the name of the relation that the Loki charm uses to interact
+  with its clients. If provided, this relation name must match a required
+  relation in metadata.yaml with the `loki_push_api` interface.
+  This argument is not required if your metadata.yaml has precisely one
+  required relation in metadata.yaml with the `loki_push_api` interface, as the
+  lib will automatically resolve the relation name inspecting the using the
+  meta information of the charm
 
 ## Alerting Rules
 
 This charm library also supports gathering alerting rules from all
 related Loki clients charms and enabling corresponding alerts within the
-Loki charm. Alert rules are automatically gathered by `LokiConsumer` object
+Loki charm. Alert rules are automatically gathered by `LokiPushApiConsumer` object
 from a directory conventionally named `loki_alert_rules`.
 This directory must reside at the top level in the `src` folder of the
 consumer charm. Each file in this directory is assumed to be a single alert rule
@@ -176,7 +196,7 @@ annotations:
 
 It is **critical** to use the `%%juju_topology%%` filter in the
 expression for the alert rule shown above. This filter is a stub that
-is automatically replaced by the `LokiConsumer` following Loki Client's Juju
+is automatically replaced by the `LokiPushApiConsumer` following Loki Client's Juju
 topology (application, model and its UUID). Such a topology filter is
 essential to ensure that alert rules submitted by one provider charm
 generates alerts only for that same charm.  The Loki charm may
@@ -187,7 +207,7 @@ expression must include such a topology filter stub.
 
 Gathering alert rules and generating rule files within the Loki
 charm is easily done using the `alerts()` method of
-`LokiProvider`. Alerts generated by Loki will
+`LokiPushApiProvider`. Alerts generated by Loki will
 automatically include Juju topology labels in the alerts. These labels
 indicate the source of the alert. The following lables are
 automatically added to every alert
@@ -210,9 +230,10 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import yaml
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationMeta, RelationRole
 from ops.framework import Object, StoredState
 from ops.model import BlockedStatus
 
@@ -224,18 +245,201 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 # Alert rules directory in workload container
 RULES_DIR = "/loki/rules"
 
 logger = logging.getLogger(__name__)
 
+RELATION_INTERFACE_NAME = "loki_push_api"
+DEFAULT_RELATION_NAME = "logging"
+DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
+
+
+class RelationNotFoundError(ValueError):
+    """Raised if there is no relation with the given name."""
+
+    def __init__(self, relation_name: str):
+        self.relation_name = relation_name
+        self.message = f"No relation named '{relation_name}' found"
+
+        super().__init__(self.message)
+
+
+class RelationInterfaceMismatchError(Exception):
+    """Raised if the relation with the given name has a different interface."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_interface: str,
+        actual_relation_interface: str,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_interface
+        self.actual_relation_interface = actual_relation_interface
+        self.message = (
+            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
+            f"interface rather than the expected '{expected_relation_interface}'"
+        )
+
+        super().__init__(self.message)
+
+
+class RelationRoleMismatchError(Exception):
+    """Raised if the relation with the given name has a different direction."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_role: RelationRole,
+        actual_relation_role: RelationRole,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_role
+        self.actual_relation_role = actual_relation_role
+        self.message = (
+            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
+            f"rather than the expected '{repr(expected_relation_role)}'"
+        )
+
+        super().__init__(self.message)
+
+
+class InvalidAlertRuleFolderPathError(Exception):
+    """Raised if the alert rules folder cannot be found or is otherwise invalid."""
+
+    def __init__(
+        self,
+        alert_rules_absolute_path: str,
+        message: str,
+    ):
+        self.alert_rules_absolute_path = alert_rules_absolute_path
+        self.message = message
+
+        super().__init__(self.message)
+
+
+def _validate_relation_by_interface_and_direction(
+    charm: CharmBase,
+    relation_name: str,
+    expected_relation_interface: str,
+    expected_relation_role: RelationRole,
+):
+    """Verifies that a relation has the necessary characteristics.
+
+    Verifies that the `relation_name` provided: (1) exists in metadata.yaml,
+    (2) declares as interface the interface name passed as `relation_interface`
+    and (3) has the right "direction", i.e., it is a relation that `charm`
+    provides or requires.
+
+    Args:
+        charm: a `CharmBase` object to scan for the matching relation.
+        relation_name: the name of the relation to be verified.
+        expected_relation_interface: the interface name to be matched by the
+            relation named `relation_name`.
+        expected_relation_role: whether the `relation_name` must be either
+            provided or required by `charm`.
+
+    Raises:
+        RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+            with the same name as provided via `relation_name` argument.
+        RelationInterfaceMismatchError: The relation with the same name as provided
+            via `relation_name` argument does not have the same relation interface
+            as specified via the `expected_relation_interface` argument.
+        RelationRoleMismatchError: If the relation with the same name as provided
+            via `relation_name` argument does not have the same role as specified
+            via the `expected_relation_role` argument.
+    """
+    if relation_name not in charm.meta.relations:
+        raise RelationNotFoundError(relation_name)
+
+    relation: RelationMeta = charm.meta.relations[relation_name]
+
+    actual_relation_interface = relation.interface_name
+    if actual_relation_interface != expected_relation_interface:
+        raise RelationInterfaceMismatchError(
+            relation_name, expected_relation_interface, actual_relation_interface
+        )
+
+    if expected_relation_role == RelationRole.provides:
+        if relation_name not in charm.meta.provides:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.provides, RelationRole.requires
+            )
+    elif expected_relation_role == RelationRole.requires:
+        if relation_name not in charm.meta.requires:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.requires, RelationRole.provides
+            )
+    else:
+        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
+
+
+def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
+    """Resolve the provided path items against the directory of the main file.
+
+    Look up the directory of the main .py file being executed. This is normally
+    going to be the charm.py file of the charm including this library. Then, resolve
+    the provided path elements and, if the result path exists and is a directory,
+    return its absolute path; otherwise, return `None`.
+    """
+    charm_dir = Path(charm.charm_dir)
+    if not charm_dir.exists() or not charm_dir.is_dir():
+        # Operator Framework does not currently expose a robust
+        # way to determine the top level charm source directory
+        # that is consistent across deployed charms and unit tests
+        # Hence for unit tests the current working directory is used
+        # TODO: updated this logic when the following ticket is resolved
+        # https://github.com/canonical/operator/issues/643
+        charm_dir = Path(os.getcwd())
+
+    alerts_dir_path = charm_dir.absolute().joinpath(*path_elements)
+
+    if not alerts_dir_path.exists():
+        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "directory does not exist")
+    if not alerts_dir_path.is_dir():
+        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "is not a directory")
+
+    return str(alerts_dir_path)
+
+
+class NoRelationWithInterfaceFoundError(Exception):
+    """No relations with the given interface are found in the charm meta."""
+
+    def __init__(self, charm: CharmBase, relation_interface: str = None):
+        self.charm = charm
+        self.relation_interface = relation_interface
+        self.message = (
+            f"No relations with interface '{relation_interface}' found in the meta "
+            f"of the '{charm.meta.name}' charm"
+        )
+
+        super().__init__(self.message)
+
+
+class MultipleRelationsWithInterfaceFoundError(Exception):
+    """Multiple relations with the given interface are found in the charm meta."""
+
+    def __init__(self, charm: CharmBase, relation_interface: str, relations: list):
+        self.charm = charm
+        self.relation_interface = relation_interface
+        self.relations = relations
+        self.message = (
+            f"Multiple relations with interface '{relation_interface}' found in the meta "
+            f"of the '{charm.name}' charm."
+        )
+
+        super().__init__(self.message)
+
 
 class RelationManagerBase(Object):
     """Base class that represents relation ends ("provides" and "requires").
+
     :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
     from :class:`RelationManagerBase` and customising the sub class as required.
+
     Attributes:
         name (str): consumer's relation name
     """
@@ -246,26 +450,42 @@ class RelationManagerBase(Object):
 
 
 class AlertRuleError(Exception):
-    """Custom exception to indicate that alert rule is not well formed"""
+    """Custom exception to indicate that alert rule is not well formed."""
 
     def __init__(self, message="Alert rule is not well formed"):
         self.message = message
         super().__init__(self.message)
 
 
-class LokiProvider(RelationManagerBase):
-    """A LokiProvider class"""
+class LokiPushApiProvider(RelationManagerBase):
+    """A LokiPushApiProvider class."""
 
-    def __init__(self, charm, relation_name: str):
+    def __init__(self, charm, relation_name: str = DEFAULT_RELATION_NAME):
         """A Loki service provider.
 
         Args:
-
             charm: a `CharmBase` instance that manages this
                 instance of the Loki service.
-            relation_name: string name of the relation that provides the
-                Loki logging service.
+
+            relation_name: an optional string name of the relation between `charm`
+                and the Loki charmed service. The default is "logging".
+                It is strongly advised not to change the default, so that people
+                deploying your charm will have a consistent experience with all
+                other charms that consume metrics endpoints.
+
+        Raises:
+            RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+                with the same name as provided via `relation_name` argument.
+            RelationInterfaceMismatchError: The relation with the same name as provided
+                via `relation_name` argument does not have the `loki_push_api` relation
+                interface.
+            RelationRoleMismatchError: If the relation with the same name as provided
+                via `relation_name` argument does not have the `RelationRole.requires`
+                role.
         """
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
+        )
         super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
@@ -287,7 +507,6 @@ class LokiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-
         if event.relation.data[self.charm.unit].get("data") is None:
             event.relation.data[self.charm.unit].update({"data": self._loki_push_api})
             logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
@@ -298,8 +517,7 @@ class LokiProvider(RelationManagerBase):
             self._generate_alert_rules_files(self.container)
 
     def _on_logging_relation_departed(self, event):
-        """Removes alert rules files when consumer charms
-        left the relation with Loki
+        """Removes alert rules files when consumer charms left the relation with Loki.
 
         Args:
             event: a `CharmEvent` in response to which the Loki
@@ -310,29 +528,28 @@ class LokiProvider(RelationManagerBase):
 
     @property
     def _loki_push_api(self) -> str:
-        """Fetch Loki push API URL
+        """Fetch Loki push API URL.
 
         Returns:
-            Loki push API URL as json string"""
-
+            Loki push API URL as json string
+        """
         loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
     @property
     def unit_ip(self) -> str:
-        """Returns unit's IP"""
+        """Returns unit's IP."""
         if bind_address := self.charm.model.get_binding(self._relation_name).network.bind_address:
             return str(bind_address)
         return ""
 
     def _remove_alert_rules_files(self, container) -> None:
-        """Remove alert rules files from worload container RULES_DIR
+        """Remove alert rules files from worload container RULES_DIR.
 
         Args:
             container: Container which has alert rules files to be deleted
         """
-
         container.remove_path(RULES_DIR, recursive=True)
         logger.debug("Previous Alert rules files deleted")
         # Since container.remove_path deletes the directory itself with its files
@@ -340,12 +557,11 @@ class LokiProvider(RelationManagerBase):
         os.makedirs(RULES_DIR, exist_ok=True)
 
     def _generate_alert_rules_files(self, container) -> None:
-        """Generate and upload alert rules files
+        """Generate and upload alert rules files.
 
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
-
         for rel_id, alert_rules in self.alerts().items():
             filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
                 alert_rules["model"],
@@ -416,42 +632,70 @@ class LokiProvider(RelationManagerBase):
         return alerts
 
 
-class LokiConsumer(RelationManagerBase):
-    """
-    Loki Consumer class
-    """
+class LokiPushApiConsumer(RelationManagerBase):
+    """Loki Consumer class."""
 
     _stored = StoredState()
-    _ALERT_RULES_PATH: str
+    _alert_rules_path: Optional[str]
 
     def __init__(
-        self, charm: CharmBase, relation_name: str, alert_rules_path="src/loki_alert_rules"
+        self,
+        charm: CharmBase,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
     ):
         """Construct a Loki charm client.
 
-        The `LokiConsumer` object provides configurations to a Loki client charm.
+        The `LokiPushApiConsumer` object provides configurations to a Loki client charm.
         A charm instantiating this object needs Loki information, for instance the
         Loki API endpoint to push logs.
-        The `LokiConsumer` can be instantiated as follows:
+        The `LokiPushApiConsumer` can be instantiated as follows:
 
-            self.loki_consumer = LokiConsumer(self, relation_name="logging")
+            self.loki_consumer = LokiPushApiConsumer(self)
 
         Args:
-
-            charm: a `CharmBase` object that manages this
-                `LokiConsumer` object. Typically this is
-                `self` in the instantiating class.
-            relation_ name: a string name of the relation between `charm` and
-                the Loki charmed service.
+            charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
+                Typically this is `self` in the instantiating class.
+            relation_name: the string name of the relation interface to look up.
+                If `charm` has exactly one relation with this interface, the relation's
+                name is returned. If none or multiple relations with the provided interface
+                are found, this method will raise either an exception of type
+                NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
+                respectively.
             alert_rules_path: an optional path for the location of alert rules
-                files.  Defaults to "src/loki_alert_rules" at the top level
-                of the charm repository.
+                files.  Defaults to "./loki_alert_rules",
+                resolved from the directory hosting the charm entry file.
+                The alert rules are automatically updated on charm upgrade.
+
+
+        Raises:
+            RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+                with the same name as provided via `relation_name` argument.
+            RelationInterfaceMismatchError: The relation with the same name as provided
+                via `relation_name` argument does not have the `prometheus_scrape` relation
+                interface.
+            RelationRoleMismatchError: If the relation with the same name as provided
+                via `relation_name` argument does not have the `RelationRole.provides`
+                role.
         """
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
+        )
+
+        try:
+            alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
+        except InvalidAlertRuleFolderPathError as e:
+            logger.warning(
+                "Invalid Prometheus alert rules folder at %s: %s",
+                e.alert_rules_absolute_path,
+                e.message,
+            )
+
         super().__init__(charm, relation_name)
         self._stored.set_default(loki_push_api=None)
         self._charm = charm
         self._relation_name = relation_name
-        self._ALERT_RULES_PATH = alert_rules_path
+        self._alert_rules_path = alert_rules_path
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_logging_relaton_changed)
 
@@ -470,6 +714,8 @@ class LokiConsumer(RelationManagerBase):
 
         if event.unit is None:
             # Workaround: Seems this is a Juju bug that sends event.unit == None
+            # Remove this if when this issue is closed:
+            # https://github.com/canonical/loki-operator/issues/3
             return
 
         if data := event.relation.data[event.unit].get("data"):
@@ -485,7 +731,6 @@ class LokiConsumer(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-
         if alert_groups := self._labeled_alert_groups:
             event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
                 {"groups": alert_groups}
@@ -529,7 +774,7 @@ class LokiConsumer(RelationManagerBase):
         return rule
 
     def _validate_alert_rule(self, rule: dict, rule_file):
-        """This method validates if an alert rule is well formed
+        """This method validates if an alert rule is well formed.
 
         Args:
             rule: A dictionary containing an alert rule definition
@@ -538,7 +783,6 @@ class LokiConsumer(RelationManagerBase):
         Returns:
             Raises an AlertRuleError exceprtion if the alert rule is not well formed
         """
-
         missing = ["alert", "expr"]
 
         for field in missing:
@@ -557,7 +801,7 @@ class LokiConsumer(RelationManagerBase):
 
     @property
     def loki_push_api(self):
-        """Fetch Loki Push API endpoint sent from LokiProvider throught relation data
+        """Fetch Loki Push API endpoint sent from LokiPushApiProvider throught relation data.
 
         Returns:
             Loki Push API endpoint
@@ -577,35 +821,35 @@ class LokiConsumer(RelationManagerBase):
         """
         alerts = []
 
-        for path in Path(self._ALERT_RULES_PATH).glob("*.rule"):
-            if not path.is_file():
-                continue
+        if self._alert_rules_path:
+            for path in Path(self._alert_rules_path).glob("*.rule"):
+                if path.is_file():
+                    logger.debug("Reading alert rule from %s", path)
+                    with path.open() as rule_file:
+                        # Load a list of rules from file then add labels and filters
+                        try:
+                            rule = yaml.safe_load(rule_file)
+                            self._validate_alert_rule(rule, rule_file)
+                            rule = self._label_alert_topology(rule)
+                            rule = self._label_alert_expression(rule)
+                            alerts.append(rule)
+                        except AlertRuleError as e:
+                            self._charm.model.unit.status = BlockedStatus(str(e))
+                        except FileNotFoundError as e:
+                            message = "Failed to read alert rules from %s: %s", path.name, str(e)
+                            logger.error(message)
+                            self._charm.model.unit.status = BlockedStatus(message)
 
-            logger.debug("Reading alert rule from %s", path)
-            with path.open() as rule_file:
-                # Load a list of rules from file then add labels and filters
-                try:
-                    rule = yaml.safe_load(rule_file)
-                    self._validate_alert_rule(rule, rule_file)
-                    rule = self._label_alert_topology(rule)
-                    rule = self._label_alert_expression(rule)
-                    alerts.append(rule)
-                except AlertRuleError as e:
-                    self._charm.model.unit.status = BlockedStatus(str(e))
-                except FileNotFoundError as e:
-                    message = "Failed to read alert rules from %s: %s", path.name, str(e)
-                    logger.error(message)
-                    self._charm.model.unit.status = BlockedStatus(message)
-
-        groups = []
         if alerts:
             metadata = self._scrape_metadata
-            group = {
-                "name": "{model}_{model_uuid}_{application}_alerts".format(**metadata),
-                "rules": alerts,
-            }
-            groups.append(group)
-        return groups
+            return [
+                {
+                    "name": "{model}_{model_uuid}_{application}_alerts".format(**metadata),
+                    "rules": alerts,
+                }
+            ]
+        else:
+            return []
 
     @property
     def _scrape_metadata(self) -> dict:
@@ -614,9 +858,8 @@ class LokiConsumer(RelationManagerBase):
         Returns:
             Scrape configutation metadata for this logging provider charm.
         """
-        metadata = {
+        return {
             "model": f"{self._charm.model.name}",
             "model_uuid": f"{self._charm.model.uuid}",
             "application": f"{self._charm.model.app.name}",
         }
-        return metadata

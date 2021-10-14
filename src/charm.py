@@ -8,7 +8,7 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.loki import LokiConsumer
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -52,7 +52,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._stored.set_default(k8s_service_patched=False, config="", remove_loki_config=False)
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
         self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
-        self._loki = LokiConsumer(self, "logging")
+        self._loki_consumer = LokiPushApiConsumer(self)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
@@ -286,7 +286,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._stored.remove_loki_config = False
             return {}
 
-        if loki_push_api := self._loki.loki_push_api:
+        if loki_push_api := self._loki_consumer.loki_push_api:
             config = {
                 "configs": [
                     {
