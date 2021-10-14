@@ -213,8 +213,8 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm._loki_config(), {})
 
     def test__loki_config_non_empty(self):
-        self.harness.charm._loki = Mock()
-        self.harness.charm._loki.loki_push_api = "http://loki:3100:/loki/api/v1/push"
+        self.harness.charm._loki_consumer = Mock()
+        self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
 
         expected = {
             "configs": [
@@ -258,8 +258,8 @@ class TestCharm(unittest.TestCase):
         self.assertDictEqual(yaml.safe_load(self.harness.charm._config_file()), expected)
 
     def test__config_file_with_loki(self):
-        self.harness.charm._loki = Mock()
-        self.harness.charm._loki.loki_push_api = "http://loki:3100:/loki/api/v1/push"
+        self.harness.charm._loki_consumer = Mock()
+        self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
         expected = {
             "integrations": {
                 "agent": {
