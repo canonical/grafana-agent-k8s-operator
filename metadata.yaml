@@ -1,0 +1,33 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: grafana-agent-k8s
+display-name: |
+  Grafana Agent
+summary: Charm for Grafana Agent
+description: |
+  Grafana Agent is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
+
+containers:
+  agent:
+    resource: agent-image
+    mounts:
+      - storage: data
+        location: /tmp/agent/data
+
+resources:
+  agent-image:
+    type: oci-image
+    description: OCI image for Grafana Agent
+
+requires:
+  prometheus-remote-write:
+    interface: prometheus_remote_write
+  metrics-endpoint:
+    interface: prometheus_scrape
+  logging:
+    interface: loki_push_api
+
+storage:
+  data:
+    type: filesystem
