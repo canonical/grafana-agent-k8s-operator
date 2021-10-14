@@ -174,7 +174,7 @@ class TestCharm(unittest.TestCase):
 
         path, content = mock_push.call_args[0]
         self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertEqual(
+        self.assertDictEqual(
             yaml.load(content, Loader=yaml.FullLoader),
             {
                 "integrations": {
@@ -299,7 +299,9 @@ class TestCharm(unittest.TestCase):
     def test__update_config_pebble_not_ready(self):
         self.harness.charm._container.can_connect = Mock(return_value=False)
         self.harness.charm._update_config()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status, WaitingStatus("waiting for agent container to start")
+        )
 
     def test__update_config_pebble_ready(self):
         self.harness.charm._container.can_connect = Mock(return_value=True)
@@ -307,8 +309,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._container.push = Mock(return_value=True)
         self.harness.charm._reload_config = Mock(return_value=True)
         self.harness.charm._update_config()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
         self.harness.charm._reload_config = Mock(side_effect=GrafanaAgentReloadError)
         self.harness.charm._update_config()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status, BlockedStatus("could not reload configuration")
+        )

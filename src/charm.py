@@ -32,7 +32,7 @@ CONFIG_PATH = "/etc/agent/agent.yaml"
 class GrafanaAgentReloadError(Exception):
     """Custom exception to indicate that grafana agent config couldn't be reloaded."""
 
-    def __init__(self, message="Error: Could not reload config"):
+    def __init__(self, message="could not reload configuration"):
         self.message = message
         super().__init__(self.message)
 
@@ -155,7 +155,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
-            self.unit.status = WaitingStatus("Waiting for Pebble ready")
+            self.unit.status = WaitingStatus("waiting for agent container to start")
             return
         config = self._config_file()
         try:
@@ -318,7 +318,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             attempts: number of attempts to reload
         """
         try:
-            self.unit.status = MaintenanceStatus("Reloading Grafana agent config")
+            self.unit.status = MaintenanceStatus("reloading agent configuration")
             url = "http://localhost/-/reload"
             errors = list(range(400, 452)) + list(range(500, 513))
             s = Session()
@@ -326,7 +326,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             s.mount("http://", HTTPAdapter(max_retries=retries))
             s.post(url)
         except Exception as e:
-            message = f"Error: Could not reload config. - {str(e)}"
+            message = f"could not reload configuration: {str(e)}"
             raise GrafanaAgentReloadError(message)
 
 
