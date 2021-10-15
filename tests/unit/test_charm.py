@@ -3,6 +3,7 @@
 
 import json
 import unittest
+from typing import Any, Dict
 from unittest.mock import MagicMock, Mock, patch
 
 import responses
@@ -116,35 +117,65 @@ class TestCharm(unittest.TestCase):
         )
 
         path, content = mock_push.call_args[0]
-        self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertDictEqual(
-            yaml.load(content, Loader=yaml.FullLoader),
-            {
-                "integrations": {
-                    "agent": {
-                        "enabled": True,
-                        "relabel_configs": REWRITE_CONFIGS,
-                    },
-                    "prometheus_remote_write": [
-                        {"url": "http://1.1.1.2:9090/api/v1/write"},
-                        {"url": "http://1.1.1.1:9090/api/v1/write"},
-                    ],
+        content = yaml.load(content, Loader=yaml.FullLoader)
+        expected_config: Dict[str, Any] = {
+            "integrations": {
+                "agent": {
+                    "enabled": True,
+                    "relabel_configs": REWRITE_CONFIGS,
                 },
-                "prometheus": {
-                    "configs": [
-                        {
-                            "name": "agent_scraper",
-                            "remote_write": [
-                                {"url": "http://1.1.1.2:9090/api/v1/write"},
-                                {"url": "http://1.1.1.1:9090/api/v1/write"},
-                            ],
-                            "scrape_configs": [],
-                        }
-                    ]
-                },
-                "server": {"log_level": "info"},
+                "prometheus_remote_write": [
+                    {"url": "http://1.1.1.2:9090/api/v1/write"},
+                    {"url": "http://1.1.1.1:9090/api/v1/write"},
+                ],
             },
+            "prometheus": {
+                "configs": [
+                    {
+                        "name": "agent_scraper",
+                        "remote_write": [
+                            {"url": "http://1.1.1.2:9090/api/v1/write"},
+                            {"url": "http://1.1.1.1:9090/api/v1/write"},
+                        ],
+                        "scrape_configs": [],
+                    }
+                ]
+            },
+            "server": {"log_level": "info"},
+        }
+        self.assertEqual(path, "/etc/agent/agent.yaml")
+
+        # Since we are comparing two dictionaries that has lists of dictionaries inside,
+        # for instance:
+        #
+        # "remote_write": [
+        #     {"url": "http://1.1.1.2:9090/api/v1/write"},
+        #     {"url": "http://1.1.1.1:9090/api/v1/write"},
+        # ],
+        #
+        # and there is no guarantee that the lists will come in the same order every time
+        # we run the tests, we cannot use `self.assertDictEqual()` and we have
+        # to compare the dictionaries in parts.
+        self.assertDictEqual(
+            content["integrations"]["agent"], expected_config["integrations"]["agent"]
         )
+        self.assertTrue(
+            [
+                i
+                for i in content["integrations"]["prometheus_remote_write"]
+                if i not in expected_config["integrations"]["prometheus_remote_write"]
+            ]
+            == []
+        )
+        self.assertTrue(
+            [
+                i
+                for i in content["prometheus"]["configs"][0]["remote_write"]
+                if i not in expected_config["prometheus"]["configs"][0]["remote_write"]
+            ]
+            == []
+        )
+        self.assertDictEqual(content["server"], expected_config["server"])
 
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
@@ -205,16 +236,25 @@ class TestCharm(unittest.TestCase):
         expected = "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
-    def test__loki_config_empty(self):
-        self.harness.charm._stored.remove_loki_config = True
-        self.assertEqual(self.harness.charm._loki_config(), {})
-
-        self.harness.charm._stored.remove_loki_config = False
-        self.assertEqual(self.harness.charm._loki_config(), {})
-
-    def test__loki_config_non_empty(self):
+    @responses.activate
+    @patch.object(Container, "pull", new=pull_empty_fake_file)
+    @patch.object(Container, "push")
+    def test__on_logging_relation_changed(self, mock_push: MagicMock):
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
+        mock_push.push.return_value = None
+
+        responses.add(
+            responses.POST,
+            "http://localhost/-/reload",
+            status=200,
+        )
+
+        rel_id = self.harness.add_relation("logging", "consumer")
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        self.harness.update_relation_data(rel_id, "consumer/0", {})
+
+        path, content = mock_push.call_args[0]
 
         expected = {
             "configs": [
@@ -238,63 +278,33 @@ class TestCharm(unittest.TestCase):
             ]
         }
 
-        self.assertDictEqual(self.harness.charm._loki_config(), expected)
+        self.assertDictEqual(yaml.safe_load(content)["loki"], expected)
+        self.assertEqual(path, "/etc/agent/agent.yaml")
+        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
-    def test__config_file_without_loki(self):
-        self.maxDiff = None
-        expected = {
-            "integrations": {
-                "agent": {
-                    "enabled": True,
-                    "relabel_configs": REWRITE_CONFIGS,
-                },
-                "prometheus_remote_write": [],
-            },
-            "prometheus": {
-                "configs": [{"name": "agent_scraper", "remote_write": [], "scrape_configs": []}]
-            },
-            "server": {"log_level": "info"},
-        }
-        self.assertDictEqual(yaml.safe_load(self.harness.charm._config_file()), expected)
-
-    def test__config_file_with_loki(self):
+    @responses.activate
+    @patch.object(Container, "pull", new=pull_empty_fake_file)
+    @patch.object(Container, "push")
+    def test__on_logging_relation_departed(self, mock_push: MagicMock):
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
-        expected = {
-            "integrations": {
-                "agent": {
-                    "enabled": True,
-                    "relabel_configs": REWRITE_CONFIGS,
-                },
-                "prometheus_remote_write": [],
-            },
-            "prometheus": {
-                "configs": [{"name": "agent_scraper", "remote_write": [], "scrape_configs": []}]
-            },
-            "server": {"log_level": "info"},
-            "loki": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": [{"url": "http://loki:3100:/loki/api/v1/push"}],
-                        "positions": {"filename": "/tmp/positions.yaml"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": 3500,
-                                        "grpc_listen_port": 3600,
-                                    },
-                                    "labels": {"pushserver": "loki"},
-                                },
-                            }
-                        ],
-                    }
-                ]
-            },
-        }
-        self.assertDictEqual(expected, yaml.safe_load(self.harness.charm._config_file()))
+        mock_push.push.return_value = None
+
+        responses.add(
+            responses.POST,
+            "http://localhost/-/reload",
+            status=200,
+        )
+
+        rel_id = self.harness.add_relation("logging", "consumer")
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        self.harness.update_relation_data(rel_id, "consumer/0", {})
+        self.harness.remove_relation_unit(rel_id, "consumer/0")
+
+        path, content = mock_push.call_args[0]
+
+        self.assertTrue("loki" not in yaml.safe_load(content))
+        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
     def test__update_config_pebble_not_ready(self):
         self.harness.charm._container.can_connect = Mock(return_value=False)
