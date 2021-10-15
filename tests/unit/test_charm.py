@@ -3,6 +3,7 @@
 
 import json
 import unittest
+from typing import Any, Dict
 from unittest.mock import MagicMock, Mock, patch
 
 import responses
@@ -117,7 +118,7 @@ class TestCharm(unittest.TestCase):
 
         path, content = mock_push.call_args[0]
         content = yaml.load(content, Loader=yaml.FullLoader)
-        expected_config = {
+        expected_config: Dict[str, Any] = {
             "integrations": {
                 "agent": {
                     "enabled": True,
