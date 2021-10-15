@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import responses
 import yaml
+from deepdiff import DeepDiff  # type: ignore
 from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.testing import Harness
 
@@ -117,7 +118,7 @@ class TestCharm(unittest.TestCase):
         )
 
         path, content = mock_push.call_args[0]
-        content = yaml.load(content, Loader=yaml.FullLoader)
+        content = yaml.safe_load(content)
         expected_config: Dict[str, Any] = {
             "integrations": {
                 "agent": {
@@ -145,38 +146,7 @@ class TestCharm(unittest.TestCase):
         }
         self.assertEqual(path, "/etc/agent/agent.yaml")
 
-        # Since we are comparing two dictionaries that has lists of dictionaries inside,
-        # for instance:
-        #
-        # "remote_write": [
-        #     {"url": "http://1.1.1.2:9090/api/v1/write"},
-        #     {"url": "http://1.1.1.1:9090/api/v1/write"},
-        # ],
-        #
-        # and there is no guarantee that the lists will come in the same order every time
-        # we run the tests, we cannot use `self.assertDictEqual()` and we have
-        # to compare the dictionaries in parts.
-        self.assertDictEqual(
-            content["integrations"]["agent"], expected_config["integrations"]["agent"]
-        )
-        self.assertTrue(
-            [
-                i
-                for i in content["integrations"]["prometheus_remote_write"]
-                if i not in expected_config["integrations"]["prometheus_remote_write"]
-            ]
-            == []
-        )
-        self.assertTrue(
-            [
-                i
-                for i in content["prometheus"]["configs"][0]["remote_write"]
-                if i not in expected_config["prometheus"]["configs"][0]["remote_write"]
-            ]
-            == []
-        )
-        self.assertDictEqual(content["server"], expected_config["server"])
-
+        self.assertEqual(DeepDiff(content, expected_config, ignore_order=True), {})
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
     @responses.activate
@@ -206,7 +176,7 @@ class TestCharm(unittest.TestCase):
         path, content = mock_push.call_args[0]
         self.assertEqual(path, "/etc/agent/agent.yaml")
         self.assertDictEqual(
-            yaml.load(content, Loader=yaml.FullLoader),
+            yaml.safe_load(content),
             {
                 "integrations": {
                     "agent": {
@@ -240,6 +210,10 @@ class TestCharm(unittest.TestCase):
     @patch.object(Container, "pull", new=pull_empty_fake_file)
     @patch.object(Container, "push")
     def test__on_logging_relation_changed(self, mock_push: MagicMock):
+        """Check for a logging relation changed.
+
+        Verify that the loki section in the config file is present.
+        """
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
         mock_push.push.return_value = None
@@ -286,6 +260,10 @@ class TestCharm(unittest.TestCase):
     @patch.object(Container, "pull", new=pull_empty_fake_file)
     @patch.object(Container, "push")
     def test__on_logging_relation_departed(self, mock_push: MagicMock):
+        """Check for a logging relation departed.
+
+        Verify that the loki section in the config file is not present.
+        """
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
         mock_push.push.return_value = None
