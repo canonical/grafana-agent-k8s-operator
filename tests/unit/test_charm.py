@@ -145,7 +145,8 @@ class TestCharm(unittest.TestCase):
         }
         self.assertEqual(path, "/etc/agent/agent.yaml")
 
-        # Since we are comparing two dictionaries that has lists inside, for instance:
+        # Since we are comparing two dictionaries that has lists of dictionaries inside,
+        # for instance:
         #
         # "remote_write": [
         #     {"url": "http://1.1.1.2:9090/api/v1/write"},
