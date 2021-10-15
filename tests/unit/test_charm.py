@@ -116,35 +116,64 @@ class TestCharm(unittest.TestCase):
         )
 
         path, content = mock_push.call_args[0]
-        self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertDictEqual(
-            yaml.load(content, Loader=yaml.FullLoader),
-            {
-                "integrations": {
-                    "agent": {
-                        "enabled": True,
-                        "relabel_configs": REWRITE_CONFIGS,
-                    },
-                    "prometheus_remote_write": [
-                        {"url": "http://1.1.1.2:9090/api/v1/write"},
-                        {"url": "http://1.1.1.1:9090/api/v1/write"},
-                    ],
+        content = yaml.load(content, Loader=yaml.FullLoader)
+        expected_config = {
+            "integrations": {
+                "agent": {
+                    "enabled": True,
+                    "relabel_configs": REWRITE_CONFIGS,
                 },
-                "prometheus": {
-                    "configs": [
-                        {
-                            "name": "agent_scraper",
-                            "remote_write": [
-                                {"url": "http://1.1.1.2:9090/api/v1/write"},
-                                {"url": "http://1.1.1.1:9090/api/v1/write"},
-                            ],
-                            "scrape_configs": [],
-                        }
-                    ]
-                },
-                "server": {"log_level": "info"},
+                "prometheus_remote_write": [
+                    {"url": "http://1.1.1.2:9090/api/v1/write"},
+                    {"url": "http://1.1.1.1:9090/api/v1/write"},
+                ],
             },
+            "prometheus": {
+                "configs": [
+                    {
+                        "name": "agent_scraper",
+                        "remote_write": [
+                            {"url": "http://1.1.1.2:9090/api/v1/write"},
+                            {"url": "http://1.1.1.1:9090/api/v1/write"},
+                        ],
+                        "scrape_configs": [],
+                    }
+                ]
+            },
+            "server": {"log_level": "info"},
+        }
+        self.assertEqual(path, "/etc/agent/agent.yaml")
+
+        # Since we are comparing two dictionaries that has lists inside, for instance:
+        #
+        # "remote_write": [
+        #     {"url": "http://1.1.1.2:9090/api/v1/write"},
+        #     {"url": "http://1.1.1.1:9090/api/v1/write"},
+        # ],
+        #
+        # and there is no guarantee that the lists will come in the same order every time
+        # we run the tests, we cannot use `self.assertDictEqual()` and we have
+        # to compare the dictionaries in parts.
+        self.assertDictEqual(
+            content["integrations"]["agent"], expected_config["integrations"]["agent"]
         )
+        self.assertTrue(
+            [
+                i
+                for i in content["integrations"]["prometheus_remote_write"]
+                if i not in expected_config["integrations"]["prometheus_remote_write"]
+            ]
+            == []
+        )
+        self.assertTrue(
+            [
+                i
+                for i in content["prometheus"]["configs"][0]["remote_write"]
+                if i not in expected_config["prometheus"]["configs"][0]["remote_write"]
+            ]
+            == []
+        )
+        self.assertDictEqual(content["server"], expected_config["server"])
 
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
