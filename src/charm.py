@@ -8,7 +8,10 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiDepartedEvent, LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import (
+    LokiPushApiConsumer,
+    LokiPushApiEndpointDeparted,
+)
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -63,7 +66,10 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self.framework.observe(
             self.on["logging"].relation_changed, self._on_logging_relation_changed
         )
-        self.framework.observe(self._loki_consumer.on.loki_departed, self._on_loki_departed)
+        self.framework.observe(
+            self._loki_consumer.on.loki_push_api_endpoint_departed,
+            self._on_loki_push_api_endpoint_departed,
+        )
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
@@ -73,7 +79,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Event handler for the logging relation changed event."""
         self._update_config()
 
-    def _on_loki_departed(self, event) -> None:
+    def _on_loki_push_api_endpoint_departed(self, event) -> None:
         """Event handler for the loki departed."""
         self._update_config(event)
 
@@ -212,7 +218,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if event is None:
             return yaml.dump(config)
 
-        if isinstance(event, LokiDepartedEvent):
+        if isinstance(event, LokiPushApiEndpointDeparted):
             config.pop("loki", None)
 
         return yaml.dump(config)
