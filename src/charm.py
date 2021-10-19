@@ -8,7 +8,7 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import LokiDepartedEvent, LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -49,7 +49,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(k8s_service_patched=False, config="", remove_loki_config=False)
+        self._stored.set_default(k8s_service_patched=False, config="")
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
         self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
         self._loki_consumer = LokiPushApiConsumer(self)
@@ -63,9 +63,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self.framework.observe(
             self.on["logging"].relation_changed, self._on_logging_relation_changed
         )
-        self.framework.observe(
-            self.on["logging"].relation_departed, self._on_logging_relation_departed
-        )
+        self.framework.observe(self._loki_consumer.on.loki_departed, self._on_loki_departed)
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
@@ -75,10 +73,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Event handler for the logging relation changed event."""
         self._update_config()
 
-    def _on_logging_relation_departed(self, _):
-        """Event handler for the logging relation reparted event."""
-        self._stored.remove_loki_config = True
-        self._update_config()
+    def _on_loki_departed(self, event) -> None:
+        """Event handler for the loki departed."""
+        self._update_config(event)
 
     def on_pebble_ready(self, event: EventBase) -> None:
         """Event handler for the pebble ready event.
@@ -87,7 +84,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
             event: The event object of the pebble ready event
         """
         container = event.workload
-        container.push(CONFIG_PATH, self._config_file())
+        config = self._config_file(event)
+        container.push(CONFIG_PATH, config)
         pebble_layer = {
             "summary": "agent layer",
             "description": "pebble config layer for Grafana Agent",
@@ -151,13 +149,15 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 self._stored.k8s_service_patched = True
                 logger.info("Successfully patched the Kubernetes service!")
 
-    def _update_config(self):
+    def _update_config(self, event=None):
 
         if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
             self.unit.status = WaitingStatus("waiting for agent container to start")
             return
-        config = self._config_file()
+
+        config = self._config_file(event)
+
         try:
             old_config = self._container.pull(CONFIG_PATH)
         except PathError:
@@ -180,21 +180,41 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
 
-    def _config_file(self) -> str:
-        """Put all the config sections together and return the main config file.
+    def _agent_configs(self) -> dict:
+        """Put all the config sections together and return a config dictionary.
 
         Returns:
-            The config file contents
+            A config dictionary
         """
         config = {}
         if server_config := self._server_config():
             config["server"] = server_config
+
         if integrations_config := self._integrations_config():
             config["integrations"] = integrations_config
+
         if prometheus_config := self._prometheus_config():
             config["prometheus"] = prometheus_config
+
         if loki_config := self._loki_config():
             config["loki"] = loki_config
+
+        return config
+
+    def _config_file(self, event: EventBase) -> str:
+        """Generates config file str based on the event received.
+
+        Returns:
+            A yaml string with grafana agent config
+        """
+        config = self._agent_configs()
+
+        if event is None:
+            return yaml.dump(config)
+
+        if isinstance(event, LokiDepartedEvent):
+            config.pop("loki", None)
+
         return yaml.dump(config)
 
     def _server_config(self) -> dict:
@@ -281,10 +301,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             The dict representing the config
         """
         config = {}
-
-        if self._stored.remove_loki_config:
-            self._stored.remove_loki_config = False
-            return {}
 
         if loki_push_api := self._loki_consumer.loki_push_api:
             config = {
