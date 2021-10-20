@@ -11,6 +11,7 @@ import yaml
 from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
+    LokiPushApiEndpointJoined,
 )
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -64,20 +65,21 @@ class GrafanaAgentOperatorCharm(CharmBase):
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
-            self.on["logging"].relation_changed, self._on_logging_relation_changed
-        )
-        self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_departed,
             self._on_loki_push_api_endpoint_departed,
+        )
+        self.framework.observe(
+            self._loki_consumer.on.loki_push_api_endpoint_joined,
+            self._on_loki_push_api_endpoint_joined,
         )
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
         self._patch_k8s_service()
 
-    def _on_logging_relation_changed(self, _):
+    def _on_loki_push_api_endpoint_joined(self, event) -> None:
         """Event handler for the logging relation changed event."""
-        self._update_config()
+        self._update_config(event)
 
     def _on_loki_push_api_endpoint_departed(self, event) -> None:
         """Event handler for the loki departed."""
@@ -186,11 +188,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
 
-    def _agent_configs(self) -> dict:
-        """Put all the config sections together and return a config dictionary.
+    def _config_file(self, event: EventBase) -> str:
+        """Generates config file str based on the event received.
 
         Returns:
-            A config dictionary
+            A yaml string with grafana agent config
         """
         config = {}
         if server_config := self._server_config():
@@ -202,25 +204,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if prometheus_config := self._prometheus_config():
             config["prometheus"] = prometheus_config
 
-        if loki_config := self._loki_config():
-            config["loki"] = loki_config
-
-        return config
-
-    def _config_file(self, event: EventBase) -> str:
-        """Generates config file str based on the event received.
-
-        Returns:
-            A yaml string with grafana agent config
-        """
-        config = self._agent_configs()
-
-        if event is None:
-            return yaml.dump(config)
-
-        if isinstance(event, LokiPushApiEndpointDeparted):
-            config.pop("loki", None)
-
+        self._loki_config(config, event)
         return yaml.dump(config)
 
     def _server_config(self) -> dict:
@@ -300,20 +284,21 @@ class GrafanaAgentOperatorCharm(CharmBase):
             ]
         }
 
-    def _loki_config(self) -> dict:
-        """Return the loki section of the config.
+    def _loki_config(self, config, event: EventBase) -> None:
+        """Modifies the loki section of the config.
 
         Returns:
-            The dict representing the config
+            None
         """
-        config = {}
+        if isinstance(event, LokiPushApiEndpointDeparted):
+            config.pop("loki", None)
 
-        if loki_push_api := self._loki_consumer.loki_push_api:
-            config = {
+        if isinstance(event, LokiPushApiEndpointJoined):
+            config["loki"] = {
                 "configs": [
                     {
                         "name": "promtail",
-                        "clients": [{"url": f"{loki_push_api}"}],
+                        "clients": [{"url": f"{self._loki_consumer.loki_push_api}"}],
                         "positions": {"filename": f"{self._promtail_positions}"},
                         "scrape_configs": [
                             {
@@ -330,8 +315,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
                     }
                 ]
             }
-
-        return config
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
