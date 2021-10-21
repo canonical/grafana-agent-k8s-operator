@@ -321,6 +321,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         Args:
             attempts: number of attempts to reload
+
+        Raises:
+            GrafanaAgentReloadError: if configuration could not be reloaded.
         """
         try:
             self.unit.status = MaintenanceStatus("reloading agent configuration")
