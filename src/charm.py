@@ -308,7 +308,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
                                             "http_listen_port": self._http_listen_port,
                                             "grpc_listen_port": self._grpc_listen_port,
                                         },
-                                        "labels": {"pushserver": "loki"},
                                     },
                                 }
                             ],
