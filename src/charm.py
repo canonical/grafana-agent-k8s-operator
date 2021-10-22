@@ -195,16 +195,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
             A yaml string with grafana agent config
         """
         config = {}
-        if server_config := self._server_config():
-            config["server"] = server_config
+        config.update(self._server_config())
+        config.update(self._integrations_config())
+        config.update(self._prometheus_config())
+        config.update(self._loki_config(event))
 
-        if integrations_config := self._integrations_config():
-            config["integrations"] = integrations_config
-
-        if prometheus_config := self._prometheus_config():
-            config["prometheus"] = prometheus_config
-
-        self._loki_config(config, event)
         return yaml.dump(config)
 
     def _server_config(self) -> dict:
@@ -213,7 +208,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The dict representing the config
         """
-        return {"log_level": "info"}
+        return {"server": {"log_level": "info"}}
 
     def _integrations_config(self) -> dict:
         """Return the integrations section of the config.
@@ -229,43 +224,45 @@ class GrafanaAgentOperatorCharm(CharmBase):
         instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
         return {
-            "agent": {
-                "enabled": True,
-                # Align the "instance" able with the rest of the Juju-collected metrics
-                "relabel_configs": [
-                    {
-                        "target_label": "instance",
-                        "regex": "(.*)",
-                        "replacement": instance_value,
-                    },
-                    {  # To add a label, we create a relabelling that replaces a built-in
-                        "source_labels": ["__address__"],
-                        "target_label": "juju_charm",
-                        "replacement": self.meta.name,
-                    },
-                    {  # To add a label, we create a relabelling that replaces a built-in
-                        "source_labels": ["__address__"],
-                        "target_label": "juju_model",
-                        "replacement": juju_model,
-                    },
-                    {
-                        "source_labels": ["__address__"],
-                        "target_label": "juju_model_uuid",
-                        "replacement": juju_model_uuid,
-                    },
-                    {
-                        "source_labels": ["__address__"],
-                        "target_label": "juju_application",
-                        "replacement": juju_application,
-                    },
-                    {
-                        "source_labels": ["__address__"],
-                        "target_label": "juju_unit",
-                        "replacement": juju_unit,
-                    },
-                ],
-            },
-            "prometheus_remote_write": list(self._remote_write.configs),
+            "integrations": {
+                "agent": {
+                    "enabled": True,
+                    # Align the "instance" able with the rest of the Juju-collected metrics
+                    "relabel_configs": [
+                        {
+                            "target_label": "instance",
+                            "regex": "(.*)",
+                            "replacement": instance_value,
+                        },
+                        {  # To add a label, we create a relabelling that replaces a built-in
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_charm",
+                            "replacement": self.meta.name,
+                        },
+                        {  # To add a label, we create a relabelling that replaces a built-in
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model",
+                            "replacement": juju_model,
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model_uuid",
+                            "replacement": juju_model_uuid,
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_application",
+                            "replacement": juju_application,
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_unit",
+                            "replacement": juju_unit,
+                        },
+                    ],
+                },
+                "prometheus_remote_write": list(self._remote_write.configs),
+            }
         }
 
     def _prometheus_config(self) -> dict:
@@ -275,46 +272,52 @@ class GrafanaAgentOperatorCharm(CharmBase):
             The dict representing the config
         """
         return {
-            "configs": [
-                {
-                    "name": "agent_scraper",
-                    "scrape_configs": self._scrape.jobs(),
-                    "remote_write": list(self._remote_write.configs),
-                }
-            ]
-        }
-
-    def _loki_config(self, config, event: EventBase) -> None:
-        """Modifies the loki section of the config.
-
-        Returns:
-            None
-        """
-        if isinstance(event, LokiPushApiEndpointDeparted):
-            config.pop("loki", None)
-
-        if isinstance(event, LokiPushApiEndpointJoined):
-            config["loki"] = {
+            "prometheus": {
                 "configs": [
                     {
-                        "name": "promtail",
-                        "clients": [{"url": f"{self._loki_consumer.loki_push_api}"}],
-                        "positions": {"filename": f"{self._promtail_positions}"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": self._http_listen_port,
-                                        "grpc_listen_port": self._grpc_listen_port,
-                                    },
-                                    "labels": {"pushserver": "loki"},
-                                },
-                            }
-                        ],
+                        "name": "agent_scraper",
+                        "scrape_configs": self._scrape.jobs(),
+                        "remote_write": list(self._remote_write.configs),
                     }
                 ]
             }
+        }
+
+    def _loki_config(self, event: EventBase) -> dict:
+        """Modifies the loki section of the config.
+
+        Returns:
+            a dict with Loki config
+        """
+        if isinstance(event, LokiPushApiEndpointDeparted):
+            return {"loki": {}}
+
+        if isinstance(event, LokiPushApiEndpointJoined):
+            return {
+                "loki": {
+                    "configs": [
+                        {
+                            "name": "promtail",
+                            "clients": [{"url": f"{self._loki_consumer.loki_push_api}"}],
+                            "positions": {"filename": f"{self._promtail_positions}"},
+                            "scrape_configs": [
+                                {
+                                    "job_name": "loki",
+                                    "loki_push_api": {
+                                        "server": {
+                                            "http_listen_port": self._http_listen_port,
+                                            "grpc_listen_port": self._grpc_listen_port,
+                                        },
+                                        "labels": {"pushserver": "loki"},
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+
+        return {"loki": {}}
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
