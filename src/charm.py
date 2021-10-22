@@ -65,12 +65,12 @@ class GrafanaAgentOperatorCharm(CharmBase):
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_departed,
-            self._on_loki_push_api_endpoint_departed,
-        )
-        self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
             self._on_loki_push_api_endpoint_joined,
+        )
+        self.framework.observe(
+            self._loki_consumer.on.loki_push_api_endpoint_departed,
+            self._on_loki_push_api_endpoint_departed,
         )
 
     def _on_install(self, _):
