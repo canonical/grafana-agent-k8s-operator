@@ -151,7 +151,10 @@ class TestCharm(unittest.TestCase):
         }
         self.assertEqual(path, "/etc/agent/agent.yaml")
 
-        self.assertEqual(DeepDiff(content, expected_config, ignore_order=True), {})
+        self.assertEqual(
+            DeepDiff(content["integrations"], expected_config["integrations"], ignore_order=True),
+            {},
+        )
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
     @responses.activate
@@ -181,25 +184,13 @@ class TestCharm(unittest.TestCase):
         path, content = mock_push.call_args[0]
         self.assertEqual(path, "/etc/agent/agent.yaml")
         self.assertDictEqual(
-            yaml.safe_load(content),
+            yaml.safe_load(content)["integrations"],
             {
-                "integrations": {
-                    "agent": {
-                        "enabled": True,
-                        "relabel_configs": REWRITE_CONFIGS,
-                    },
-                    "prometheus_remote_write": [],
+                "agent": {
+                    "enabled": True,
+                    "relabel_configs": REWRITE_CONFIGS,
                 },
-                "prometheus": {
-                    "configs": [
-                        {
-                            "name": "agent_scraper",
-                            "remote_write": [],
-                            "scrape_configs": [],
-                        }
-                    ]
-                },
-                "server": {"log_level": "info"},
+                "prometheus_remote_write": [],
             },
         )
 
@@ -264,7 +255,7 @@ class TestCharm(unittest.TestCase):
         path, content = mock_push.call_args[0]
 
         self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertTrue("loki" not in yaml.safe_load(content))
+        self.assertTrue(yaml.safe_load(content)["loki"] == {})
 
     def test__update_config_pebble_ready(self):
         self.harness.charm._container.can_connect = Mock(return_value=True)
