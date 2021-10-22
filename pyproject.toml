@@ -61,6 +61,7 @@ allow_redefinition = true
 [[tool.mypy.overrides]]
 module = ["ops.*"]
 ignore_missing_imports = true
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = ["charms.prometheus_k8s.v0.*"]
