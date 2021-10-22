@@ -231,7 +231,6 @@ class TestCharm(unittest.TestCase):
                                     "http_listen_port": 3500,
                                     "grpc_listen_port": 3600,
                                 },
-                                "labels": {"pushserver": "loki"},
                             },
                         }
                     ],
