@@ -28,6 +28,10 @@ requires:
   logging:
     interface: loki_push_api
 
+provides:
+  log_proxy:
+    interface: loki_push_api
+
 storage:
   data:
     type: filesystem
