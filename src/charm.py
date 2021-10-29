@@ -8,6 +8,7 @@
 import logging
 
 import yaml
+from charms.grafana_agent_k8s.v0.grafana_agent import LogProxyProvider
 from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
@@ -57,6 +58,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
         self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
         self._loki_consumer = LokiPushApiConsumer(self)
+        self._log_proxy = LogProxyProvider(self)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
