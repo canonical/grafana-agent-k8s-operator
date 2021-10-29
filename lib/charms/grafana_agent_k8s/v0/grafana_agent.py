@@ -7,50 +7,75 @@
 r"""## Overview.
 
 This document explains how to integrate a workload charm that needs to send logs to a
-`Loki` or a `Grafana agent` charm that implements the `loki_push_api` interface.
+charmed operator that implements the `loki_push_api` relation interface to expose
+to other charmed operators Loki's Push API endpoint.
 
-The underlying idea is that this library will create and manage a side-car container
-in the pod of the workload charm that will run `Promtail` as a `LogProxy` to forward logs
-through `loki_push_api` interface.
+
+Filtering of logs in Loki is largely performed on the basis of labels.
+In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
+generates telemetry like logs.
+In order to be able to control the labels on the logs pushed to a Loki Push API endpoint to add
+Juju topology labels, this library will create and manage a sidecar container that runs `promtail`
+as a logging proxy, and `promtail` is in charge of adding the Juju topology labels.
+
 
 
 
 ## Consumer Library Usage
 
 Let's say that we have a workload charm that produce logs and we need to send those logs to
-`Loki` or `Grafana agent` that implements the `loki_push_api` interface.
+`Loki` or `Grafana Agent` that implements the `loki_push_api` interface.
 
-To solve this situation we need to do two things in the workload charm:
-
- - Use the `LogProxyConsumer` class by instanting it in the `__init__` method.
- - Modify the `metadata.yaml` file to add:
-   - The promtail side-car container.
-   - The `log_proxy` relation in the `requires` section.
-   - The `promtail-image` in the `resources` section.
+Adopting this library in a charmed operator consist of two steps:
 
 
-To use the `LogProxyConsumer` we only have to import the libray and instantiate it:
+1. Use the `LogProxyConsumer` class by instanting it in the `__init__` method of the
+   charmed operator:
 
+   ```python
+   from charms.grafana_agent_k8s.v0.grafana_agent import LogProxyConsumer
 
-```python
-from charms.grafana_agent_k8s.v0.grafana_agent import LogProxyConsumer
+   ...
 
-...
+       def __init__(self, *args):
+           ...
+           self._log_proxy = LogProxyConsumer(self, LOG_FILES)
+   ```
 
-    def __init__(self, *args):
-        ...
-        self._log_proxy = LogProxyConsumer(self, LOG_FILES)
-```
+   Note that `LOG_FILES` is a `list` containing the log files we want to send to `Loki` or
+   `Grafana Agent`, for instance:
 
-Note that `LOG_FILES` is a `list` containing the log files we want to send to `Loki` or
-`Grafana agent`, for instance:
+   ```python
+   LOG_FILES = [
+       "/var/log/apache2/access.log",
+       "/var/log/alternatives.log",
+   ]
+   ```
 
-```python
-LOG_FILES = [
-    "/var/log/apache2/access.log",
-    "/var/log/alternatives.log",
-]
-```
+2. Modify the `metadata.yaml` file to add:
+
+   - The promtail side-car container:
+      ```yaml
+        containers:
+          promtail:
+            resource: promtail-image
+      ```
+
+   - The `log_proxy` relation in the `requires` section:
+     ```yaml
+     requires:
+       log_proxy:
+         interface: loki_push_api
+         optional: true
+     ```
+
+   - The `promtail-image` in the `resources` section:
+     ```yaml
+       resources:
+         promtail-image:
+           type: oci-image
+           description: upstream docker image for Promtail
+     ```
 """
 
 import logging
