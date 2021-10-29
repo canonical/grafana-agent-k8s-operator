@@ -259,7 +259,7 @@ class LogProxyConsumer(RelationManagerBase):
 
     def _initial_config(self) -> dict:
         """Generates an initial config for Promtail to be completed with the `client` section
-        once a relation between Grafana agent charm and a workload charm is established.
+        once a relation between Grafana Agent charm and a workload charm is established.
 
         Returns:
             A dictionary containing initial config.
@@ -271,11 +271,11 @@ class LogProxyConsumer(RelationManagerBase):
         return config
 
     def _add_client(self, current_config: dict, agent_url: str) -> dict:
-        """Updates Promtail's current configuration by adding a Grafana agent URL.
+        """Updates Promtail's current configuration by adding a Grafana Agent URL.
 
         Args:
             current_config: A dictionary containing Promtail current configuration.
-            agent_url: A string with Grafana agent URL.
+            agent_url: A string with Grafana Agent URL.
 
         Returns:
             Updated Promtail configuration.
@@ -288,11 +288,11 @@ class LogProxyConsumer(RelationManagerBase):
         return current_config
 
     def _remove_client(self, current_config, agent_url) -> dict:
-        """Updates Promtail's current configuration by removing a Grafana agent URL.
+        """Updates Promtail's current configuration by removing a Grafana Agent URL.
 
         Args:
             current_config: A dictionary containing Promtail current configuration.
-            agent_url: A string with Grafana agent URL.
+            agent_url: A string with Grafana Agent URL.
 
         Returns:
             Updated Promtail configuration.
