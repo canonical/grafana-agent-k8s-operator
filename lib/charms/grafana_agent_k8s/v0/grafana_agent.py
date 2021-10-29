@@ -113,10 +113,10 @@ class RelationManagerBase(Object):
         name (str): consumer's relation name
     """
 
-    def __init__(self, charm: CharmBase, relation_name):
+    def __init__(self, charm: CharmBase, relation_name=DEFAULT_RELATION_NAME):
         super().__init__(charm, relation_name)
         self._relation_name = relation_name
-        self.name = "promtail"
+        self._container_name = "promtail"
 
 
 class LogProxyConsumer(RelationManagerBase):
@@ -128,7 +128,7 @@ class LogProxyConsumer(RelationManagerBase):
         self._stored.set_default(grafana_agents="{}")
         self._charm = charm
         self._relation_name = relation_name
-        self._container = self._charm.unit.get_container(self.name)
+        self._container = self._charm.unit.get_container(self._container_name)
         self._log_files = log_files
         self._loki_push_api = ""
         self.framework.observe(self._charm.on.promtail_pebble_ready, self._on_promtail_pebble_ready)
@@ -146,7 +146,7 @@ class LogProxyConsumer(RelationManagerBase):
             self._loki_push_api = _loki_push_api
             self._update_config(event)
             self._update_agents_list(event)
-            self._container.restart(self.name)
+            self._container.restart(self._container_name)
 
     def _on_log_proxy_relation_departed(self, event):
         """Event handler for the `log_proxy_relation_departed`.
@@ -158,9 +158,9 @@ class LogProxyConsumer(RelationManagerBase):
         self._update_agents_list(event)
 
         if len(self._current_config["clients"]) == 0:
-            self._container.stop(self.name)
+            self._container.stop(self._container_name)
         else:
-            self._container.restart(self.name)
+            self._container.restart(self._container_name)
 
     def _on_upgrade_charm(self, event):
         # TODO: Implement it ;-)
