@@ -162,7 +162,6 @@ class LogProxyConsumer(RelationManagerBase):
         }
 
         self._container.add_layer("promtail", pebble_layer, combine=True)
-        logger.debug("Creating first config file")
         config = self._initial_config()
         self._container.push(CONFIG_PATH, yaml.dump(config))
 
@@ -190,7 +189,6 @@ class LogProxyConsumer(RelationManagerBase):
             event: `RelationChangedEvent` or `RelationDepartedEvent`
         """
 
-        logger.debug("Updating config.")
         config = self._build_config_file(event)
         self._container.push(CONFIG_PATH, config)
 
@@ -351,7 +349,6 @@ class LogProxyProvider(RelationManagerBase):
     def _on_log_proxy_relation_changed(self, event):
         if event.relation.data[self._charm.unit].get("data") is None:
             event.relation.data[self._charm.unit].update({"data": self._loki_push_api})
-            logger.debug("Saving Grafana Agent url in relation data %s", self._loki_push_api)
 
     def _on_upgrade_charm(self, event):
         pass
