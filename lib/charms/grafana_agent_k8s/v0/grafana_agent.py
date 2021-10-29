@@ -130,7 +130,6 @@ class LogProxyConsumer(RelationManagerBase):
         self._relation_name = relation_name
         self._container = self._charm.unit.get_container(self._container_name)
         self._log_files = log_files
-        self._loki_push_api = ""
         self.framework.observe(self._charm.on.promtail_pebble_ready, self._on_promtail_pebble_ready)
         self.framework.observe(self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed)
         self.framework.observe(self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed)
@@ -142,8 +141,7 @@ class LogProxyConsumer(RelationManagerBase):
         Args:
             event: The event object `RelationChangedEvent`.
         """
-        if _loki_push_api := event.relation.data[event.unit].get("data", None):
-            self._loki_push_api = _loki_push_api
+        if event.relation.data[event.unit].get("data", None):
             self._update_config(event)
             self._update_agents_list(event)
             self._container.restart(self._container_name)
