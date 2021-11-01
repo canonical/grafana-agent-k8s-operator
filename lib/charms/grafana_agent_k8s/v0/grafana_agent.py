@@ -351,7 +351,7 @@ class LogProxyConsumer(RelationManagerBase):
                                 'job': "juju_{}_{}_{}".format(
                                     self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name
                                 ),
-                                '__path__': '/var/log/*log'
+                                '__path__': '/var/log/dmesg'
                             }
                         }
                     ]
