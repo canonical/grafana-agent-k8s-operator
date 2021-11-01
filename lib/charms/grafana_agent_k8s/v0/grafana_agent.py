@@ -23,8 +23,7 @@ as a logging proxy, injecting Juju topology labels into the logs on the fly.
 
 ## Consumer Library Usage
 
-Let's say that we have a workload charm that produce logs and we need to send those logs to
-`Loki` or `Grafana Agent` that implements the `loki_push_api` interface.
+Let's say that we have a workload charm that produce logs and we need to send those logs to a workload implementing the `loki_push_api` interface, like `Loki` or `Grafana Agent`.
 
 Adopting this library in a charmed operator consist of two steps:
 
