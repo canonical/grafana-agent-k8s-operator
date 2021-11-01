@@ -16,7 +16,7 @@ In the Juju ecosystem, Juju topology labels are used to uniquely identify the wo
 generates telemetry like logs.
 In order to be able to control the labels on the logs pushed to a Loki Push API endpoint to add
 Juju topology labels, this library will create and manage a sidecar container that runs `promtail`
-as a logging proxy, and `promtail` is in charge of adding the Juju topology labels.
+as a logging proxy, injecting Juju topology labels into the logs on the fly.
 
 
 
