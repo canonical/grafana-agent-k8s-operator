@@ -76,8 +76,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._on_loki_push_api_endpoint_departed,
         )
 
-        self.on
-
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
         self._patch_k8s_service()
