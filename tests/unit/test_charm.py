@@ -86,7 +86,8 @@ class TestCharm(unittest.TestCase):
         self.harness = Harness(GrafanaAgentOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_model_info(name="lma", uuid="1234567890")
-        self.harness.begin_with_initial_hooks()
+        self.harness.set_leader(True)
+        self.harness.begin()
 
     @responses.activate
     @patch.object(Container, "pull", new=pull_empty_fake_file)
@@ -100,26 +101,20 @@ class TestCharm(unittest.TestCase):
             status=200,
         )
 
-        rel_id = self.harness.add_relation("prometheus-remote-write", "prometheus-k8s")
+        rel_id = self.harness.add_relation("prometheus-remote-write", "prometheus")
 
-        self.harness.add_relation_unit(rel_id, "prometheus-k8s/0")
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
         self.harness.update_relation_data(
             rel_id,
-            "prometheus-k8s/0",
-            {
-                "address": "1.1.1.1",
-                "port": "9090",
-            },
+            "prometheus/0",
+            {"remote_write": json.dumps({"url": "http://1.1.1.1:9090/api/v1/write"})},
         )
 
-        self.harness.add_relation_unit(rel_id, "prometheus-k8s/1")
+        self.harness.add_relation_unit(rel_id, "prometheus/1")
         self.harness.update_relation_data(
             rel_id,
-            "prometheus-k8s/1",
-            {
-                "address": "1.1.1.2",
-                "port": "9090",
-            },
+            "prometheus/1",
+            {"remote_write": json.dumps({"url": "http://1.1.1.2:9090/api/v1/write"})},
         )
 
         path, content = mock_push.call_args[0]
