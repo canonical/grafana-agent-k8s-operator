@@ -12,7 +12,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import List, Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import yaml
 from ops.charm import CharmBase, RelationEvent, RelationMeta, RelationRole
@@ -684,6 +684,7 @@ class PrometheusRemoteWriteProvider(Object):
                 continue
 
             alert_rules = json.loads(relation.data[relation.app].get("alert_rules", "{}"))
+
             if not alert_rules:
                 continue
 
