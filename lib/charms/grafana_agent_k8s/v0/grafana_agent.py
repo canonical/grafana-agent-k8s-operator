@@ -79,10 +79,15 @@ Adopting this library in a charmed operator consist of two steps:
 
 import logging
 import json
+import requests
 import yaml
+import zipfile
+
+from hashlib import sha256
 from ops.charm import CharmBase, InstallEvent, RelationChangedEvent, RelationDepartedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-
+from pathlib import Path
+from zipfile import ZipFile
 
 logger = logging.getLogger(__name__)
 # The unique Charmhub library identifier, never change it
@@ -97,9 +102,19 @@ LIBPATCH = 1
 
 DEFAULT_RELATION_NAME = "log_proxy"
 HTTP_LISTEN_PORT = 9080
+HTTP_LISTEN_PORT = 9080
 GRPC_LISTEN_PORT = 0
 POSITIONS_FILENAME = "/tmp/positions.yaml"
-CONFIG_PATH = "/etc/promtail/config.yml"
+CONFIG_PATH = "/tmp/promtail_config.yml"
+PROMTAIL_BINARY_ZIP_URL = "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
+BINARY_ZIP_PATH = "/tmp/promtail-linux-amd64.zip"
+BINARY_DIR = "/tmp"
+BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
+WORKLOAD_BINARY_PATH = "/tmp/promtail-linux-amd64"
+
+
+class PromtailSHA256Error(Exception):
+    """Raised if there is an error with Promtail sha256 sum binary file"""
 
 
 class RelationManagerBase(Object):
@@ -115,7 +130,6 @@ class RelationManagerBase(Object):
     def __init__(self, charm: CharmBase, relation_name=DEFAULT_RELATION_NAME):
         super().__init__(charm, relation_name)
         self._relation_name = relation_name
-        self._container_name = "promtail"
 
 
 class LogProxyConsumer(RelationManagerBase):
@@ -127,9 +141,10 @@ class LogProxyConsumer(RelationManagerBase):
         self._stored.set_default(grafana_agents="{}")
         self._charm = charm
         self._relation_name = relation_name
+        containers = dict(self._charm.model.unit.containers)
+        self._container_name = [*containers].pop()
         self._container = self._charm.unit.get_container(self._container_name)
         self._log_files = log_files
-        self.framework.observe(self._charm.on.promtail_pebble_ready, self._on_promtail_pebble_ready)
         self.framework.observe(self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed)
         self.framework.observe(self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed)
         self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
@@ -141,8 +156,11 @@ class LogProxyConsumer(RelationManagerBase):
             event: The event object `RelationChangedEvent`.
         """
         if event.relation.data[event.unit].get("data", None):
+            self._obtain_promtail(event)
+            self._initial_config()
             self._update_config(event)
             self._update_agents_list(event)
+            self._build_pebble_layer()
             self._container.restart(self._container_name)
 
     def _on_log_proxy_relation_departed(self, event):
@@ -163,11 +181,8 @@ class LogProxyConsumer(RelationManagerBase):
         # TODO: Implement it ;-)
         pass
 
-    def _on_promtail_pebble_ready(self, _):
+    def _build_pebble_layer(self):
         """Event handler for the pebble ready event.
-
-        Args:
-            event: The event object of the pebble ready event
         """
 
         pebble_layer = {
@@ -177,15 +192,53 @@ class LogProxyConsumer(RelationManagerBase):
                 "promtail": {
                     "override": "replace",
                     "summary": "promtail",
-                    "command": f"/usr/bin/promtail {self._cli_args}",
-                    "startup": "disable",
+                    "command": f"{WORKLOAD_BINARY_PATH} {self._cli_args}",
+                    "startup": "enable",
                 }
             },
         }
+        self._container.add_layer(self._container_name, pebble_layer, combine=True)
 
-        self._container.add_layer("promtail", pebble_layer, combine=True)
-        config = self._initial_config()
-        self._container.push(CONFIG_PATH, yaml.dump(config))
+
+    def _obtain_promtail(self, event) -> None:
+        self._download_promtail(event)
+
+        if not self._check_sha256sum():
+            msg = "Promtail bnary sha256sum mismatch"
+            logger.error(msg)
+            raise PromtailSHA256Error(msg)
+
+        self._unzip_binary()
+        self._upload_binary()
+
+
+    def _download_promtail(self, event) -> None:
+        url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
+
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(BINARY_ZIP_PATH, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+    def _check_sha256sum(self, filename=BINARY_ZIP_PATH, sha256sum=BINARY_SHA25SUM) -> bool:
+        with open(filename, "rb") as f:
+            f_byte= f.read()
+            result = sha256(f_byte).hexdigest()
+
+        if sha256sum == result:
+            return True
+
+        return False
+
+
+    def _unzip_binary(self, zip_file=BINARY_ZIP_PATH, binary_dir=BINARY_DIR) -> None:
+        with ZipFile(zip_file, 'r') as zip_ref:
+            zip_ref.extractall(binary_dir)
+
+    def _upload_binary(self, dest=WORKLOAD_BINARY_PATH, origin=WORKLOAD_BINARY_PATH) -> None:
+        with open(origin, 'rb') as f:
+            self._container.push(dest, f, permissions=0o755)
 
     def _update_agents_list(self, event):
         """Updates the active Grafana agents list.
@@ -254,18 +307,15 @@ class LogProxyConsumer(RelationManagerBase):
 
         return yaml.dump(config)
 
-    def _initial_config(self) -> dict:
+    def _initial_config(self) -> None:
         """Generates an initial config for Promtail to be completed with the `client` section
         once a relation between Grafana Agent charm and a workload charm is established.
-
-        Returns:
-            A dictionary containing initial config.
         """
         config = {}
         config.update(self._server_config())
         config.update(self._positions())
         config.update(self._scrape_configs())
-        return config
+        self._container.push(CONFIG_PATH, yaml.dump(config))
 
     def _add_client(self, current_config: dict, agent_url: str) -> dict:
         """Updates Promtail's current configuration by adding a Grafana Agent URL.
@@ -370,10 +420,18 @@ class LogProxyProvider(RelationManagerBase):
 
     def _on_log_proxy_relation_changed(self, event):
         if event.relation.data[self._charm.unit].get("data") is None:
-            event.relation.data[self._charm.unit].update({"data": self._loki_push_api})
+            data = {}
+            data.update(json.loads(self._loki_push_api))
+            data.update(json.loads(self._promtail_binary_url))
+            event.relation.data[self._charm.unit].update({"data": json.dumps(data)})
 
     def _on_upgrade_charm(self, event):
         pass
+
+    @property
+    def _promtail_binary_url(self) -> str:
+        # FIXME: Use charmhub's URL
+        return json.dumps({"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL})
 
     @property
     def _loki_push_api(self) -> str:
