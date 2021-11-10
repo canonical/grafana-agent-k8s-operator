@@ -115,8 +115,8 @@ POSITIONS_FILENAME = "/tmp/positions.yaml"
 CONFIG_PATH = "/tmp/promtail_config.yml"
 
 
-class PromtailSHA256Error(Exception):
-    """Raised if there is an error with Promtail sha256 sum binary file."""
+class PromtailDigestError(Exception):
+    """Raised if there is an error with Promtail binary file."""
 
 
 class RelationManagerBase(Object):
@@ -237,7 +237,7 @@ class LogProxyConsumer(RelationManagerBase):
         if not self._check_sha256sum():
             msg = "Promtail bnary sha256sum mismatch"
             logger.error(msg)
-            raise PromtailSHA256Error(msg)
+            raise PromtailDigestError(msg)
 
         self._unzip_binary()
         self._upload_binary()
