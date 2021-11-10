@@ -88,6 +88,7 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredSt
 from pathlib import Path
 from zipfile import ZipFile
 from urllib.request import urlopen
+from typing import Optional
 
 
 logger = logging.getLogger(__name__)
@@ -137,14 +138,13 @@ class LogProxyConsumer(RelationManagerBase):
 
     _stored = StoredState()
 
-    def __init__(self, charm, log_files: list, relation_name: str = DEFAULT_RELATION_NAME):
+    def __init__(self, charm, log_files: list, container_name: Optional[str], relation_name: str = DEFAULT_RELATION_NAME):
         super().__init__(charm, relation_name)
         self._stored.set_default(grafana_agents="{}")
         self._charm = charm
         self._relation_name = relation_name
-        containers = dict(self._charm.model.unit.containers)
-        self._container_name = [*containers].pop()
-        self._container = self._charm.unit.get_container(self._container_name)
+        self._container_name = container_name
+        self._container = self._get_container(container_name)
         self._log_files = log_files
         self.framework.observe(self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created)
         self.framework.observe(self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed)
@@ -189,6 +189,19 @@ class LogProxyConsumer(RelationManagerBase):
         # TODO: Implement it ;-)
         pass
 
+
+    def _get_container(self, container_name):
+        if container_name is not None:
+            return self._charm.unit.get_container(container_name)
+
+        containers = dict(self._charm.model.unit.containers)
+
+        if len(containers) == 1:
+            return self._charm.unit.get_container([*containers].pop())
+
+        # FIXME: Use custom exception
+        raise Exception("Container cannot be obtained")
+
     def _build_pebble_layer(self):
         """Event handler for the pebble ready event.
         """
@@ -200,7 +213,7 @@ class LogProxyConsumer(RelationManagerBase):
                 "promtail": {
                     "override": "replace",
                     "summary": "promtail",
-                    "command": f"{WORKLOAD_BINARY_PATH} {self._cli_args}",
+                    "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
                     "startup": "enabled",
                 }
             },
@@ -284,7 +297,7 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             The arguments as a string
         """
-        return f"-config.file={CONFIG_PATH}"
+        return "-config.file={}".format(CONFIG_PATH)
 
     @property
     def _current_config(self) -> dict:
@@ -451,7 +464,7 @@ class LogProxyProvider(RelationManagerBase):
         Returns:
             Loki push API URL as json string
         """
-        loki_push_api = f"http://{self.unit_ip}:{self._charm._http_listen_port}/loki/api/v1/push"
+        loki_push_api = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self._charm._http_listen_port)
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
