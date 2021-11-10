@@ -228,8 +228,10 @@ class LogProxyConsumer(RelationManagerBase):
         }
         self._container.add_layer(self._container_name, pebble_layer, combine=True)
 
-
     def _obtain_promtail(self, event) -> None:
+        if self._is_promtail_binary_in_workload():
+            return
+
         self._download_promtail(event)
 
         if not self._check_sha256sum():
@@ -240,6 +242,9 @@ class LogProxyConsumer(RelationManagerBase):
         self._unzip_binary()
         self._upload_binary()
 
+    def _is_promtail_binary_in_workload(self) -> bool:
+        pat = WORKLOAD_BINARY_PATH.split("/")[-1]
+        return True if len(self._container.list_files(BINARY_DIR, pattern=pat)) == 1 else False
 
     def _download_promtail(self, event) -> None:
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
