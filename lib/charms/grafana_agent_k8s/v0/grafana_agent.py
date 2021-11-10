@@ -155,7 +155,7 @@ class LogProxyConsumer(RelationManagerBase):
     def _on_log_proxy_relation_created(self, event):
         """Event handler for the `log_proxy_relation_created`.
         """
-        self._container.push(CONFIG_PATH, yaml.dump(self._initial_config()))
+        self._container.push(CONFIG_PATH, yaml.dump(self._initial_config))
 
     def _on_log_proxy_relation_changed(self, event):
         """Event handler for the `log_proxy_relation_changed`.
