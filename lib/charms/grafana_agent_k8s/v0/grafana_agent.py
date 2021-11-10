@@ -155,7 +155,7 @@ class LogProxyConsumer(RelationManagerBase):
     def _on_log_proxy_relation_created(self, event):
         """Event handler for the `log_proxy_relation_created`.
         """
-        self._initial_config()
+        self._container.push(CONFIG_PATH, yaml.dump(self._initial_config()))
 
     def _on_log_proxy_relation_changed(self, event):
         """Event handler for the `log_proxy_relation_changed`.
@@ -317,7 +317,8 @@ class LogProxyConsumer(RelationManagerBase):
 
         return yaml.dump(config)
 
-    def _initial_config(self) -> None:
+    @property
+    def _initial_config(self) -> dict:
         """Generates an initial config for Promtail to be completed with the `client` section
         once a relation between Grafana Agent charm and a workload charm is established.
         """
@@ -325,7 +326,7 @@ class LogProxyConsumer(RelationManagerBase):
         config.update(self._server_config())
         config.update(self._positions())
         config.update(self._scrape_configs())
-        self._container.push(CONFIG_PATH, yaml.dump(config))
+        return config
 
     def _add_client(self, current_config: dict, agent_url: str) -> dict:
         """Updates Promtail's current configuration by adding a Grafana Agent URL.
