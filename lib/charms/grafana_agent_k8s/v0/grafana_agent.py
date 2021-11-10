@@ -79,7 +79,6 @@ Adopting this library in a charmed operator consist of two steps:
 
 import logging
 import json
-import requests
 import yaml
 import zipfile
 
@@ -88,6 +87,8 @@ from ops.charm import CharmBase, InstallEvent, RelationChangedEvent, RelationDep
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from pathlib import Path
 from zipfile import ZipFile
+from urllib.request import urlopen
+
 
 logger = logging.getLogger(__name__)
 # The unique Charmhub library identifier, never change it
@@ -99,6 +100,11 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 LIBPATCH = 1
+PROMTAIL_BINARY_ZIP_URL = "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
+BINARY_ZIP_PATH = "/tmp/promtail-linux-amd64.zip"
+BINARY_DIR = "/tmp"
+BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
+WORKLOAD_BINARY_PATH = "/tmp/promtail-linux-amd64"
 
 DEFAULT_RELATION_NAME = "log_proxy"
 HTTP_LISTEN_PORT = 9080
@@ -106,11 +112,6 @@ HTTP_LISTEN_PORT = 9080
 GRPC_LISTEN_PORT = 0
 POSITIONS_FILENAME = "/tmp/positions.yaml"
 CONFIG_PATH = "/tmp/promtail_config.yml"
-PROMTAIL_BINARY_ZIP_URL = "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
-BINARY_ZIP_PATH = "/tmp/promtail-linux-amd64.zip"
-BINARY_DIR = "/tmp"
-BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
-WORKLOAD_BINARY_PATH = "/tmp/promtail-linux-amd64"
 
 
 class PromtailSHA256Error(Exception):
@@ -145,9 +146,16 @@ class LogProxyConsumer(RelationManagerBase):
         self._container_name = [*containers].pop()
         self._container = self._charm.unit.get_container(self._container_name)
         self._log_files = log_files
+        self.framework.observe(self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created)
         self.framework.observe(self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed)
         self.framework.observe(self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed)
         self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
+
+
+    def _on_log_proxy_relation_created(self, event):
+        """Event handler for the `log_proxy_relation_created`.
+        """
+        self._initial_config()
 
     def _on_log_proxy_relation_changed(self, event):
         """Event handler for the `log_proxy_relation_changed`.
@@ -157,11 +165,11 @@ class LogProxyConsumer(RelationManagerBase):
         """
         if event.relation.data[event.unit].get("data", None):
             self._obtain_promtail(event)
-            self._initial_config()
             self._update_config(event)
             self._update_agents_list(event)
             self._build_pebble_layer()
             self._container.restart(self._container_name)
+            self._container.restart("promtail")
 
     def _on_log_proxy_relation_departed(self, event):
         """Event handler for the `log_proxy_relation_departed`.
@@ -173,9 +181,9 @@ class LogProxyConsumer(RelationManagerBase):
         self._update_agents_list(event)
 
         if len(self._current_config["clients"]) == 0:
-            self._container.stop(self._container_name)
+            self._container.stop("promtail")
         else:
-            self._container.restart(self._container_name)
+            self._container.restart("promtail")
 
     def _on_upgrade_charm(self, event):
         # TODO: Implement it ;-)
@@ -193,7 +201,7 @@ class LogProxyConsumer(RelationManagerBase):
                     "override": "replace",
                     "summary": "promtail",
                     "command": f"{WORKLOAD_BINARY_PATH} {self._cli_args}",
-                    "startup": "enable",
+                    "startup": "enabled",
                 }
             },
         }
@@ -214,12 +222,14 @@ class LogProxyConsumer(RelationManagerBase):
 
     def _download_promtail(self, event) -> None:
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
+        response = urlopen(url)
 
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(BINARY_ZIP_PATH, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
+        with open(BINARY_ZIP_PATH, 'wb') as f:
+            while True:
+                chunk = response.read(8192)
+                if not chunk:
+                    break
+                f.write(chunk)
 
     def _check_sha256sum(self, filename=BINARY_ZIP_PATH, sha256sum=BINARY_SHA25SUM) -> bool:
         with open(filename, "rb") as f:
