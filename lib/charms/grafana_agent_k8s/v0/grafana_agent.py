@@ -178,7 +178,7 @@ class LogProxyConsumer(RelationManagerBase):
             self._obtain_promtail(event)
             self._update_config(event)
             self._update_agents_list(event)
-            self._build_pebble_layer()
+            self._add_pebble_layer()
             self._container.restart(self._container_name)
             self._container.restart("promtail")
 
@@ -212,8 +212,7 @@ class LogProxyConsumer(RelationManagerBase):
         # FIXME: Use custom exception
         raise Exception("Container cannot be obtained")
 
-    def _build_pebble_layer(self):
-        """Event handler for the pebble ready event."""
+    def _add_pebble_layer(self):
         pebble_layer = {
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
