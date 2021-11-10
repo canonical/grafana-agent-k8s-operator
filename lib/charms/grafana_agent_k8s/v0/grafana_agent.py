@@ -23,7 +23,8 @@ as a logging proxy, injecting Juju topology labels into the logs on the fly.
 
 ## Consumer Library Usage
 
-Let's say that we have a workload charm that produce logs and we need to send those logs to a workload implementing the `loki_push_api` interface, like `Loki` or `Grafana Agent`.
+Let's say that we have a workload charm that produce logs and we need to send those logs to a
+workload implementing the `loki_push_api` interface, like `Loki` or `Grafana Agent`.
 
 Adopting this library in a charmed operator consist of two steps:
 
@@ -77,19 +78,16 @@ Adopting this library in a charmed operator consist of two steps:
      ```
 """
 
-import logging
 import json
-import yaml
-import zipfile
-
+import logging
 from hashlib import sha256
-from ops.charm import CharmBase, InstallEvent, RelationChangedEvent, RelationDepartedEvent
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from pathlib import Path
-from zipfile import ZipFile
-from urllib.request import urlopen
 from typing import Optional
+from urllib.request import urlopen
+from zipfile import ZipFile
 
+import yaml
+from ops.charm import CharmBase, RelationChangedEvent, RelationDepartedEvent
+from ops.framework import Object, StoredState
 
 logger = logging.getLogger(__name__)
 # The unique Charmhub library identifier, never change it
@@ -101,7 +99,9 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 LIBPATCH = 1
-PROMTAIL_BINARY_ZIP_URL = "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
+PROMTAIL_BINARY_ZIP_URL = (
+    "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
+)
 BINARY_ZIP_PATH = "/tmp/promtail-linux-amd64.zip"
 BINARY_DIR = "/tmp"
 BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
@@ -116,7 +116,7 @@ CONFIG_PATH = "/tmp/promtail_config.yml"
 
 
 class PromtailSHA256Error(Exception):
-    """Raised if there is an error with Promtail sha256 sum binary file"""
+    """Raised if there is an error with Promtail sha256 sum binary file."""
 
 
 class RelationManagerBase(Object):
@@ -135,10 +135,17 @@ class RelationManagerBase(Object):
 
 
 class LogProxyConsumer(RelationManagerBase):
+    """LogProxyConsumer class."""
 
     _stored = StoredState()
 
-    def __init__(self, charm, log_files: list, container_name: Optional[str], relation_name: str = DEFAULT_RELATION_NAME):
+    def __init__(
+        self,
+        charm,
+        log_files: list,
+        container_name: Optional[str],
+        relation_name: str = DEFAULT_RELATION_NAME,
+    ):
         super().__init__(charm, relation_name)
         self._stored.set_default(grafana_agents="{}")
         self._charm = charm
@@ -146,15 +153,19 @@ class LogProxyConsumer(RelationManagerBase):
         self._container_name = container_name
         self._container = self._get_container(container_name)
         self._log_files = log_files
-        self.framework.observe(self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created)
-        self.framework.observe(self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed)
-        self.framework.observe(self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed)
+        self.framework.observe(
+            self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
+        )
+        self.framework.observe(
+            self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
+        )
+        self.framework.observe(
+            self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed
+        )
         self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
-
     def _on_log_proxy_relation_created(self, event):
-        """Event handler for the `log_proxy_relation_created`.
-        """
+        """Event handler for the `log_proxy_relation_created`."""
         self._container.push(CONFIG_PATH, yaml.dump(self._initial_config))
 
     def _on_log_proxy_relation_changed(self, event):
@@ -189,7 +200,6 @@ class LogProxyConsumer(RelationManagerBase):
         # TODO: Implement it ;-)
         pass
 
-
     def _get_container(self, container_name):
         if container_name is not None:
             return self._charm.unit.get_container(container_name)
@@ -203,9 +213,7 @@ class LogProxyConsumer(RelationManagerBase):
         raise Exception("Container cannot be obtained")
 
     def _build_pebble_layer(self):
-        """Event handler for the pebble ready event.
-        """
-
+        """Event handler for the pebble ready event."""
         pebble_layer = {
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
@@ -237,7 +245,7 @@ class LogProxyConsumer(RelationManagerBase):
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
         response = urlopen(url)
 
-        with open(BINARY_ZIP_PATH, 'wb') as f:
+        with open(BINARY_ZIP_PATH, "wb") as f:
             while True:
                 chunk = response.read(8192)
                 if not chunk:
@@ -246,7 +254,7 @@ class LogProxyConsumer(RelationManagerBase):
 
     def _check_sha256sum(self, filename=BINARY_ZIP_PATH, sha256sum=BINARY_SHA25SUM) -> bool:
         with open(filename, "rb") as f:
-            f_byte= f.read()
+            f_byte = f.read()
             result = sha256(f_byte).hexdigest()
 
         if sha256sum == result:
@@ -254,13 +262,12 @@ class LogProxyConsumer(RelationManagerBase):
 
         return False
 
-
     def _unzip_binary(self, zip_file=BINARY_ZIP_PATH, binary_dir=BINARY_DIR) -> None:
-        with ZipFile(zip_file, 'r') as zip_ref:
+        with ZipFile(zip_file, "r") as zip_ref:
             zip_ref.extractall(binary_dir)
 
     def _upload_binary(self, dest=WORKLOAD_BINARY_PATH, origin=WORKLOAD_BINARY_PATH) -> None:
-        with open(origin, 'rb') as f:
+        with open(origin, "rb") as f:
             self._container.push(dest, f, permissions=0o755)
 
     def _update_agents_list(self, event):
@@ -286,7 +293,6 @@ class LogProxyConsumer(RelationManagerBase):
         Args:
             event: `RelationChangedEvent` or `RelationDepartedEvent`
         """
-
         config = self._build_config_file(event)
         self._container.push(CONFIG_PATH, config)
 
@@ -301,7 +307,7 @@ class LogProxyConsumer(RelationManagerBase):
 
     @property
     def _current_config(self) -> dict:
-        """ Property that returns the current Promtail configuration.
+        """Property that returns the current Promtail configuration.
 
         Returns:
             A dict containing Promtail configuration.
@@ -332,7 +338,9 @@ class LogProxyConsumer(RelationManagerBase):
 
     @property
     def _initial_config(self) -> dict:
-        """Generates an initial config for Promtail to be completed with the `client` section
+        """Generates an initial config for Promtail.
+
+        This config it's going to be completed with the `client` section
         once a relation between Grafana Agent charm and a workload charm is established.
         """
         config = {}
@@ -394,11 +402,7 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             The dict representing the `positions` section.
         """
-        return {
-            "positions": {
-                "filename": POSITIONS_FILENAME
-            }
-        }
+        return {"positions": {"filename": POSITIONS_FILENAME}}
 
     def _scrape_configs(self) -> dict:
         """Generates the scrape_configs section of the Promtail config file.
@@ -414,32 +418,37 @@ class LogProxyConsumer(RelationManagerBase):
         # Also we need to use the log_files that we get from the consumer.
         # and use the JujuTopology object
         return {
-            'scrape_configs': [
+            "scrape_configs": [
                 {
-                    'job_name': 'system',
-                    'static_configs': [
+                    "job_name": "system",
+                    "static_configs": [
                         {
-                            'targets': ['localhost'],
-                            'labels': {
-                                'job': "juju_{}_{}_{}".format(
-                                    self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name
+                            "targets": ["localhost"],
+                            "labels": {
+                                "job": "juju_{}_{}_{}".format(
+                                    self._charm.model.name,
+                                    self._charm.model.uuid,
+                                    self._charm.model.app.name,
                                 ),
-                                '__path__': '/var/log/dmesg'
-                            }
+                                "__path__": "/var/log/dmesg",
+                            },
                         }
-                    ]
+                    ],
                 }
             ]
         }
 
 
 class LogProxyProvider(RelationManagerBase):
+    """LogProxyProvider class."""
 
     def __init__(self, charm, relation_name: str = DEFAULT_RELATION_NAME):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self.framework.observe(self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed)
+        self.framework.observe(
+            self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
+        )
         self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
     def _on_log_proxy_relation_changed(self, event):
@@ -464,7 +473,9 @@ class LogProxyProvider(RelationManagerBase):
         Returns:
             Loki push API URL as json string
         """
-        loki_push_api = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self._charm._http_listen_port)
+        loki_push_api = "http://{}:{}/loki/api/v1/push".format(
+            self.unit_ip, self._charm._http_listen_port
+        )
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
