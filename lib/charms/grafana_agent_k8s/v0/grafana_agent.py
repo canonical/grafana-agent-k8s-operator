@@ -106,6 +106,7 @@ BINARY_ZIP_PATH = "/tmp/promtail-linux-amd64.zip"
 BINARY_DIR = "/tmp"
 BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
 WORKLOAD_BINARY_PATH = "/tmp/promtail-linux-amd64"
+SERVICE_NAME = "promtail"
 
 DEFAULT_RELATION_NAME = "log_proxy"
 HTTP_LISTEN_PORT = 9080
@@ -180,7 +181,7 @@ class LogProxyConsumer(RelationManagerBase):
             self._update_agents_list(event)
             self._add_pebble_layer()
             self._container.restart(self._container_name)
-            self._container.restart("promtail")
+            self._container.restart(SERVICE_NAME)
 
     def _on_log_proxy_relation_departed(self, event):
         """Event handler for the `log_proxy_relation_departed`.
@@ -192,9 +193,9 @@ class LogProxyConsumer(RelationManagerBase):
         self._update_agents_list(event)
 
         if len(self._current_config["clients"]) == 0:
-            self._container.stop("promtail")
+            self._container.stop(SERVICE_NAME)
         else:
-            self._container.restart("promtail")
+            self._container.restart(SERVICE_NAME)
 
     def _on_upgrade_charm(self, event):
         # TODO: Implement it ;-)
@@ -217,9 +218,9 @@ class LogProxyConsumer(RelationManagerBase):
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
             "services": {
-                "promtail": {
+                SERVICE_NAME: {
                     "override": "replace",
-                    "summary": "promtail",
+                    "summary": SERVICE_NAME,
                     "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
                     "startup": "enabled",
                 }
