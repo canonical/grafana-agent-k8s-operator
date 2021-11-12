@@ -474,7 +474,7 @@ class LogProxyConsumer(RelationManagerBase):
             - a list of dictionaries representing static_configs section
         """
         static_configs = []
-        config = {
+        config: dict = {
             "targets": ["localhost"],
             "labels": {
                 "job": "juju_{}_{}_{}".format(
