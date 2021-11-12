@@ -81,6 +81,7 @@ Adopting this library in a charmed operator consist of two steps:
 import json
 import logging
 from hashlib import sha256
+from shutil import copyfileobj
 from typing import Optional
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -274,12 +275,8 @@ class LogProxyConsumer(RelationManagerBase):
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
         response = urlopen(url)
 
-        with open(BINARY_ZIP_PATH, "wb") as f:
-            while True:
-                chunk = response.read(8192)
-                if not chunk:
-                    break
-                f.write(chunk)
+        with response as r, open(BINARY_ZIP_PATH, "wb") as f:
+            copyfileobj(r, f)
 
     def _check_sha256sum(self, filename=BINARY_ZIP_PATH, sha256sum=BINARY_SHA25SUM) -> bool:
         with open(filename, "rb") as f:
