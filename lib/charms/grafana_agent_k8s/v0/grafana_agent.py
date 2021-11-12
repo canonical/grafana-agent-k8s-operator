@@ -219,6 +219,20 @@ class LogProxyConsumer(RelationManagerBase):
         pass
 
     def _get_container(self, container_name):
+        """Gets a single container by name or using the only container running in the Pod.
+
+        If there is more than one container in the Pod a `PromtailDigestError` is raised.
+
+        Args:
+            container_name: The container name.
+
+        Returns:
+            container: a `ops.model.Container` object representing the container.
+
+        Raises:
+            PromtailDigestError if no `container_name` is passed and there is more than one
+                container in the Pod.
+        """
         if container_name is not None:
             return self._charm.unit.get_container(container_name)
 
@@ -235,6 +249,7 @@ class LogProxyConsumer(RelationManagerBase):
         raise PromtailDigestError(msg)
 
     def _add_pebble_layer(self):
+        """Adds Pebble layer that manages Promtail service in Workload container."""
         pebble_layer = {
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
@@ -250,6 +265,7 @@ class LogProxyConsumer(RelationManagerBase):
         self._container.add_layer(self._container_name, pebble_layer, combine=True)
 
     def _create_directories(self) -> None:
+        """Creates the directories for Promtail binary and config file."""
         self._container.exec(["mkdir", "-p", WORKLOAD_BINARY_DIR])
         self._container.exec(["mkdir", "-p", WORKLOAD_CONFIG_DIR])
 
@@ -268,6 +284,11 @@ class LogProxyConsumer(RelationManagerBase):
         self._upload_binary()
 
     def _is_promtail_binary_in_workload(self) -> bool:
+        """Check if Promtail binary is already stored in workload container.
+
+        Returns:
+            a boolean representing whether Promtail is present or not.
+        """
         cont = self._container.list_files(WORKLOAD_BINARY_DIR, pattern=WORKLOAD_BINARY_FILE_NAME)
         return True if len(cont) == 1 else False
 
@@ -413,7 +434,7 @@ class LogProxyConsumer(RelationManagerBase):
         """Generates the server section of the Promtail config file.
 
         Returns:
-            The dict representing the `server` section.
+            A dict representing the `server` section.
         """
         return {
             "server": {
@@ -426,7 +447,7 @@ class LogProxyConsumer(RelationManagerBase):
         """Generates the positions section of the Promtail config file.
 
         Returns:
-            The dict representing the `positions` section.
+            A dict representing the `positions` section.
         """
         return {"positions": {"filename": WORKLOAD_POSITIONS_PATH}}
 
@@ -434,7 +455,7 @@ class LogProxyConsumer(RelationManagerBase):
         """Generates the scrape_configs section of the Promtail config file.
 
         Returns:
-            The dict representing the `scrape_configs` section.
+            A dict representing the `scrape_configs` section.
         """
         # TODO: We need to define the right values for:
         # - job_name
@@ -489,6 +510,7 @@ class LogProxyProvider(RelationManagerBase):
 
     @property
     def _promtail_binary_url(self) -> str:
+        """URL from which Promtail binary can be downloaded."""
         # FIXME: Use charmhub's URL
         return json.dumps({"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL})
 
