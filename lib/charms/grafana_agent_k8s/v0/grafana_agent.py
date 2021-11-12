@@ -81,7 +81,8 @@ Adopting this library in a charmed operator consist of two steps:
 import json
 import logging
 from hashlib import sha256
-from shutil import copyfileobj
+from io import BytesIO
+from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -110,7 +111,7 @@ BINARY_ZIP_FILE_NAME = "promtail-linux-amd64.zip"
 BINARY_ZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_ZIP_FILE_NAME)
 BINARY_FILE_NAME = "promtail-linux-amd64"
 BINARY_PATH = "{}/{}".format(BINARY_DIR, BINARY_FILE_NAME)
-BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
+BINARY_SHA256SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
 
 WORKLOAD_BINARY_DIR = "/opt/promtail"
 WORKLOAD_BINARY_FILE_NAME = "promtail-linux-amd64"
@@ -273,15 +274,9 @@ class LogProxyConsumer(RelationManagerBase):
         if self._is_promtail_binary_in_workload():
             return
 
-        self._download_promtail(event)
-
-        if not self._check_sha256sum():
-            msg = "Promtail binary sha256sum mismatch"
-            logger.warning(msg)
-            raise PromtailDigestError(msg)
-
-        self._unzip_binary()
-        self._upload_binary()
+        if self._download_promtail(event):
+            with open(BINARY_PATH, "rb") as f:
+                self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
 
     def _is_promtail_binary_in_workload(self) -> bool:
         """Check if Promtail binary is already stored in workload container.
@@ -292,30 +287,32 @@ class LogProxyConsumer(RelationManagerBase):
         cont = self._container.list_files(WORKLOAD_BINARY_DIR, pattern=WORKLOAD_BINARY_FILE_NAME)
         return True if len(cont) == 1 else False
 
-    def _download_promtail(self, event) -> None:
+    def _download_promtail(self, event) -> bool:
+        """Downloads Promtail zip file and checks if its sha256 is correct.
+
+        Returns:
+            True if zip file was downloaded, else returns false.
+
+        Raises:
+            Raises PromtailDigestError if its sha256 is wrong.
+        """
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
-        response = urlopen(url)
 
-        with response as r, open(BINARY_ZIP_PATH, "wb") as f:
-            copyfileobj(r, f)
+        with urlopen(url) as r:
+            file_bytes = r.read()
+            result = sha256(file_bytes).hexdigest()
 
-    def _check_sha256sum(self, filename=BINARY_ZIP_PATH, sha256sum=BINARY_SHA25SUM) -> bool:
-        with open(filename, "rb") as f:
-            f_byte = f.read()
-            result = sha256(f_byte).hexdigest()
+            if result != BINARY_SHA256SUM:
+                logger.error(
+                    "promtail binary mismatch, expected:'{}' but got '{}'",
+                    BINARY_SHA256SUM,
+                    result,
+                )
+                raise PromtailDigestError("Digest mismatch for promtail binary")
 
-        if sha256sum == result:
-            return True
+            ZipFile(BytesIO(file_bytes)).extractall(BINARY_DIR)
 
-        return False
-
-    def _unzip_binary(self, zip_file=BINARY_ZIP_PATH, binary_dir=BINARY_DIR) -> None:
-        with ZipFile(zip_file, "r") as zip_ref:
-            zip_ref.extractall(binary_dir)
-
-    def _upload_binary(self, dest=WORKLOAD_BINARY_PATH, origin=BINARY_PATH) -> None:
-        with open(origin, "rb") as f:
-            self._container.push(dest, f, permissions=0o755, make_dirs=True)
+        return True if Path(BINARY_PATH).is_file() else False
 
     def _update_agents_list(self, event):
         """Updates the active Grafana agents list.
