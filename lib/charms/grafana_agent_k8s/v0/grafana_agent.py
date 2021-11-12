@@ -80,6 +80,7 @@ Adopting this library in a charmed operator consist of two steps:
 
 import json
 import logging
+from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -180,7 +181,9 @@ class LogProxyConsumer(RelationManagerBase):
     def _on_log_proxy_relation_created(self, event):
         """Event handler for the `log_proxy_relation_created`."""
         self._create_directories()
-        self._container.push(WORKLOAD_CONFIG_PATH, yaml.dump(self._initial_config), make_dirs=True)
+        self._container.push(
+            WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._initial_config), make_dirs=True
+        )
 
     def _on_log_proxy_relation_changed(self, event):
         """Event handler for the `log_proxy_relation_changed`.
@@ -378,7 +381,7 @@ class LogProxyConsumer(RelationManagerBase):
             agent_url = json.loads(self._stored.grafana_agents)[str(event.unit)]
             config = self._remove_client(self._current_config, agent_url)
 
-        return yaml.dump(config)
+        return yaml.safe_dump(config)
 
     @property
     def _initial_config(self) -> dict:
@@ -454,33 +457,41 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             A dict representing the `scrape_configs` section.
         """
-        # TODO: We need to define the right values for:
-        # - job_name
-        # - targets
-        # - __path__
-        #
-        # Also we need to use the log_files that we get from the consumer.
-        # and use the JujuTopology object
+        # TODO: use the JujuTopology object
         return {
             "scrape_configs": [
                 {
                     "job_name": "system",
-                    "static_configs": [
-                        {
-                            "targets": ["localhost"],
-                            "labels": {
-                                "job": "juju_{}_{}_{}".format(
-                                    self._charm.model.name,
-                                    self._charm.model.uuid,
-                                    self._charm.model.app.name,
-                                ),
-                                "__path__": "/var/log/dmesg",
-                            },
-                        }
-                    ],
+                    "static_configs": self._generate_static_configs(),
                 }
             ]
         }
+
+    def _generate_static_configs(self) -> list:
+        """Generates static_configs section.
+
+        Returns:
+            - a list of dictionaries representing static_configs section
+        """
+        static_configs = []
+        config = {
+            "targets": ["localhost"],
+            "labels": {
+                "job": "juju_{}_{}_{}".format(
+                    self._charm.model.name,
+                    self._charm.model.uuid,
+                    self._charm.model.app.name,
+                ),
+                "__path__": "",
+            },
+        }
+
+        for _file in self._log_files:
+            conf = deepcopy(config)
+            conf["labels"]["__path__"] = _file
+            static_configs.append(conf)
+
+        return static_configs
 
 
 class LogProxyProvider(RelationManagerBase):
