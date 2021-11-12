@@ -226,8 +226,12 @@ class LogProxyConsumer(RelationManagerBase):
         if len(containers) == 1:
             return self._charm.unit.get_container([*containers].pop())
 
-        # FIXME: Use custom exception
-        raise Exception("Container cannot be obtained")
+        msg = (
+            "No 'container_name' parameter has been specified; since this charmed operator"
+            " is not running exactly one container, it must be specified which container"
+            " to get logs from."
+        )
+        raise PromtailDigestError(msg)
 
     def _add_pebble_layer(self):
         pebble_layer = {
