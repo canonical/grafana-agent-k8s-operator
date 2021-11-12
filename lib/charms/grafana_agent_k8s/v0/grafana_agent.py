@@ -82,6 +82,7 @@ import json
 import logging
 from hashlib import sha256
 from typing import Optional
+from urllib.error import HTTPError
 from urllib.request import urlopen
 from zipfile import ZipFile
 
@@ -102,18 +103,27 @@ LIBPATCH = 1
 PROMTAIL_BINARY_ZIP_URL = (
     "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
 )
-BINARY_ZIP_PATH = "/tmp/promtail-linux-amd64.zip"
+# Paths in `charm` container
 BINARY_DIR = "/tmp"
+BINARY_ZIP_FILE_NAME = "promtail-linux-amd64.zip"
+BINARY_ZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_ZIP_FILE_NAME)
+BINARY_FILE_NAME = "promtail-linux-amd64"
+BINARY_PATH = "{}/{}".format(BINARY_DIR, BINARY_FILE_NAME)
 BINARY_SHA25SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
-WORKLOAD_BINARY_PATH = "/tmp/promtail-linux-amd64"
-SERVICE_NAME = "promtail"
+
+WORKLOAD_BINARY_DIR = "/opt/promtail"
+WORKLOAD_BINARY_FILE_NAME = "promtail-linux-amd64"
+WORKLOAD_BINARY_PATH = "{}/{}".format(WORKLOAD_BINARY_DIR, WORKLOAD_BINARY_FILE_NAME)
+WORKLOAD_CONFIG_DIR = "/etc/promtail"
+WORKLOAD_CONFIG_FILE_NAME = "promtail_config.yaml"
+WORKLOAD_CONFIG_PATH = "{}/{}".format(WORKLOAD_CONFIG_DIR, WORKLOAD_CONFIG_FILE_NAME)
+WORKLOAD_POSITIONS_PATH = "/tmp/positions.yaml"
+WORKLOAD_SERVICE_NAME = "promtail"
 
 DEFAULT_RELATION_NAME = "log_proxy"
 HTTP_LISTEN_PORT = 9080
 HTTP_LISTEN_PORT = 9080
 GRPC_LISTEN_PORT = 0
-POSITIONS_FILENAME = "/tmp/positions.yaml"
-CONFIG_PATH = "/tmp/promtail_config.yml"
 
 
 class PromtailDigestError(Exception):
@@ -167,7 +177,8 @@ class LogProxyConsumer(RelationManagerBase):
 
     def _on_log_proxy_relation_created(self, event):
         """Event handler for the `log_proxy_relation_created`."""
-        self._container.push(CONFIG_PATH, yaml.dump(self._initial_config))
+        self._create_directories()
+        self._container.push(WORKLOAD_CONFIG_PATH, yaml.dump(self._initial_config), make_dirs=True)
 
     def _on_log_proxy_relation_changed(self, event):
         """Event handler for the `log_proxy_relation_changed`.
@@ -176,12 +187,17 @@ class LogProxyConsumer(RelationManagerBase):
             event: The event object `RelationChangedEvent`.
         """
         if event.relation.data[event.unit].get("data", None):
-            self._obtain_promtail(event)
-            self._update_config(event)
-            self._update_agents_list(event)
-            self._add_pebble_layer()
-            self._container.restart(self._container_name)
-            self._container.restart(SERVICE_NAME)
+            try:
+                self._obtain_promtail(event)
+                self._update_config(event)
+                self._update_agents_list(event)
+                self._add_pebble_layer()
+                self._container.restart(self._container_name)
+                self._container.restart(WORKLOAD_SERVICE_NAME)
+            except HTTPError as e:
+                msg = "Promtail binary couldn't be download - {}".format(str(e))
+                logger.warning(msg)
+                raise PromtailDigestError(msg)
 
     def _on_log_proxy_relation_departed(self, event):
         """Event handler for the `log_proxy_relation_departed`.
@@ -193,9 +209,9 @@ class LogProxyConsumer(RelationManagerBase):
         self._update_agents_list(event)
 
         if len(self._current_config["clients"]) == 0:
-            self._container.stop(SERVICE_NAME)
+            self._container.stop(WORKLOAD_SERVICE_NAME)
         else:
-            self._container.restart(SERVICE_NAME)
+            self._container.restart(WORKLOAD_SERVICE_NAME)
 
     def _on_upgrade_charm(self, event):
         # TODO: Implement it ;-)
@@ -218,15 +234,19 @@ class LogProxyConsumer(RelationManagerBase):
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
             "services": {
-                SERVICE_NAME: {
+                WORKLOAD_SERVICE_NAME: {
                     "override": "replace",
-                    "summary": SERVICE_NAME,
+                    "summary": WORKLOAD_SERVICE_NAME,
                     "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
                     "startup": "enabled",
                 }
             },
         }
         self._container.add_layer(self._container_name, pebble_layer, combine=True)
+
+    def _create_directories(self) -> None:
+        self._container.exec(["mkdir", "-p", WORKLOAD_BINARY_DIR])
+        self._container.exec(["mkdir", "-p", WORKLOAD_CONFIG_DIR])
 
     def _obtain_promtail(self, event) -> None:
         if self._is_promtail_binary_in_workload():
@@ -235,16 +255,16 @@ class LogProxyConsumer(RelationManagerBase):
         self._download_promtail(event)
 
         if not self._check_sha256sum():
-            msg = "Promtail bnary sha256sum mismatch"
-            logger.error(msg)
+            msg = "Promtail binary sha256sum mismatch"
+            logger.warning(msg)
             raise PromtailDigestError(msg)
 
         self._unzip_binary()
         self._upload_binary()
 
     def _is_promtail_binary_in_workload(self) -> bool:
-        pat = WORKLOAD_BINARY_PATH.split("/")[-1]
-        return True if len(self._container.list_files(BINARY_DIR, pattern=pat)) == 1 else False
+        cont = self._container.list_files(WORKLOAD_BINARY_DIR, pattern=WORKLOAD_BINARY_FILE_NAME)
+        return True if len(cont) == 1 else False
 
     def _download_promtail(self, event) -> None:
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
@@ -271,9 +291,9 @@ class LogProxyConsumer(RelationManagerBase):
         with ZipFile(zip_file, "r") as zip_ref:
             zip_ref.extractall(binary_dir)
 
-    def _upload_binary(self, dest=WORKLOAD_BINARY_PATH, origin=WORKLOAD_BINARY_PATH) -> None:
+    def _upload_binary(self, dest=WORKLOAD_BINARY_PATH, origin=BINARY_PATH) -> None:
         with open(origin, "rb") as f:
-            self._container.push(dest, f, permissions=0o755)
+            self._container.push(dest, f, permissions=0o755, make_dirs=True)
 
     def _update_agents_list(self, event):
         """Updates the active Grafana agents list.
@@ -299,7 +319,7 @@ class LogProxyConsumer(RelationManagerBase):
             event: `RelationChangedEvent` or `RelationDepartedEvent`
         """
         config = self._build_config_file(event)
-        self._container.push(CONFIG_PATH, config)
+        self._container.push(WORKLOAD_CONFIG_PATH, config, make_dirs=True)
 
     @property
     def _cli_args(self) -> str:
@@ -308,7 +328,7 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             The arguments as a string
         """
-        return "-config.file={}".format(CONFIG_PATH)
+        return "-config.file={}".format(WORKLOAD_CONFIG_PATH)
 
     @property
     def _current_config(self) -> dict:
@@ -317,7 +337,7 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             A dict containing Promtail configuration.
         """
-        raw_current = self._container.pull(CONFIG_PATH).read()
+        raw_current = self._container.pull(WORKLOAD_CONFIG_PATH).read()
         current_config = yaml.safe_load(raw_current)
         return current_config
 
@@ -407,7 +427,7 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             The dict representing the `positions` section.
         """
-        return {"positions": {"filename": POSITIONS_FILENAME}}
+        return {"positions": {"filename": WORKLOAD_POSITIONS_PATH}}
 
     def _scrape_configs(self) -> dict:
         """Generates the scrape_configs section of the Promtail config file.
