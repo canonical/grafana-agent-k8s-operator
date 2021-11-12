@@ -33,16 +33,25 @@ Adopting this library in a charmed operator consist of two steps:
    charmed operator:
 
    ```python
-   from charms.grafana_agent_k8s.v0.grafana_agent import LogProxyConsumer
+   from charms.grafana_agent_k8s.v0.grafana_agent import LogProxyConsumer, PromtailDigestError
 
    ...
 
        def __init__(self, *args):
            ...
-           self._log_proxy = LogProxyConsumer(self, LOG_FILES)
+           try:
+               self._log_proxy = LogProxyConsumer(
+                   charm=self, log_files=LOG_FILES, container_name=PEER
+               )
+           except PromtailDigestError as e:
+               msg = str(e)
+               logger.error(msg)
+               self.unit.status = BlockedStatus(msg)
    ```
 
-   Note that `LOG_FILES` is a `list` containing the log files we want to send to `Loki` or
+   Note that:
+
+   - `LOG_FILES` is a `list` containing the log files we want to send to `Loki` or
    `Grafana Agent`, for instance:
 
    ```python
@@ -52,14 +61,10 @@ Adopting this library in a charmed operator consist of two steps:
    ]
    ```
 
-2. Modify the `metadata.yaml` file to add:
+   - `container_name` is the name of the container in which the application is running.
+      If in the Pod there is only one container, this argument can be avoided.
 
-   - The promtail side-car container:
-      ```yaml
-        containers:
-          promtail:
-            resource: promtail-image
-      ```
+2. Modify the `metadata.yaml` file to add:
 
    - The `log_proxy` relation in the `requires` section:
      ```yaml
@@ -69,13 +74,18 @@ Adopting this library in a charmed operator consist of two steps:
          optional: true
      ```
 
-   - The `promtail-image` in the `resources` section:
-     ```yaml
-       resources:
-         promtail-image:
-           type: oci-image
-           description: upstream docker image for Promtail
-     ```
+Once the library is implemented in a charmed operator and a relation is established with
+the charm that implemets the `loki_push_api` interface, the library will inject a
+Pebble layer that runs Promtail in the worload container to send logs.
+
+Because the library can raise a `PromtailDigestError` when:
+
+- Promtail binary cannot be downloaded.
+- No `container_name` parameter has been specified and the Pod has more than 1 container.
+- The sha256 sum mismatch for promtail binary.
+
+that's why in the above example, the instanciation is made in a `try/except` block
+to handle these situations conveniently.
 """
 
 import json
