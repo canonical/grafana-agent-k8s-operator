@@ -91,10 +91,11 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     @patch.object(Container, "pull", new=pull_empty_fake_file)
+    @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test_remote_write_configuration(self, mock_push: MagicMock):
+    def test_remote_write_configuration(self, mock_push: MagicMock, mock_restart: MagicMock):
         mock_push.push.return_value = None
-
+        mock_restart.restart.return_value = True
         responses.add(
             responses.POST,
             "http://localhost/-/reload",
@@ -154,9 +155,11 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     @patch.object(Container, "pull", new=pull_empty_fake_file)
+    @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test_scrape_without_remote_write_configuration(self, mock_push: MagicMock):
+    def test_scrape_without_remote_write_configuration(self, mock_push: MagicMock, mock_restart: MagicMock):
         mock_push.push.return_value = None
+        mock_restart.restart.return_value = True
 
         responses.add(
             responses.POST,
@@ -199,9 +202,11 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     @patch.object(Container, "pull", new=pull_empty_fake_file)
+    @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_joined(self, mock_push: MagicMock):
+    def test__on_loki_push_api_endpoint_joined(self, mock_push: MagicMock, mock_restart: MagicMock):
         """Test Loki config is in config file when LokiPushApiEndpointJoined is fired."""
+        mock_restart.restart.return_value = True
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
 
@@ -236,9 +241,11 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     @patch.object(Container, "pull", new=pull_empty_fake_file)
+    @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_departed(self, mock_push: MagicMock):
+    def test__on_loki_push_api_endpoint_departed(self, mock_push: MagicMock, mock_restart: MagicMock):
         """Test Loki config is not in config file when LokiPushApiEndpointDeparted is fired."""
+        mock_restart.restart.return_value = True
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
 
@@ -251,15 +258,16 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(path, "/etc/agent/agent.yaml")
         self.assertTrue(yaml.safe_load(content)["loki"] == {})
 
+
     def test__update_config_pebble_ready(self):
-        self.harness.charm._container.can_connect = Mock(return_value=True)
+        self.harness.charm._container.restart = Mock(return_value=True)
         self.harness.charm._container.pull = Mock(return_value="")
         self.harness.charm._container.push = Mock(return_value=True)
         self.harness.charm._reload_config = Mock(return_value=True)
         self.harness.charm._update_config()
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
-        self.harness.charm._reload_config = Mock(side_effect=GrafanaAgentReloadError)
+        self.harness.charm._container.restart = Mock(side_effect=GrafanaAgentReloadError)
         self.harness.charm._update_config()
         self.assertEqual(
             self.harness.charm.unit.status, BlockedStatus("could not reload configuration")
