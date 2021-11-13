@@ -8,8 +8,8 @@
 import logging
 
 import yaml
+from charms.loki_k8s.v0.log_proxy import LogProxyProvider
 from charms.loki_k8s.v0.loki_push_api import (
-    LogProxyProvider,
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
@@ -178,7 +178,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         try:
             if yaml.safe_load(config) != yaml.safe_load(old_config):
                 self._container.push(CONFIG_PATH, config)
-                self._reload_config()
+                # FIXME: #19
+                # self._reload_config()
+                self._container.restart(self._name)
                 self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
