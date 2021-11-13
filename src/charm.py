@@ -8,8 +8,8 @@
 import logging
 
 import yaml
-from charms.grafana_agent_k8s.v0.grafana_agent import LogProxyProvider
 from charms.loki_k8s.v0.loki_push_api import (
+    LogProxyProvider,
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
@@ -55,8 +55,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
-        self._remote_write = PrometheusRemoteWriteConsumer(self)
-        self._scrape = MetricsEndpointConsumer(self)
+        self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
+        self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
+
         self._loki_consumer = LokiPushApiConsumer(self)
         self._log_proxy = LogProxyProvider(self)
 
@@ -64,9 +65,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
             self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
-        )
-        self.framework.observe(
-            self.on["prometheus-remote-write"].relation_broken, self.on_remote_write_broken
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
@@ -122,11 +120,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._update_status()
 
     def on_remote_write_changed(self, _: RelationChangedEvent) -> None:
-        """Event handler for the remote write changed event."""
-        self._update_config()
-        self._update_status()
-
-    def on_remote_write_broken(self, _: RelationChangedEvent) -> None:
         """Event handler for the remote write changed event."""
         self._update_config()
         self._update_status()
@@ -271,7 +264,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                         },
                     ],
                 },
-                "prometheus_remote_write": list(self._remote_write.endpoints),
+                "prometheus_remote_write": list(self._remote_write.configs),
             }
         }
 
@@ -287,7 +280,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                     {
                         "name": "agent_scraper",
                         "scrape_configs": self._scrape.jobs(),
-                        "remote_write": list(self._remote_write.endpoints),
+                        "remote_write": list(self._remote_write.configs),
                     }
                 ]
             }
