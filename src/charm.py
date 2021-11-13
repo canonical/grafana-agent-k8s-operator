@@ -55,8 +55,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
-        self._remote_write = PrometheusRemoteWriteConsumer(self, "prometheus-remote-write")
-        self._scrape = MetricsEndpointConsumer(self, name="metrics-endpoint")
+        self._remote_write = PrometheusRemoteWriteConsumer(self)
+        self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self)
         self._log_proxy = LogProxyProvider(self)
