@@ -157,7 +157,9 @@ class TestCharm(unittest.TestCase):
     @patch.object(Container, "pull", new=pull_empty_fake_file)
     @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test_scrape_without_remote_write_configuration(self, mock_push: MagicMock, mock_restart: MagicMock):
+    def test_scrape_without_remote_write_configuration(
+        self, mock_push: MagicMock, mock_restart: MagicMock
+    ):
         mock_push.push.return_value = None
         mock_restart.restart.return_value = True
 
@@ -204,7 +206,9 @@ class TestCharm(unittest.TestCase):
     @patch.object(Container, "pull", new=pull_empty_fake_file)
     @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_joined(self, mock_push: MagicMock, mock_restart: MagicMock):
+    def test__on_loki_push_api_endpoint_joined(
+        self, mock_push: MagicMock, mock_restart: MagicMock
+    ):
         """Test Loki config is in config file when LokiPushApiEndpointJoined is fired."""
         mock_restart.restart.return_value = True
         self.harness.charm._loki_consumer = Mock()
@@ -243,7 +247,9 @@ class TestCharm(unittest.TestCase):
     @patch.object(Container, "pull", new=pull_empty_fake_file)
     @patch.object(Container, "restart")
     @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_departed(self, mock_push: MagicMock, mock_restart: MagicMock):
+    def test__on_loki_push_api_endpoint_departed(
+        self, mock_push: MagicMock, mock_restart: MagicMock
+    ):
         """Test Loki config is not in config file when LokiPushApiEndpointDeparted is fired."""
         mock_restart.restart.return_value = True
         self.harness.charm._loki_consumer = Mock()
@@ -257,7 +263,6 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(path, "/etc/agent/agent.yaml")
         self.assertTrue(yaml.safe_load(content)["loki"] == {})
-
 
     def test__update_config_pebble_ready(self):
         self.harness.charm._container.restart = Mock(return_value=True)
