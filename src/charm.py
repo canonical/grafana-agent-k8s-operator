@@ -264,7 +264,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                         },
                     ],
                 },
-                "prometheus_remote_write": list(self._remote_write.configs),
+                "prometheus_remote_write": self._remote_write.endpoints,
             }
         }
 
@@ -280,7 +280,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                     {
                         "name": "agent_scraper",
                         "scrape_configs": self._scrape.jobs(),
-                        "remote_write": list(self._remote_write.configs),
+                        "remote_write": self._remote_write.endpoints,
                     }
                 ]
             }
