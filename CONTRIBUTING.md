@@ -37,7 +37,7 @@ tox -e static # Run static analysis
 tox -e unit  # Run unit tests
 ```
 
-Unit tests are implemented using the Operator Framework test [harness](https://ops.readthedocs.io/en/latest/#module-ops.testing).
+Unit tests are implemented using the Operator Framework [test harness](https://ops.readthedocs.io/en/latest/#module-ops.testing).
 
 ### Build
 
