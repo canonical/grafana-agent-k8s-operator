@@ -52,7 +52,7 @@ Install the [charmcraft tool](https://juju.is/docs/sdk/setting-up-charmcraft) an
 The core implementation of this charm is represented by the [`GrafanaAgentOperatorCharm`](src/charm.py) class.
 `GrafanaAgentOperatorCharm` responds to the following events:
 
-- `self.on.install`: In this even we patch K8s service ports.
+- `self.on.install`: In this event we patch K8s service ports.
 - `self.on.agent_pebble_ready`: In this event the charm builds the Pebble layer to be added in the workload charm. This Pebble layer will manage the execution of Promtail binary
 - `self.on["prometheus-remote-write"].relation_changed`: In this event the Grafana agent config is updated with remote-write settings.
 - `self._scrape.on.targets_changed`: In this event the Grafana agent config is updated with scrape settings.
