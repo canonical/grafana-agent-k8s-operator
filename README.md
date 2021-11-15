@@ -1,4 +1,4 @@
-# Grafana agent operator for K8s
+# Grafana agent operator for Kubernetes
 
 ## Description
 [Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
@@ -8,7 +8,7 @@
 Create a Juju model for your operators, say "lma"
 
 ```bash
-    juju add-model lma
+juju add-model lma
 ```
 
 The Grafana agent may be deployed using the juju command line:
@@ -20,7 +20,7 @@ juju deploy grafana-agent-k8s
 If required, you can remove the deployment completely:
 
 ```bash
-    juju destroy-model -y lma --no-wait --force --destroy-storage
+juju destroy-model -y lma --no-wait --force --destroy-storage
 ```
 
 ## Relations
