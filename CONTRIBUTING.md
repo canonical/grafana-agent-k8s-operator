@@ -25,6 +25,7 @@ A typical setup using [snaps](https://snapcraft.io/), for deployments to a [micr
 ```
 
 ### Developing + Testing
+
 All tests can be executed by running `tox` without arguments.
 
 To run individual test environments:

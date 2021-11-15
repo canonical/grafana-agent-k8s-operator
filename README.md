@@ -1,8 +1,7 @@
 # Grafana agent operator for K8s
 
 ## Description
-[Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for sending metrics, logs, and trace data to the opinionated
-Grafana observability stack.
+[Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
 
 ## Usage
 
@@ -43,5 +42,4 @@ Currently supported relations are:
 
 ## OCI Images
 
-This charm by default uses the latest release of the
-[grafana/agent](https://hub.docker.com/r/grafana/agent)
+This charm by default uses the latest release of the [grafana/agent](https://hub.docker.com/r/grafana/agent)
