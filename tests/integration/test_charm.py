@@ -4,9 +4,10 @@
 # See LICENSE file for licensing details.
 
 import logging
+from pathlib import Path
+
 import pytest
 import yaml
-from pathlib import Path
 
 log = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
