@@ -34,3 +34,9 @@ async def test_build_and_deploy(ops_test):
 
     # effectively disable the update status from firing
     await ops_test.model.set_config({"update-status-hook-interval": "60m"})
+
+
+async def test_relating_to_loki(ops_test):
+    await ops_test.model.deploy("loki-k8s", channel="edge", application_name="loki")
+    await ops_test.model.add_relation("loki", "agent")
+    await ops_test.model.wait_for_idle(apps=["loki"], status="active", timeout=1000)
