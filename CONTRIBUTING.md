@@ -32,6 +32,7 @@ To run individual test environments:
 
 ```bash
 tox -e fmt  # Apply coding style standards to code
+tox -e integration  # Run integration tests
 tox -e lint  # Check your code complies to linting rules
 tox -e static # Run static analysis
 tox -e unit  # Run unit tests
