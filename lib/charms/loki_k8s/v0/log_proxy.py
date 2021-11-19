@@ -9,25 +9,25 @@ r"""## Overview.
 
 This document explains how to use the two principal objects this library provides:
 
-- `LogProxyProvider`: This object is ment to be used by any charmed operator that needs to act
-as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
+- `LogProxyProvider`: This object can be used by any charmed operator that needs to act
+as a Log Proxy to Loki by implementing the provider side of `loki_push_api` relation interface.
 For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
 and forward them to Loki.
 
-- `LogProxyConsumer`: This object is ment to be used by any K8s charmed operator that needs to
-send log to Loki through a Log Proxy by implementing the consumer side of `log_proxy` relation
-interface.
+- `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
+send log to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
+relation interface.
 Filtering logs in Loki is largely performed on the basis of labels.
 In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
 generates telemetry like logs.
-In order to be able to control the labels on the logs pushedm this object injects a Pebble layer
-that runs Promtail in the worload container, injecting Juju topology labels into the
+In order to be able to control the labels on the logs pushed this object injects a Pebble layer
+that runs Promtail in the workload container, injecting Juju topology labels into the
 logs on the fly.
 
 ## LogProxyConsumer Library Usage
 
-Let's say that we have a workload charm that produce logs and we need to send those logs to a
-workload implementing the `loki_push_api` interface, like `Loki` or `Grafana Agent`.
+Let's say that we have a workload charm that produces logs and we need to send those logs to a
+workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana Agent`.
 
 Adopting this object in a charmed operator consist of two steps:
 
@@ -78,8 +78,8 @@ Adopting this object in a charmed operator consist of two steps:
      ```
 
 Once the library is implemented in a charmed operator and a relation is established with
-the charm that implemets the `loki_push_api` interface, the library will inject a
-Pebble layer that runs Promtail in the worload container to send logs.
+the charm that implements the `loki_push_api` interface, the library will inject a
+Pebble layer that runs Promtail in the workload container to send logs.
 
 The object can raise a `PromtailDigestError` when:
 
@@ -87,13 +87,13 @@ The object can raise a `PromtailDigestError` when:
 - No `container_name` parameter has been specified and the Pod has more than 1 container.
 - The sha256 sum mismatch for promtail binary.
 
-that's why in the above example, the instanciation is made in a `try/except` block
+that's why in the above example, the instantiation is made in a `try/except` block
 to handle these situations conveniently.
 
 
 ## LogProxyProvider Library Usage
 
-This object is ment to be used by any charmed operator that needs to act
+This object is meant to be used by any charmed operator that needs to act
 as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
 For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
 and forward them to Loki.
@@ -137,6 +137,7 @@ from zipfile import ZipFile
 import yaml
 from ops.charm import CharmBase, RelationChangedEvent, RelationDepartedEvent
 from ops.framework import Object, StoredState
+from ops.model import ModelError
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +173,7 @@ WORKLOAD_SERVICE_NAME = "promtail"
 
 DEFAULT_RELATION_NAME = "log_proxy"
 HTTP_LISTEN_PORT = 9080
-HTTP_LISTEN_PORT = 9080
-GRPC_LISTEN_PORT = 0
+GRPC_LISTEN_PORT = 9095
 
 
 class PromtailDigestError(Exception):
@@ -223,7 +223,6 @@ class LogProxyConsumer(RelationManagerBase):
         self.framework.observe(
             self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed
         )
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
     def _on_log_proxy_relation_created(self, event):
         """Event handler for the `log_proxy_relation_created`."""
@@ -265,10 +264,6 @@ class LogProxyConsumer(RelationManagerBase):
         else:
             self._container.restart(WORKLOAD_SERVICE_NAME)
 
-    def _on_upgrade_charm(self, event):
-        # TODO: Implement it ;-)
-        pass
-
     def _get_container(self, container_name):
         """Gets a single container by name or using the only container running in the Pod.
 
@@ -285,19 +280,24 @@ class LogProxyConsumer(RelationManagerBase):
                 container in the Pod.
         """
         if container_name is not None:
-            return self._charm.unit.get_container(container_name)
+            try:
+                return self._charm.unit.get_container(container_name)
+            except ModelError as e:
+                msg = str(e)
+                logger.warning(msg)
+                raise PromtailDigestError(msg)
+        else:
+            containers = dict(self._charm.model.unit.containers)
 
-        containers = dict(self._charm.model.unit.containers)
+            if len(containers) == 1:
+                return self._charm.unit.get_container([*containers].pop())
 
-        if len(containers) == 1:
-            return self._charm.unit.get_container([*containers].pop())
-
-        msg = (
-            "No 'container_name' parameter has been specified; since this charmed operator"
-            " is not running exactly one container, it must be specified which container"
-            " to get logs from."
-        )
-        raise PromtailDigestError(msg)
+            msg = (
+                "No 'container_name' parameter has been specified; since this charmed operator"
+                " is not running exactly one container, it must be specified which container"
+                " to get logs from."
+            )
+            raise PromtailDigestError(msg)
 
     def _add_pebble_layer(self):
         """Adds Pebble layer that manages Promtail service in Workload container."""
@@ -376,8 +376,7 @@ class LogProxyConsumer(RelationManagerBase):
             agent_url = json.loads(event.relation.data[event.unit].get("data"))["loki_push_api"]
             grafana_agents[str(event.unit)] = agent_url
             self._stored.grafana_agents = json.dumps(grafana_agents)
-
-        if isinstance(event, RelationDepartedEvent):
+        elif isinstance(event, RelationDepartedEvent):
             agent_url = grafana_agents.pop(str(event.unit))
             self._stored.grafana_agents = json.dumps(grafana_agents)
 
@@ -420,13 +419,14 @@ class LogProxyConsumer(RelationManagerBase):
             A yaml string with Promtail config.
         """
         config = {}
+        current_config = self._current_config.copy()
+
         if isinstance(event, RelationChangedEvent):
             agent_url = json.loads(event.relation.data[event.unit].get("data"))["loki_push_api"]
-            config = self._add_client(self._current_config, agent_url)
-
-        if isinstance(event, RelationDepartedEvent):
+            config = self._add_client(current_config, agent_url)
+        elif isinstance(event, RelationDepartedEvent):
             agent_url = json.loads(self._stored.grafana_agents)[str(event.unit)]
-            config = self._remove_client(self._current_config, agent_url)
+            config = self._remove_client(current_config, agent_url)
 
         return yaml.safe_dump(config)
 
@@ -470,7 +470,9 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             Updated Promtail configuration.
         """
-        if clients := current_config.get("clients"):
+        clients = current_config.get("clients", None)
+
+        if clients:
             clients = [c for c in clients if c != {"url": agent_url}]
             current_config["clients"] = clients
             return current_config
@@ -505,23 +507,7 @@ class LogProxyConsumer(RelationManagerBase):
             A dict representing the `scrape_configs` section.
         """
         # TODO: use the JujuTopology object
-        return {
-            "scrape_configs": [
-                {
-                    "job_name": "system",
-                    "static_configs": self._generate_static_configs(),
-                }
-            ]
-        }
-
-    def _generate_static_configs(self) -> list:
-        """Generates static_configs section.
-
-        Returns:
-            - a list of dictionaries representing static_configs section
-        """
-        static_configs = []
-        config: dict = {
+        config = {
             "targets": ["localhost"],
             "labels": {
                 "job": "juju_{}_{}_{}".format(
@@ -532,6 +518,23 @@ class LogProxyConsumer(RelationManagerBase):
                 "__path__": "",
             },
         }
+
+        return {
+            "scrape_configs": [
+                {
+                    "job_name": "system",
+                    "static_configs": self._generate_static_configs(config),
+                }
+            ]
+        }
+
+    def _generate_static_configs(self, config: dict) -> list:
+        """Generates static_configs section.
+
+        Returns:
+            - a list of dictionaries representing static_configs section
+        """
+        static_configs = []
 
         for _file in self._log_files:
             conf = deepcopy(config)
@@ -551,7 +554,6 @@ class LogProxyProvider(RelationManagerBase):
         self.framework.observe(
             self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
         )
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
     def _on_log_proxy_relation_changed(self, event):
         if event.relation.data[self._charm.unit].get("data") is None:
@@ -559,9 +561,6 @@ class LogProxyProvider(RelationManagerBase):
             data.update(json.loads(self._loki_push_api))
             data.update(json.loads(self._promtail_binary_url))
             event.relation.data[self._charm.unit].update({"data": json.dumps(data)})
-
-    def _on_upgrade_charm(self, event):
-        pass
 
     @property
     def _promtail_binary_url(self) -> str:
@@ -585,6 +584,8 @@ class LogProxyProvider(RelationManagerBase):
     @property
     def unit_ip(self) -> str:
         """Returns unit's IP."""
-        if bind_address := self._charm.model.get_binding(self._relation_name).network.bind_address:
+        bind_address = self._charm.model.get_binding(self._relation_name).network.bind_address
+
+        if bind_address:
             return str(bind_address)
         return ""
