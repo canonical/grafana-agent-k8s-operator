@@ -212,7 +212,9 @@ class TestCharm(unittest.TestCase):
         """Test Loki config is in config file when LokiPushApiEndpointJoined is fired."""
         mock_restart.restart.return_value = True
         self.harness.charm._loki_consumer = Mock()
-        self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
+        self.harness.charm._loki_consumer.loki_push_api = [
+            {"url": "http://loki:3100:/loki/api/v1/push"}
+        ]
 
         handle = Handle(None, "kind", "Key")
         event = LokiPushApiEndpointJoined(handle)
