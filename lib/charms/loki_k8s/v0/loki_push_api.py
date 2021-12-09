@@ -77,41 +77,22 @@ For example a Loki charm may instantiate the
                 self.unit.status = BlockedStatus(str(e))
 
 
-The `LokiPushApiProvider` object has two main responsibilities:
+The `LokiPushApiProvider` object has several responsibilities:
 
-1.- Be in charge of setting the Loki Push API Address into
-relation data so clients can use it to send logs. Every time a unit joins
-a relation: `$ juju add-relation loki-k8s loki-client-k8s` the object sets:
+1. Set the URL of the Loki Push API in the provider app data bag; the URL
+   must be unique to all instances (e.g., using a load balancer).
 
-    event.relation.data[self.charm.unit]["data"] = self._loki_push_api
-
-Where `self._loki_push_api` is: `http://<LOKI_UNIT_IP>:<LOKI_PORT>/loki/api/v1/push`
-
-
-2.- Every time a Loki client unit joins a relation set its metadata and
-[alerts rules](https://grafana.com/docs/loki/latest/rules/#alerting-rules) to
-relation data.
-
-The metadata is stored in relation data:
-
-    event.relation.data[self._charm.app]["metadata"] = json.dumps(self._scrape_metadata)
-
-For instance the metadata has the following data:
+2. Process the metadata of the consumer application, provided via the
+   "metadata" field of the consumer data bag, which are used to annotate the
+   alert rules (see next point). An example for "metadata" is the following:
 
     {'model': 'loki',
      'model_uuid': '0b7d1071-ded2-4bf5-80a3-10a81aeb1386',
      'application': 'promtail-k8s'
     }
 
-About alert rules, they are stored in relation data:
-
-    if alert_groups := self._labeled_alert_groups:
-        event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
-            {"groups": alert_groups}
-        )
-
-
-And has this aspect:
+3. Process alert rules set into the relation by the `LokiPushApiConsumer`
+   objects, e.g.:
 
     '{
          "groups": [{
@@ -139,7 +120,6 @@ And has this aspect:
 Once these alert rules are sent over relation data, the `LokiPushApiProvider` object
 stores these files in the directory `/loki/rules` inside the Loki charm container.
 
-
 ## LokiPushApiConsumer Library Usage
 
 This Loki charm interacts with its clients using the Loki
@@ -149,15 +129,16 @@ For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
-    from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+```python
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 
-    class LokiClientCharm(CharmBase):
+class LokiClientCharm(CharmBase):
 
-        def __init__(self, *args):
-            super().__init__(*args)
-            ...
-            self._loki_consumer = LokiPushApiConsumer(self)
-
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self._loki_consumer = LokiPushApiConsumer(self)
+```
 
 The `LokiPushApiConsumer` constructor requires two things:
 
@@ -209,7 +190,7 @@ The format of this alert rule conforms to the
 [Loki docs](https://grafana.com/docs/loki/latest/rules/#alerting-rules).
 An example of the contents of one such file is shown below.
 
-```
+```yaml
 alert: HighPercentageError
 expr: |
   sum(rate({%%juju_topology%%} |= "error" [5m])) by (job)
@@ -246,6 +227,30 @@ automatically added to every alert
 - `juju_model_uuid`
 - `juju_application`
 
+
+Whether alert rules files does not contain the keys `alert` or `expr` or
+there is no alert rules file in `alert_rules_path` a `loki_push_api_alert_rules_error` event
+is emitted.
+To handle these situations the event must be observed in the `LokiClientCharm` charm.py file:
+
+
+```python
+class LokiClientCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self._loki_consumer = LokiPushApiConsumer(self)
+
+        self.framework.observe(
+            self._loki_consumer.on.loki_push_api_alert_rules_error,
+            self._alert_rules_error
+        )
+
+    def _alert_rules_error(self, event):
+        self.unit.status = BlockedStatus(event.message)
+```
+
 ## Relation Data
 
 The Loki charm uses both application and unit relation data to
@@ -256,18 +261,25 @@ data using the `alert_rules` key.
 
 """
 
-import dataclasses
 import json
 import logging
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
-from ops.charm import CharmBase, RelationMeta, RelationRole
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import BlockedStatus
+from ops.charm import CharmBase, RelationEvent, RelationRole
+from ops.framework import (
+    EventBase,
+    EventSource,
+    Object,
+    ObjectEvents,
+    StoredDict,
+    StoredList,
+    StoredState,
+)
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -277,7 +289,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 7
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +303,7 @@ class RelationNotFoundError(ValueError):
 
     def __init__(self, relation_name: str):
         self.relation_name = relation_name
-        self.message = f"No relation named '{relation_name}' found"
+        self.message = "No relation named '{}' found".format(relation_name)
 
         super().__init__(self.message)
 
@@ -309,10 +321,10 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
-            f"interface rather than the expected '{expected_relation_interface}'"
+            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
+                relation_name, actual_relation_interface, expected_relation_interface
+            )
         )
-
         super().__init__(self.message)
 
 
@@ -328,11 +340,9 @@ class RelationRoleMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_role
         self.actual_relation_role = actual_relation_role
-        self.message = (
-            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
-            f"rather than the expected '{repr(expected_relation_role)}'"
+        self.message = "The '{}' relation has role '{}' rather than the expected '{}'".format(
+            relation_name, repr(actual_relation_role), repr(expected_relation_role)
         )
-
         super().__init__(self.message)
 
 
@@ -370,7 +380,7 @@ def _validate_relation_by_interface_and_direction(
     if relation_name not in charm.meta.relations:
         raise RelationNotFoundError(relation_name)
 
-    relation: RelationMeta = charm.meta.relations[relation_name]
+    relation = charm.meta.relations[relation_name]
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
@@ -389,7 +399,7 @@ def _validate_relation_by_interface_and_direction(
                 relation_name, RelationRole.requires, RelationRole.provides
             )
     else:
-        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
+        raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
 
 def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
@@ -411,29 +421,42 @@ def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
     return True
 
 
-@dataclasses.dataclass(frozen=True)
+def _type_convert_stored(obj):
+    """Convert Stored* to their appropriate types, recursively."""
+    if isinstance(obj, StoredList):
+        return list(map(_type_convert_stored, obj))
+    elif isinstance(obj, StoredDict):
+        rdict = {}  # type: Dict[Any, Any]
+        for k in obj.keys():
+            rdict[k] = _type_convert_stored(obj[k])
+        return rdict
+    else:
+        return obj
+
+
 class JujuTopology:
-    """Dataclass for storing and formatting juju topology information."""
+    """Class for storing and formatting juju topology information."""
 
-    model: str
-    model_uuid: str
-    application: str
-    charm_name: str
+    def __init__(self, model: str, model_uuid: str, application: str, charm_name: str):
+        self.model = model
+        self.model_uuid = model_uuid
+        self.application = application
+        self.charm_name = charm_name
 
-    @staticmethod
-    def from_charm(charm):
+    @classmethod
+    def from_charm(cls, charm):
         """Factory method for creating the topology dataclass from a given charm."""
-        return JujuTopology(
+        return cls(
             model=charm.model.name,
             model_uuid=charm.model.uuid,
             application=charm.model.app.name,
             charm_name=charm.meta.name,
         )
 
-    @staticmethod
-    def from_relation_data(data):
+    @classmethod
+    def from_relation_data(cls, data):
         """Factory method for creating the topology dataclass from a relation data dict."""
-        return JujuTopology(
+        return cls(
             model=data["model"],
             model_uuid=data["model_uuid"],
             application=data["application"],
@@ -443,7 +466,7 @@ class JujuTopology:
     @property
     def identifier(self) -> str:
         """Format the topology information into a terse string."""
-        return f"{self.model}_{self.model_uuid}_{self.application}"
+        return "{}_{}_{}".format(self.model, self.model_uuid, self.application)
 
     @property
     def short_model_uuid(self):
@@ -468,10 +491,12 @@ class JujuTopology:
 
     def as_dict(self, short_uuid=False) -> dict:
         """Format the topology information into a dict."""
-        as_dict = dataclasses.asdict(self)
-        if short_uuid:
-            as_dict["model_uuid"] = self.short_model_uuid
-        return as_dict
+        return {
+            "model": self.model,
+            "model_uuid": self.model_uuid,
+            "application": self.application,
+            "charm_name": self.charm_name,
+        }
 
     def as_dict_with_logql_labels(self):
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
@@ -520,7 +545,7 @@ def load_alert_rule_from_file(
 
 
 def load_alert_rules_from_dir(
-    dir_path: Union[str, Path],
+    dir_path: str,
     topology: JujuTopology,
     *,
     recursive: bool = False,
@@ -560,15 +585,15 @@ def load_alert_rules_from_dir(
         # Generate group name:
         #  - name, from juju topology
         #  - suffix, from the relative path of the rule file;
-        return (
-            f"{topology.identifier}_"
-            f"{'' if relpath == '.' else relpath.replace(os.path.sep, '_') + '_'}"
-            "alerts"
+        return "{}_{}alerts".format(
+            topology.identifier, "" if relpath == "." else relpath.replace(os.path.sep, "_") + "_"
         )
 
     invalid_files = []
     for path in filter(Path.is_file, Path(dir_path).glob("**/*.rule" if recursive else "*.rule")):
-        if rule := load_alert_rule_from_file(path, topology, allow_free_standing):
+        rule = load_alert_rule_from_file(path, topology, allow_free_standing)
+
+        if rule:
             logger.debug("Reading alert rule from %s", path)
             alerts[_group_name(path)].append(rule)
         else:
@@ -609,8 +634,9 @@ class NoRelationWithInterfaceFoundError(Exception):
         self.charm = charm
         self.relation_interface = relation_interface
         self.message = (
-            f"No relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.meta.name}' charm"
+            "No relations with interface '{}' found in the meta of the '{}' charm".format(
+                relation_interface, charm.meta.name
+            )
         )
 
         super().__init__(self.message)
@@ -624,10 +650,10 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         self.relation_interface = relation_interface
         self.relations = relations
         self.message = (
-            f"Multiple relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.name}' charm."
+            "Multiple relations with interface '{}' found in the meta of the '{}' charm.".format(
+                relation_interface, charm.name
+            )
         )
-
         super().__init__(self.message)
 
 
@@ -646,6 +672,22 @@ class RelationManagerBase(Object):
         self.name = relation_name
 
 
+class LokiPushApiAlertRulesError(EventBase):
+    """Event emitted when an AlertRulesError exception is raised."""
+
+    def __init__(self, handle, message):
+        super().__init__(handle)
+        self.message = message
+
+    def snapshot(self):
+        """Save message information."""
+        return {"message": self.message}
+
+    def restore(self, snapshot):
+        """Restore message information."""
+        self.message = snapshot["message"]
+
+
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -657,6 +699,7 @@ class LokiPushApiEndpointJoined(EventBase):
 class LoggingEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
+    loki_push_api_alert_rules_error = EventSource(LokiPushApiAlertRulesError)
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
 
@@ -672,12 +715,13 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             charm: a `CharmBase` instance that manages this
                 instance of the Loki service.
-
             relation_name: an optional string name of the relation between `charm`
                 and the Loki charmed service. The default is "logging".
                 It is strongly advised not to change the default, so that people
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
+
+            rules_dir: path in workload container where rule files are to be stored.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -693,21 +737,42 @@ class LokiPushApiProvider(RelationManagerBase):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
         super().__init__(charm, relation_name)
-        self.charm = charm
+        self._charm = charm
         self._relation_name = relation_name
+        self.container = self._charm._container
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
         # https://grafana.com/docs/loki/latest/rules/#ruler-storage
         tenant_id = "fake"
         self._rules_dir = os.path.join(rules_dir, tenant_id)
+        # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
+        # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
+        self.container.make_dir(self._rules_dir, make_parents=True)
 
-        self.container = self.charm.unit.get_container("loki")
-        events = self.charm.on[relation_name]
+        events = self._charm.on[relation_name]
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
     def _on_logging_relation_changed(self, event):
+        """Handle changes in related consumers.
+
+        Anytime there are changes in the relation between Loki
+        and its consumers charms.
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must update its relation data.
+        """
+        if isinstance(event, RelationEvent):
+            self._process_logging_relation_changed(event.relation)
+        else:
+            # Upgrade event or other charm-level event
+            for relation in self._charm.model.relations[self._relation_name]:
+                self._process_logging_relation_changed(relation)
+
+    def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
 
         Anytime there are changes in relations between Loki
@@ -717,15 +782,14 @@ class LokiPushApiProvider(RelationManagerBase):
         consumer charms forwards,
 
         Args:
-            event: a `CharmEvent` in response to which the Loki
-                charm must update its relation data.
+            relation: the `Relation` instance to update.
         """
-        if event.relation.data[self.charm.unit].get("data") is None:
-            event.relation.data[self.charm.unit].update({"data": self._loki_push_api})
-            logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
+        if self._charm.unit.is_leader():
+            relation.data[self._charm.app].update({"loki_push_api": self._loki_push_api})
+            logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
 
-        if event.relation.data.get(event.relation.app).get("alert_rules") is not None:
-            logger.debug("Saving alerts rules to disk")
+        if relation.data.get(relation.app).get("alert_rules"):
+            logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
 
@@ -746,14 +810,15 @@ class LokiPushApiProvider(RelationManagerBase):
         Returns:
             Loki push API URL as json string
         """
-        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
-        data = {"loki_push_api": loki_push_api}
-        return json.dumps(data)
+        endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self._charm._port)
+        return json.dumps({"url": endpoint_url})
 
     @property
     def unit_ip(self) -> str:
         """Returns unit's IP."""
-        if bind_address := self.charm.model.get_binding(self._relation_name).network.bind_address:
+        bind_address = self._charm.model.get_binding(self._relation_name).network.bind_address
+
+        if bind_address:
             return str(bind_address)
         return ""
 
@@ -777,7 +842,7 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         for rel_id, alert_rules in self.alerts().items():
             filename = "{}_rel_{}_alert.rules".format(
-                JujuTopology.from_relation_data(alert_rules),
+                JujuTopology.from_relation_data(alert_rules).identifier,
                 rel_id,
             )
             path = os.path.join(self._rules_dir, filename)
@@ -818,7 +883,7 @@ class LokiPushApiProvider(RelationManagerBase):
             metadata indexed by relation ID.
         """
         alerts = {}
-        for relation in self.charm.model.relations[self._relation_name]:
+        for relation in self._charm.model.relations[self._relation_name]:
             if not relation.units:
                 continue
 
@@ -887,6 +952,16 @@ class LokiPushApiConsumer(RelationManagerBase):
             RelationRoleMismatchError: If the relation with the same name as provided
                 via `relation_name` argument does not have the `RelationRole.provides`
                 role.
+
+        Emits:
+            loki_push_api_endpoint_joined: This event is emitted when the relation between the
+                charmed operator that instantiates `LokiPushApiProvider` (Loki charm for instance)
+                and the charmed operator that instantiates `LokiPushApiConsumer` is established.
+            loki_push_api_endpoint_departed: This event is emitted when the relation between the
+                charmed operator that implements `LokiPushApiProvider` (Loki charm for instance)
+                and the charmed operator that implements `LokiPushApiConsumer` is removed.
+            loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
+                file is encountered or if `alert_rules_path` is empty.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
@@ -897,11 +972,13 @@ class LokiPushApiConsumer(RelationManagerBase):
         super().__init__(charm, relation_name)
         self.topology = JujuTopology.from_charm(charm)
 
-        self._stored.set_default(loki_push_api=None)
+        self._stored.set_default(loki_push_api={})
         self._charm = charm
         self._relation_name = relation_name
         self._alert_rules_path = alert_rules_path
+
         events = self._charm.on[relation_name]
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
@@ -914,44 +991,79 @@ class LokiPushApiConsumer(RelationManagerBase):
         Args:
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
+
+        Emits:
+            loki_push_api_endpoint_joined: Once the relation is established, this event is emitted.
+            loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
+                file is encountered or if `alert_rules_path` is empty.
         """
-        if not self._charm.unit.is_leader():
-            return
+        if isinstance(event, RelationEvent):
+            self._process_logging_relation_changed(event.relation)
+        else:
+            # Upgrade event or other charm-level event
+            for relation in self._charm.model.relations[self._relation_name]:
+                self._process_logging_relation_changed(relation)
 
-        if event.unit is None:
-            # Workaround: Seems this is a Juju bug that sends event.unit == None
-            # Remove this if when this issue is closed:
-            # https://github.com/canonical/loki-operator/issues/3
-            return
+    def _process_logging_relation_changed(self, relation: Relation):
+        loki_push_api_data = relation.data[relation.app].get("loki_push_api")
 
-        if data := event.relation.data[event.unit].get("data"):
-            self._stored.loki_push_api = json.loads(data)["loki_push_api"]
+        if loki_push_api_data:
+            self._stored.loki_push_api[relation.id] = json.loads(loki_push_api_data)
 
-        event.relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-        self._set_alert_rules(event)
+        if self._charm.unit.is_leader():
+            alert_groups, invalid_files = load_alert_rules_from_dir(
+                self._alert_rules_path,
+                self.topology,
+                recursive=False,
+                allow_free_standing=self.allow_free_standing_rules,
+            )
+            alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
+
+            if alert_rules_error_message:
+                self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
+
+            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
+            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_departed(self, _):
-        """Handle departures in related consumers.
+    def _on_logging_relation_departed(self, event):
+        """Handle departures in related providers.
 
         Anytime there are departures in relations between the consumer charm and Loki
         the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event.
         The consumer charm can then choose to update its configuration.
         """
+        # Provide default to avoid throwing, as in some complicated scenarios with
+        # upgrades and hook failures we might not have data in the storage
+        self._stored.loki_push_api.pop(event.relation.id, None)
         self.on.loki_push_api_endpoint_departed.emit()
 
-    def _set_alert_rules(self, event):
-        """Set alert rules into relation data.
+    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
+        """Check alert rules.
 
         Args:
-            event: a `CharmEvent` in response to which the consumer
-                charm must update its relation data.
+            alert_groups: a list of prometheus alert rule groups.
+            invalid_files: a list of invalid rules files.
+
+        Returns:
+            A string with the validation message. The message is not empty whether there are
+            invalid alert rules files or there are no alert rules groups.
         """
-        if alert_groups := self._labeled_alert_groups:
-            event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
-                {"groups": alert_groups}
-            )
-        # TODO: else json.dumps({}) ?
+        message = ""
+
+        if invalid_files:
+            must_contain = ["'alert'", "'expr'"]
+            if self.allow_free_standing_rules:
+                must_contain.append("'%%juju_topology%%'")
+
+            message = "Failed to read alert rules (must contain {}): ".format(
+                ", ".join(must_contain)
+            ) + ", ".join(map(str, invalid_files))
+        elif not alert_groups:
+            message = "No alert rules found in {}".format(self._alert_rules_path)
+
+        return message
 
     def _label_alert_topology(self, rule) -> dict:
         """Insert juju topology labels into an alert rule.
@@ -969,45 +1081,13 @@ class LokiPushApiConsumer(RelationManagerBase):
         return rule
 
     @property
-    def loki_push_api(self):
-        """Fetch Loki Push API endpoint sent from LokiPushApiProvider through relation data.
+    def loki_push_api(self) -> List[str]:
+        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
-            Loki Push API endpoint
+            A list with Loki Push API endpoints.
         """
-        return self._stored.loki_push_api
-
-    @property
-    def _labeled_alert_groups(self) -> list:
-        """Load alert rules from rule files.
-
-        All rules from files for a consumer charm are loaded into a single
-        group. The generated name of this group includes Juju topology
-        prefixes.
-
-        Returns:
-            a list of Loki alert rule groups.
-        """
-        alert_groups, invalid_files = load_alert_rules_from_dir(
-            self._alert_rules_path,
-            self.topology,
-            recursive=False,
-            allow_free_standing=self.allow_free_standing_rules,
-        )
-
-        if invalid_files:
-            must_contain = ["'alert'", "'expr'"]
-            if self.allow_free_standing_rules:
-                must_contain.append("'%%juju_topology%%'")
-            message = "Failed to read alert rules (must contain {}): ".format(
-                ", ".join(must_contain)
-            ) + ", ".join(map(str, invalid_files))
-            self._charm.model.unit.status = BlockedStatus(message)
-
-        elif not alert_groups:
-            """No invalid files, but also no alerts found (path might be invalid)"""
-            self._charm.model.unit.status = BlockedStatus(
-                "No alert rules found in " + self._alert_rules_path
-            )
-
-        return alert_groups
+        return [
+            _type_convert_stored(loki_endpoint)
+            for loki_endpoint in self._stored.loki_push_api.values()
+        ]
