@@ -1,12 +1,5 @@
-[project]
-name = "cassandra-operator"
-description = "Kubernetes charm for Apache Cassandra"
-license = "Apache 2.0"
-python = "^3.8"
-readme = "README.md"
-homepage = "https://charmhub.io/grafana-agent-k8s"
-repository = "https://github.com/canonical/grafana-agent-operator"
-documentation = "https://charmhub.io/grafana-agent-k8s/docs"
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -66,3 +59,7 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 module = ["charms.prometheus_k8s.v0.*"]
 follow_imports = "silent"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
