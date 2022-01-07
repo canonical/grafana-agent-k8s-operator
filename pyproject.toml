@@ -52,12 +52,12 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["ops.*"]
+module = ["ops.*", "pytest_operator.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["charms.prometheus_k8s.v0.*"]
+module = ["charms.prometheus_k8s.*"]
 follow_imports = "silent"
 
 [tool.pytest.ini_options]
