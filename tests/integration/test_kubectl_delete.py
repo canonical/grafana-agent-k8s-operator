@@ -20,7 +20,7 @@ async def test_deploy_from_local_path(ops_test, charm_under_test):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
 
-    resources = {"unused-image": METADATA["resources"]["unused-image"]["upstream-source"]}
+    resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     await ops_test.model.deploy(charm_under_test, application_name=app_name, resources=resources)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 

@@ -19,7 +19,7 @@ app_name = METADATA["name"]
 async def test_deploy_from_edge_and_upgrade_from_local_path(ops_test, charm_under_test):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.info("deploy charm from charmhub")
-    resources = {"unused-image": METADATA["resources"]["unused-image"]["upstream-source"]}
+    resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
 
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
