@@ -2,8 +2,7 @@
 # See LICENSE file for licensing details.
 
 name: grafana-agent-k8s
-display-name: |
-  Grafana Agent
+
 summary: Charm for Grafana Agent
 description: |
   Grafana Agent is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.

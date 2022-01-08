@@ -1,7 +1,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-type: "charm"
+type: charm
 bases:
   - build-on:
     - name: "ubuntu"
@@ -12,4 +12,4 @@ bases:
 parts:
   charm:
     build-packages:
-      - git
+    - git
