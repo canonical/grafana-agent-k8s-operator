@@ -31,6 +31,7 @@ from requests.packages.urllib3.util.retry import Retry  # type: ignore
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
+REMOTE_WRITE_RELATION_NAME = "receive-remote-write"
 
 
 class GrafanaAgentReloadError(Exception):
@@ -61,9 +62,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
             ],
         )
-        self._remote_write = PrometheusRemoteWriteConsumer(
-            self, relation_name="prometheus-remote-write"
-        )
+        self._remote_write = PrometheusRemoteWriteConsumer(self)
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
@@ -73,7 +72,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
-            self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
+            self.on[REMOTE_WRITE_RELATION_NAME].relation_changed, self.on_remote_write_changed
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
@@ -137,7 +136,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def _update_status(self) -> None:
         """Update the status to reflect the status quo."""
         if len(self.model.relations["metrics-endpoint"]):
-            if not len(self.model.relations["prometheus-remote-write"]):
+            if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                 self.unit.status = BlockedStatus("no related Prometheus remote-write")
                 return
 

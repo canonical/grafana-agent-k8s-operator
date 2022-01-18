@@ -29,7 +29,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 
 logger = logging.getLogger(__name__)
@@ -289,7 +289,6 @@ class AlertRules:
             # Load a list of rules from file then add labels and filters
             try:
                 rule_file = yaml.safe_load(rf)
-
             except Exception as e:
                 logger.error("Failed to read alert rules from %s: %s", file_path.name, e)
                 return []
@@ -757,12 +756,12 @@ class PrometheusRemoteWriteProvider(Object):
 
     ```
     provides:
-        prometheus-remote-write:  # Relation name
+        receive-remote-write:  # Relation name
             interface: prometheus_remote_write  # Relation interface
     ```
 
     About the name of the relation managed by this library: technically, you *could* change
-    the relation name, `prometheus-remote-write`, but that requires you to provide the new
+    the relation name, `receive-remote-write`, but that requires you to provide the new
     relation name to the `PrometheusRemoteWriteProducer` via the `relation_name` constructor
     argument. (The relation interface, on the other hand, is immutable and, if you were to change
     it, your charm would not be able to relate with other charms using the right relation
@@ -923,9 +922,8 @@ class PrometheusRemoteWriteProvider(Object):
                 continue
 
             try:
-
                 for group in alert_rules["groups"]:
-                    alerts[group["name"]] = group
+                    alerts[group["name"]] = {"groups": [group]}
             except KeyError as e:
                 logger.error(
                     "Relation %s has invalid data : %s",

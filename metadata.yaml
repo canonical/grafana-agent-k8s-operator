@@ -27,7 +27,7 @@ resources:
     description: OCI image for Grafana Agent
 
 requires:
-  prometheus-remote-write:
+  receive-remote-write:
     interface: prometheus_remote_write
   metrics-endpoint:
     interface: prometheus_scrape
