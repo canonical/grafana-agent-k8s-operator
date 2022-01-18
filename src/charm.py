@@ -8,8 +8,8 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.log_proxy import LogProxyProvider
 from charms.loki_k8s.v0.loki_push_api import (
+    LogProxyConsumer,
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
@@ -25,7 +25,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from requests.packages.urllib3.util.retry import Retry  # type: ignore
 
 from kubernetes_service import K8sServicePatch, PatchFailed
 
@@ -59,7 +59,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self)
-        self._log_proxy = LogProxyProvider(self)
+        self._log_proxy = LogProxyConsumer(self)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
