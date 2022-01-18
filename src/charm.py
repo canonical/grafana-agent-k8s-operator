@@ -8,11 +8,11 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.log_proxy import LogProxyProvider
 from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
+    LokiPushApiProvider,
 )
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -58,8 +58,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._remote_write = PrometheusRemoteWriteConsumer(self)
         self._scrape = MetricsEndpointConsumer(self)
 
-        self._loki_consumer = LokiPushApiConsumer(self)
-        self._log_proxy = LogProxyProvider(self)
+        self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
+        self._loki_provider = LokiPushApiProvider(self, relation_name="logging-provider", port=self._http_listen_port)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
@@ -303,7 +303,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                     "configs": [
                         {
                             "name": "promtail",
-                            "clients": [{"url": f"{self._loki_consumer.loki_push_api}"}],
+                            "clients": self._loki_consumer.loki_push_api,
                             "positions": {"filename": f"{self._promtail_positions}"},
                             "scrape_configs": [
                                 {
