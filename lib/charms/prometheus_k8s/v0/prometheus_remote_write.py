@@ -1,6 +1,8 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-"""This library facilitates the integration of the prometheus_remote_write interface.
+"""# Prometheus remote-write library.
+
+This library facilitates the integration of the prometheus_remote_write interface.
 
 Charms that need to push data to a charm exposing the Prometheus remote_write API,
 should use the `PrometheusRemoteWriteConsumer`. Charms that operate software that exposes
@@ -33,7 +35,7 @@ LIBPATCH = 1
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_RELATION_NAME = "prometheus-remote-write"
+DEFAULT_RELATION_NAME = "receive-remote-write"
 RELATION_INTERFACE_NAME = "prometheus_remote_write"
 
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/prometheus_alert_rules"
@@ -62,7 +64,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as its interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -82,13 +84,328 @@ class RelationRoleMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_role
         self.actual_relation_role = actual_relation_role
-        self.message = (
-            "The '{}' relation has role '{}' rather than the expected '{}'".format(
-                relation_name, repr(actual_relation_role), repr(expected_relation_role)
-            )
+        self.message = "The '{}' relation has role '{}' rather than the expected '{}'".format(
+            relation_name, repr(actual_relation_role), repr(expected_relation_role)
         )
 
         super().__init__(self.message)
+
+
+class JujuTopology:
+    """Class for storing and formatting juju topology information."""
+
+    STUB = "%%juju_topology%%"
+
+    def __init__(self, model: str, model_uuid: str, application: str, charm_name: str):
+        """Build a JujuTopology object.
+
+        A `JujuTopology` object is used for storing and transforming
+        Juju Topology information. This information is used to
+        annotate Prometheus scrape jobs and alert rules. Such
+        annotation when applied to scrape jobs helps in identifying
+        the source of the scrapped metrics. On the other hand when
+        applied to alert rules topology information ensures that
+        evaluation of alert expressions is restricted to the source
+        (charm) from which the alert rules were obtained.
+
+        Args:
+            model: a string name of the Juju model
+            model_uuid: a globally unique string identifier for the Juju model
+            application: an application name as a string
+            charm_name: name of charm as a string
+        """
+        self.model = model
+        self.model_uuid = model_uuid
+        self.application = application
+        self.charm_name = charm_name
+
+    @classmethod
+    def from_charm(cls, charm):
+        """Factory method for creating the `JujuTopology` dataclass from a given charm.
+
+        Args:
+            charm: a `CharmBase` object for which the `JujuTopology` has to be constructed
+
+        Returns:
+            a `JujuTopology` object.
+        """
+        return cls(
+            model=charm.model.name,
+            model_uuid=charm.model.uuid,
+            application=charm.model.app.name,
+            charm_name=charm.meta.name,
+        )
+
+    @classmethod
+    def from_relation_data(cls, data: dict):
+        """Factory method for creating the `JujuTopology` dataclass from a dictionary.
+
+        Args:
+            data: a dictionary with four keys providing topology information. The keys are
+                - "model"
+                - "model_uuid"
+                - "application"
+                - "charm_name"
+
+        Returns:
+            a `JujuTopology` object.
+        """
+        return cls(
+            model=data["model"],
+            model_uuid=data["model_uuid"],
+            application=data["application"],
+            charm_name=data["charm_name"],
+        )
+
+    @property
+    def identifier(self) -> str:
+        """Format the topology information into a terse string."""
+        return "{}_{}_{}".format(self.model, self.model_uuid, self.application)
+
+    @property
+    def scrape_identifier(self):
+        """Format the topology information into a scrape identifier."""
+        return "juju_{}_{}_{}_prometheus_scrape".format(
+            self.model,
+            self.model_uuid[:7],
+            self.application,
+        )
+
+    @property
+    def promql_labels(self) -> str:
+        """Format the topology information into a verbose string."""
+        return 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
+            self.model, self.model_uuid, self.application
+        )
+
+    def as_dict(self) -> dict:
+        """Format the topology information into a dict."""
+        return {
+            "model": self.model,
+            "model_uuid": self.model_uuid,
+            "application": self.application,
+            "charm_name": self.charm_name,
+        }
+
+    def as_dict_with_promql_labels(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        return {
+            "juju_model": self.model,
+            "juju_model_uuid": self.model_uuid,
+            "juju_application": self.application,
+            "juju_charm": self.charm_name,
+        }
+
+    def render(self, template: str):
+        """Render a juju-topology template string with topology info."""
+        return template.replace(JujuTopology.STUB, self.promql_labels)
+
+
+def _is_official_alert_rule_format(rules_dict: dict) -> bool:
+    """Are alert rules in the upstream format as supported by Prometheus.
+
+    Alert rules in dictionary format are in "official" form if they
+    contain a "groups" key, since this implies they contain a list of
+    alert rule groups.
+
+    Args:
+        rules_dict: a set of alert rules in Python dictionary format
+
+    Returns:
+        True if alert rules are in official Prometheus file format.
+    """
+    return "groups" in rules_dict
+
+
+def _is_single_alert_rule_format(rules_dict: dict) -> bool:
+    """Are alert rules in single rule format.
+
+    The Prometheus charm library supports reading of alert rules in a
+    custom format that consists of a single alert rule per file. This
+    does not conform to the offical Prometheus alert rule file format
+    which requires that each alert rules file consists of a list of
+    alert rule groups and each group consists of a list of alert
+    rules.
+
+    Alert rules in dictionary form are considered to be in single rule
+    format if in the least it contains two keys correspoinding to the
+    alert rule name and alert expression.
+
+    Returns:
+        True if alert rule is in single rule file format.
+    """
+    # one alert rule per file
+    return set(rules_dict) >= {"alert", "expr"}
+
+
+class AlertRules:
+    """Utility class for amalgamating prometheus alert rule files and injecting juju topology.
+
+    An `AlertRules` object supports aggregating alert rules from files and directories in both
+    official and single rule file formats using the `add_path()` method. All the alert rules
+    read are annotated with Juju topology labels and amalgamated into a single data structure
+    in the form of a Python dictionary using the `as_dict()` method. Such a dictionary can be
+    easily dumped into JSON format and exchanged over relation data. The dictionary can also
+    be dumped into YAML format and written directly into an alert rules file that is read by
+    Prometheus. Note that multiple `AlertRules` objects must not be written into the same file,
+    since Prometheus allows only a single list of alert rule groups per alert rules file.
+
+    The official Prometheus format is a YAML file conforming to the Prometheus documentation
+    (https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+    The custom single rule format is a subsection of the official YAML, having a single alert
+    rule, effectively "one alert per file".
+    """
+
+    # This class uses the following terminology for the various parts of a rule file:
+    # - alert rules file: the entire groups[] yaml, including the "groups:" key.
+    # - alert groups (plural): the list of groups[] (a list, i.e. no "groups:" key) - it is a list
+    #   of dictionaries that have the "name" and "rules" keys.
+    # - alert group (singular): a single dictionary that has the "name" and "rules" keys.
+    # - alert rules (plural): all the alerts in a given alert group - a list of dictionaries with
+    #   the "alert" and "expr" keys.
+    # - alert rule (singular): a single dictionary that has the "alert" and "expr" keys.
+
+    def __init__(self, topology: JujuTopology):
+        """Build and alert rule object.
+
+        Args:
+            topology: a `JujuTopology` instance that is used to annotate all alert rules.
+        """
+        self.topology = topology
+        self.alert_groups = []  # type: List[dict]
+
+    def _from_file(self, root_path: Path, file_path: Path) -> List[dict]:
+        """Read a rules file from path, injecting juju topology.
+
+        Args:
+            root_path: full path to the root rules folder (used only for generating group name)
+            file_path: full path to a *.rule file.
+
+        Returns:
+            A list of dictionaries representing the rules file, if file is valid (the structure is
+            formed by `yaml.safe_load` of the file); an empty list otherwise.
+        """
+        with file_path.open() as rf:
+            # Load a list of rules from file then add labels and filters
+            try:
+                rule_file = yaml.safe_load(rf)
+
+            except Exception as e:
+                logger.error("Failed to read alert rules from %s: %s", file_path.name, e)
+                return []
+
+            if _is_official_alert_rule_format(rule_file):
+                alert_groups = rule_file["groups"]
+            elif _is_single_alert_rule_format(rule_file):
+                # convert to list of alert groups
+                # group name is made up from the file name
+                alert_groups = [{"name": file_path.stem, "rules": [rule_file]}]
+            else:
+                # invalid/unsupported
+                logger.error("Invalid rules file: %s", file_path.name)
+                return []
+
+            # update rules with additional metadata
+            for alert_group in alert_groups:
+                # update group name with topology and sub-path
+                alert_group["name"] = self._group_name(
+                    str(root_path),
+                    str(file_path),
+                    alert_group["name"],
+                )
+
+                # add "juju_" topology labels
+                for alert_rule in alert_group["rules"]:
+                    if "labels" not in alert_rule:
+                        alert_rule["labels"] = {}
+                    alert_rule["labels"].update(self.topology.as_dict_with_promql_labels())
+
+                    # insert juju topology filters into a prometheus alert rule
+                    alert_rule["expr"] = self.topology.render(alert_rule["expr"])
+
+            return alert_groups
+
+    def _group_name(self, root_path: str, file_path: str, group_name: str) -> str:
+        """Generate group name from path and topology.
+
+        The group name is made up of the relative path between the root dir_path, the file path,
+        and topology identifier.
+
+        Args:
+            root_path: path to the root rules dir.
+            file_path: path to rule file.
+            group_name: original group name to keep as part of the new augmented group name
+
+        Returns:
+            New group name, augmented by juju topology and relative path.
+        """
+        rel_path = os.path.relpath(os.path.dirname(file_path), root_path)
+        rel_path = "" if rel_path == "." else rel_path.replace(os.path.sep, "_")
+
+        # Generate group name:
+        #  - name, from juju topology
+        #  - suffix, from the relative path of the rule file;
+        group_name_parts = [self.topology.identifier, rel_path, group_name, "alerts"]
+        # filter to remove empty strings
+        return "_".join(filter(None, group_name_parts))
+
+    def _from_dir(self, dir_path: Path, recursive: bool) -> List[dict]:
+        """Read all rule files in a directory.
+
+        All rules from files for the same directory are loaded into a single
+        group. The generated name of this group includes juju topology.
+        By default, only the top directory is scanned; for nested scanning, pass `recursive=True`.
+
+        Args:
+            dir_path: directory containing *.rule files (alert rules without groups).
+            recursive: flag indicating whether to scan for rule files recursively.
+
+        Returns:
+            a list of dictionaries representing prometheus alert rule groups, each dictionary
+            representing an alert group (structure determined by `yaml.safe_load`).
+        """
+        alert_groups = []  # type: List[dict]
+
+        # Gather all alerts into a list of groups
+        paths = dir_path.glob("**/*.rule" if recursive else "*.rule")
+        for file_path in filter(Path.is_file, paths):
+            alert_groups_from_file = self._from_file(dir_path, file_path)
+            if alert_groups_from_file:
+                logger.debug("Reading alert rule from %s", file_path)
+                alert_groups.extend(alert_groups_from_file)
+
+        return alert_groups
+
+    def add_path(self, path: str, *, recursive: bool = False):
+        """Add rules from a dir path.
+
+        All rules from files are aggregated into a data structure representing a single rule file.
+        All group names are augmented with juju topology.
+
+        Args:
+            path: either a rules file or a dir of rules files.
+            recursive: whether to read files recursively or not (no impact if `path` is a file).
+
+        Raises:
+            InvalidAlertRulePathError: if the provided path is invalid.
+        """
+        path = Path(path)  # type: Path
+        if path.is_dir():
+            self.alert_groups.extend(self._from_dir(path, recursive))
+        elif path.is_file():
+            self.alert_groups.extend(self._from_file(path.parent, path))
+        else:
+            raise InvalidAlertRulePathError(str(path), "path does not exist")
+
+    def as_dict(self) -> dict:
+        """Return standard alert rules file in dict representation.
+
+        Returns:
+            a dictionary containing a single list of alert rule groups.
+            The list of alert rule groups is provided as value of the
+            "groups" dictionary key.
+        """
+        return {"groups": self.alert_groups} if self.alert_groups else {}
 
 
 def _validate_relation_by_interface_and_direction(
@@ -96,7 +413,7 @@ def _validate_relation_by_interface_and_direction(
     relation_name: str,
     expected_relation_interface: str,
     expected_relation_role: RelationRole,
-) -> str:
+):
     """Verifies that a relation has the necessary characteristics.
 
     Verifies that the `relation_name` provided: (1) exists in metadata.yaml,
@@ -125,7 +442,7 @@ def _validate_relation_by_interface_and_direction(
     if relation_name not in charm.meta.relations:
         raise RelationNotFoundError(relation_name)
 
-    relation: RelationMeta = charm.meta.relations[relation_name]
+    relation = charm.meta.relations[relation_name]  # type: RelationMeta
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
@@ -163,7 +480,7 @@ class PrometheusRemoteWriteEndpointsChangedEvent(EventBase):
         self.relation_id = snapshot["relation_id"]
 
 
-class InvalidAlertRuleFolderPathError(Exception):
+class InvalidAlertRulePathError(Exception):
     """Raised if the alert rules folder cannot be found or is otherwise invalid."""
 
     def __init__(
@@ -185,7 +502,7 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
     the provided path elements and, if the result path exists and is a directory,
     return its absolute path; otherwise, return `None`.
     """
-    charm_dir = Path(charm.charm_dir)
+    charm_dir = Path(str(charm.charm_dir))
     if not charm_dir.exists() or not charm_dir.is_dir():
         # Operator Framework does not currently expose a robust
         # way to determine the top level charm source directory
@@ -198,9 +515,9 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
     alerts_dir_path = charm_dir.absolute().joinpath(*path_elements)
 
     if not alerts_dir_path.exists():
-        raise InvalidAlertRuleFolderPathError(alerts_dir_path, "directory does not exist")
+        raise InvalidAlertRulePathError(str(alerts_dir_path), "directory does not exist")
     if not alerts_dir_path.is_dir():
-        raise InvalidAlertRuleFolderPathError(alerts_dir_path, "is not a directory")
+        raise InvalidAlertRulePathError(str(alerts_dir_path), "is not a directory")
 
     return str(alerts_dir_path)
 
@@ -233,11 +550,11 @@ class PrometheusRemoteWriteConsumer(Object):
 
     ```
     requires:
-        prometheus-remote-write:  # Relation name
+        receive-remote-write:  # Relation name
             interface: prometheus_remote_write  # Relation interface
     ```
 
-    The charmed operator uses the `PrometheusRemoteWriteConsumer` as follows:
+    The charmed operator is expected to use the `PrometheusRemoteWriteConsumer` as follows:
 
     ```
     def __init__(self, *args):
@@ -247,9 +564,12 @@ class PrometheusRemoteWriteConsumer(Object):
 
         self.framework.observe(
             self.remote_write_consumer.on.endpoints_changed,
-            _handle_endpoints_changed,
+            self._handle_endpoints_changed,
         )
     ```
+    The `endpoints_changed` event will fire in situations such as provider ip change (e.g.
+    relation created, provider upgrade, provider pod churn) or provider config change (e.g.
+    metadata settings).
 
     Then, inside the logic of `_handle_endpoints_changed`, the updated endpoint list is
     retrieved with with:
@@ -261,24 +581,27 @@ class PrometheusRemoteWriteConsumer(Object):
     which returns a dictionary structured like the Prometheus configuration object (see
     https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
 
-    About the name of the relation managed by this library: technically, you *could* change
-    the relation name, `prometheus-remote-write`, but that requires you to provide the new
-    relation name to the `PrometheusRemoteWriteConsumer` via the `relation_name` constructor
-    argument. (The relation interface, on the other hand, is immutable and, if you were to change
-    it, your charm would not be able to relate with other charms using the right relation
-    interface. The library prevents you from doing that by raising an exception.) In any case, it
-    is strongly discouraged to change the relation name: having consistent relation names across
-    charms that do similar things is a very good thing for the people that will use your charm.
-    The one exception to the rule above, is if you charm needs to both consume and provide a
-    relation using the `prometheus_remote_write` interface, in which case changing the relation
-    name to differentiate between "incoming" and "outgoing" remote write interactions is necessary.
+    Regarding the default relation name, `receive-remote-write`: if you choose to change it,
+    you would need to explicitly provide it to the `PrometheusRemoteWriteConsumer` via the
+    `relation_name` constructor argument. (The relation interface, on the other hand, is
+    fixed and, if you were to change it, your charm would not be able to relate with other
+    charms using the correct relation interface. The library prevents you from doing that by
+    raising an exception.)
 
-    It is also possible to specify alert rules. By default, this library will look
-    into the `<charm_parent_dir>/prometheus_alert_rules`, which in standard charm
-    layouts resolves to `src/prometheus_alert_rules`. Each alert rule goes into a
-    separate `*.rule` file. If the syntax of a rule is invalid,
-    the  `MetricsEndpointProvider` logs an error and does not load the particular
-    rule.
+    In any case, it is strongly discouraged to change the relation name: having consistent
+    relation names across charms that do similar things is good practice and more
+    straightforward for the users of your charm. The one exception to the rule above,
+    is if your charm needs to both consume and provide a relation using the
+    `prometheus_remote_write` interface, in which case changing the relation name to
+    differentiate between "incoming" and "outgoing" remote write interactions is necessary.
+
+    It is also possible to specify alert rules. By default, this library will search
+    `<charm_parent_dir>/prometheus_alert_rules`, which in standard charm
+    layouts resolves to `src/prometheus_alert_rules`. Each set of alert rules, grouped
+    by the topology identifier, goes into a separate `*.rule` file.
+
+    If the syntax of a rule is invalid, the `MetricsEndpointProvider` logs an error and
+    does not load the particular rule.
 
     To avoid false positives and negatives in the evaluation of your alert rules,
     you must always add the `%%juju_topology%%` token as label filters in the
@@ -333,7 +656,7 @@ class PrometheusRemoteWriteConsumer(Object):
 
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
-        except InvalidAlertRuleFolderPathError as e:
+        except InvalidAlertRulePathError as e:
             logger.debug(
                 "Invalid Prometheus alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
@@ -345,52 +668,54 @@ class PrometheusRemoteWriteConsumer(Object):
         self._relation_name = relation_name
         self._alert_rules_path = alert_rules_path
 
-        self.framework.observe(
-            self._charm.on[self._relation_name].relation_joined,
-            self._handle_endpoints_changed,
-        )
-        self.framework.observe(
-            self._charm.on[self._relation_name].relation_changed,
-            self._handle_endpoints_changed,
-        )
-        self.framework.observe(
-            self._charm.on[self._relation_name].relation_departed,
-            self._handle_endpoints_changed,
-        )
-        self.framework.observe(
-            self._charm.on[self._relation_name].relation_broken,
-            self._handle_endpoints_changed,
-        )
+        self.topology = JujuTopology.from_charm(charm)
 
+        on_relation = self._charm.on[self._relation_name]
+
+        self.framework.observe(on_relation.relation_joined, self._handle_endpoints_changed)
+        self.framework.observe(on_relation.relation_changed, self._handle_endpoints_changed)
+        self.framework.observe(on_relation.relation_departed, self._handle_endpoints_changed)
+        self.framework.observe(on_relation.relation_broken, self._handle_endpoints_changed)
+        self.framework.observe(on_relation.relation_joined, self._push_alerts_on_relation_joined)
         self.framework.observe(
-            self._charm.on[self._relation_name].relation_joined,
-            self._set_alerts_on_relation_changed,
+            self._charm.on.leader_elected, self._push_alerts_to_all_relation_databags
         )
         self.framework.observe(
-            self._charm.on.upgrade_charm,
-            self._set_alerts_to_all_relation,
+            self._charm.on.upgrade_charm, self._push_alerts_to_all_relation_databags
         )
 
     def _handle_endpoints_changed(self, event: RelationEvent):
         self.on.endpoints_changed.emit(relation_id=event.relation.id)
 
-    def _set_alerts_on_relation_changed(self, event: RelationEvent):
-        self._set_alerts_to_relation(event.relation)
+    def _push_alerts_on_relation_joined(self, event: RelationEvent):
+        self._push_alerts_to_relation_databag(event.relation)
 
-    def _set_alerts_to_all_relation(self, _):
+    def _push_alerts_to_all_relation_databags(self, _):
         for relation in self.model.relations[self._relation_name]:
-            self._set_alerts_to_relation(relation)
+            self._push_alerts_to_relation_databag(relation)
 
-    def _set_alerts_to_relation(self, relation: Relation):
-        if alert_groups := self._labeled_alert_groups:
-            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+    def _push_alerts_to_relation_databag(self, relation: Relation):
+        if not self._charm.unit.is_leader():
+            return
+
+        alert_rules = AlertRules(self.topology)
+        alert_rules.add_path(self._alert_rules_path, recursive=False)
+
+        alert_rules_as_dict = alert_rules.as_dict()
+
+        if alert_rules_as_dict:
+            relation.data[self._charm.app]["alert_rules"] = json.dumps(alert_rules_as_dict)
 
     @property
     def endpoints(self) -> List[Dict[str, str]]:
-        """A config object ready to be dropped in to a prometheus config file.
+        """A config object ready to be dropped into a prometheus config file.
+
+        The format of the dict is specified in the official prometheus docs:
+        https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write
 
         Returns:
-            A list of remote_write configs.
+            A list of dictionaries where each dictionary provides information about
+            a single remote_write endpoint.
         """
         endpoints = []
         for relation in self.model.relations[self._relation_name]:
@@ -399,8 +724,7 @@ class PrometheusRemoteWriteConsumer(Object):
                     # This is a peer unit
                     continue
 
-                remote_write = relation.data[unit].get("remote_write")
-                if remote_write:
+                if remote_write := relation.data[unit].get("remote_write"):
                     deserialized_remote_write = json.loads(remote_write)
                     endpoints.append(
                         {
@@ -410,106 +734,12 @@ class PrometheusRemoteWriteConsumer(Object):
 
         return endpoints
 
-    def _label_alert_topology(self, rule) -> dict:
-        """Insert juju topology labels into an alert rule.
-
-        Args:
-            rule: a dictionary representing a prometheus alert rule.
-
-        Returns:
-            a dictionary representing prometheus alert rule with juju
-            topology labels.
-        """
-        metadata = self._consumer_metadata
-        labels = rule.get("labels", {})
-        labels["juju_model"] = metadata["model"]
-        labels["juju_model_uuid"] = metadata["model_uuid"]
-        labels["juju_application"] = metadata["application"]
-        rule["labels"] = labels
-        return rule
-
-    def _label_alert_expression(self, rule) -> dict:
-        """Insert juju topology filters into a prometheus alert rule.
-
-        Args:
-            rule: a dictionary representing a prometheus alert rule.
-
-        Returns:
-            a dictionary representing a prometheus alert rule that filters based
-            on juju topology.
-        """
-        metadata = self._consumer_metadata
-        topology = 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
-            metadata["model"], metadata["model_uuid"], metadata["application"]
-        )
-
-        if expr := rule.get("expr", None):
-            expr = expr.replace("%%juju_topology%%", topology)
-            rule["expr"] = expr
-        else:
-            logger.error("Invalid alert expression in %s", rule.get("alert"))
-
-        return rule
-
-    @property
-    def _labeled_alert_groups(self) -> list:
-        """Load alert rules from rule files.
-
-        All rules from files for a consumer charm are loaded into a single
-        group. the generated name of this group includes juju topology
-        prefixes.
-
-        Returns:
-            a list of prometheus alert rule groups.
-        """
-        alerts = []
-        for p in Path(self._alert_rules_path).glob("*.rule"):
-            if not p.is_file():
-                continue
-
-            logger.debug("Reading alert rule from %s", p)
-            with p.open() as rule_file:
-                # Load a list of rules from file then add labels and filters
-                try:
-                    rule = yaml.safe_load(rule_file)
-                    rule = self._label_alert_topology(rule)
-                    rule = self._label_alert_expression(rule)
-                    alerts.append(rule)
-                except Exception as e:
-                    logger.error("Failed to read alert rules from %s: %s", p.name, str(e))
-
-        # Gather all alerts into a list of one group since Prometheus
-        # requires alerts be part of some group
-        groups = []
-        if alerts:
-            metadata = self._consumer_metadata
-            group = {
-                "name": "{model}_{model_uuid}_{application}_alerts".format(**metadata),
-                "rules": alerts,
-            }
-            groups.append(group)
-        return groups
-
-    @property
-    def _consumer_metadata(self) -> dict:
-        """Generate scrape metadata.
-
-        Returns:
-            Scrape configuration metadata for the charm using this PrometheusRemoteWriteConsumer.
-        """
-        return {
-            "model": str(self._charm.model.name),
-            "model_uuid": str(self._charm.model.uuid),
-            "application": str(self._charm.model.app.name),
-            "charm_name": str(self._charm.meta.name),
-        }
-
 
 class PrometheusRemoteWriteProvider(Object):
     """API that manages a provided `prometheus_remote_write` relation.
 
-    The `PrometheusRemoteWriteProvider` is intended to be used by charms that need to receive data
-    from other charms over the Prometheus remote_write API.
+    The `PrometheusRemoteWriteProvider` is intended to be used by charms whose workloads need
+    to receive data from other charms' workloads over the Prometheus remote_write API.
 
     The `PrometheusRemoteWriteProvider` object can be instantiated as follows in your charm:
 
@@ -591,22 +821,22 @@ class PrometheusRemoteWriteProvider(Object):
         self._endpoint_port = int(endpoint_port)
         self._endpoint_path = endpoint_path
 
-        relation_events = self._charm.on[self._relation_name]
+        on_relation = self._charm.on[self._relation_name]
         self.framework.observe(
-            relation_events.relation_created,
+            on_relation.relation_created,
             self._set_endpoint_on_relation_change,
         )
         self.framework.observe(
-            relation_events.relation_joined,
+            on_relation.relation_joined,
             self._set_endpoint_on_relation_change,
         )
 
-    def update_endpoint(self, relation: Optional[Relation] = None) -> None:
+    def update_endpoint(self, relation: Relation = None) -> None:
         """Triggers programmatically the update of the relation data.
 
         This method should be used when the charm relying on this library needs
         to update the relation data in response to something occurring outside
-        of the `prometheus_remote_write` relation lifecycle, e.g., in case of an
+        of the `prometheus_remote_write` relation lifecycle, e.g., in case of a
         host address change because the charmed operator becomes connected to an
         Ingress after the `prometheus_remote_write` relation is established.
 
@@ -636,10 +866,10 @@ class PrometheusRemoteWriteProvider(Object):
 
         path = self._endpoint_path or ""
         if path and not path.startswith("/"):
-            path = str(path)
+            path = "/{}".format(path)
 
         endpoint_url = "{}://{}:{}{}".format(
-           self._endpoint_schema, address, str(self._endpoint_port), path
+            self._endpoint_schema, address, str(self._endpoint_port), path
         )
 
         relation.data[self._charm.unit]["remote_write"] = json.dumps(
@@ -682,7 +912,7 @@ class PrometheusRemoteWriteProvider(Object):
         Returns:
             a dictionary mapping the name of an alert rule group to the group.
         """
-        alerts = {}
+        alerts = {}  # type: Dict[str, dict] # mapping b/w juju identifiers and alert rule files
         for relation in self._charm.model.relations[self._relation_name]:
             if not relation.units:
                 continue
@@ -693,6 +923,7 @@ class PrometheusRemoteWriteProvider(Object):
                 continue
 
             try:
+
                 for group in alert_rules["groups"]:
                     alerts[group["name"]] = group
             except KeyError as e:

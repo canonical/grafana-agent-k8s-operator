@@ -19,14 +19,14 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
-from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent
+from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase, StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from requests.packages.urllib3.util.retry import Retry  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
             ],
         )
-        self._remote_write = PrometheusRemoteWriteConsumer(self)
+        self._remote_write = PrometheusRemoteWriteConsumer(
+            self, relation_name="prometheus-remote-write"
+        )
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
