@@ -25,7 +25,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry  # type: ignore
+from requests.packages.urllib3.util.retry import Retry
 
 from kubernetes_service import K8sServicePatch, PatchFailed
 
