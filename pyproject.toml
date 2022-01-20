@@ -59,7 +59,7 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["ops.*"]
+module = ["ops.*", "requests.packages.urllib3.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

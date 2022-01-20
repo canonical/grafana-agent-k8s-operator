@@ -59,7 +59,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
-        self._loki_provider = LokiPushApiProvider(self, relation_name="logging-provider", port=self._http_listen_port)
+        self._loki_provider = LokiPushApiProvider(
+            self, relation_name="logging-provider", port=self._http_listen_port
+        )
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
