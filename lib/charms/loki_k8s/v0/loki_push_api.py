@@ -379,9 +379,9 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 
 import yaml
-from ops.charm import CharmBase, RelationEvent, RelationRole
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import ModelError, Relation
+from ops.charm import CharmBase, HookEvent, RelationEvent, RelationRole
+from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.model import Container, ModelError, Relation
 from ops.pebble import APIError
 
 # The unique Charmhub library identifier, never change it
@@ -1101,7 +1101,6 @@ class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
 
     on = LoggingEvents()
-    _stored = StoredState()
 
     def __init__(
         self,
@@ -1157,7 +1156,6 @@ class LokiPushApiConsumer(ConsumerBase):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
         super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
-        self._stored.set_default(loki_push_api={})
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -1189,7 +1187,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_departed(self, event):
+    def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
 
         Anytime there are departures in relations between the consumer charm and Loki
@@ -1198,7 +1196,6 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
-        self._stored.loki_push_api.pop(event.relation.id, None)
         self.on.loki_push_api_endpoint_departed.emit()
 
     @property
@@ -1231,56 +1228,91 @@ class PromtailDigestError(Exception):
     """Raised if there is an error with Promtail binary file."""
 
 
-class LogProxyConsumer(RelationManagerBase):
-    """LogProxyConsumer class."""
+class LogProxyConsumer(ConsumerBase):
+    """LogProxyConsumer class.
+
+    The `LogProxyConsumer` object provides a method for attaching `promtail` to
+    a workload in order to generate structured logging data from applications
+    which traditionally log to syslog or do not have native Loki integration.
+    The `LogProxyConsumer` can be instantiated as follows:
+
+        self._log_proxy_consumer = LogProxyConsumer(self, log_files=["/var/log/messages"])
+
+    Args:
+        charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
+            Typically this is `self` in the instantiating class.
+        log_files: a list of log files to monitor with Promtail.
+        relation_name: the string name of the relation interface to look up.
+            If `charm` has exactly one relation with this interface, the relation's
+            name is returned. If none or multiple relations with the provided interface
+            are found, this method will raise either an exception of type
+            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
+            respectively.
+        enable_syslog: Whether or not to enable syslog integration.
+        syslog_port: The port syslog is attached to.
+        alert_rules_path: an optional path for the location of alert rules
+            files. Defaults to "./src/loki_alert_rules",
+            resolved from the directory hosting the charm entry file.
+            The alert rules are automatically updated on charm upgrade.
+        allow_free_standing_rules: A boolean to allow rules which are not in
+            `alert_rules_path`.
+        container_name: An optional container name to inject the payload into.
+
+    Raises:
+        RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+            with the same name as provided via `relation_name` argument.
+        RelationInterfaceMismatchError: The relation with the same name as provided
+            via `relation_name` argument does not have the `loki_push_api` relation
+            interface.
+        RelationRoleMismatchError: If the relation with the same name as provided
+            via `relation_name` argument does not have the `RelationRole.provides`
+            role.
+    """
 
     def __init__(
         self,
         charm,
-        log_files: list = [],
+        log_files: list = None,
         container_name: Optional[str] = None,
         relation_name: str = "log-proxy",
         enable_syslog: bool = False,
         syslog_port: int = 1514,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        allow_free_standing_rules: bool = False,
     ):
-        super().__init__(charm, relation_name)
+        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
         self._charm = charm
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files
+        self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
 
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
-        )
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
-        )
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed
-        )
+        events = self._charm.on[relation_name]
+        self.framework.observe(events.relation_created, self._on_relation_created)
+        self.framework.observe(events.relation_changed, self._on_relation_changed)
+        self.framework.observe(events.relation_departed, self._on_relation_departed)
         self.framework.observe(
             getattr(self._charm.on, "{}_pebble_ready".format(self._container_name)),
             self._on_pebble_ready,
         )
 
-    def _on_pebble_ready(self, event):
+    def _on_pebble_ready(self, _: HookEvent) -> None:
         """Event handler for `pebble_ready`."""
         if self.model.relations[self._relation_name] and not self._is_promtail_installed():
             self._setup_promtail()
 
-    def _on_log_proxy_relation_created(self, event):
-        """Event handler for the `log_proxy_relation_created`."""
+    def _on_relation_created(self, _: RelationEvent) -> None:
+        """Event handler for `relation_created`."""
         if not self._container.can_connect():
             return
         if not self._is_promtail_installed():
             self._setup_promtail()
 
-    def _on_log_proxy_relation_changed(self, event):
-        """Event handler for the `log_proxy_relation_changed`.
+    def _on_relation_changed(self, _: RelationEvent) -> None:
+        """Event handler for `relation_changed`.
 
         Args:
             event: The event object `RelationChangedEvent`.
@@ -1295,24 +1327,23 @@ class LogProxyConsumer(RelationManagerBase):
                 self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
                 self._container.restart(WORKLOAD_SERVICE_NAME)
 
-    def _on_log_proxy_relation_departed(self, event):
-        """Event handler for the `log_proxy_relation_departed`.
+    def _on_relation_departed(self, _: RelationEvent) -> None:
+        """Event handler for `relation_departed`.
 
         Args:
             event: The event object `RelationDepartedEvent`.
         """
-        if not self._container.can_connect():
+        if not self._charm.model.relations[self._relation_name]:
+            self._container.stop(WORKLOAD_SERVICE_NAME)
             return
+
         new_config = self._promtail_config
         if new_config != self._current_config:
             self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
 
-        if not new_config["clients"]:
-            self._container.stop(WORKLOAD_SERVICE_NAME)
-        else:
-            self._container.restart(WORKLOAD_SERVICE_NAME)
+        self._container.restart(WORKLOAD_SERVICE_NAME)
 
-    def _get_container(self, container_name):
+    def _get_container(self, container_name: Optional[str] = "") -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
         If there is more than one container in the Pod a `PromtailDigestError` is raised.
@@ -1327,7 +1358,7 @@ class LogProxyConsumer(RelationManagerBase):
             PromtailDigestError if no `container_name` is passed and there is more than one
                 container in the Pod.
         """
-        if container_name is not None:
+        if container_name:
             try:
                 return self._charm.unit.get_container(container_name)
             except ModelError as e:
@@ -1347,7 +1378,7 @@ class LogProxyConsumer(RelationManagerBase):
             )
             raise PromtailDigestError(msg)
 
-    def _get_container_name(self, container_name):
+    def _get_container_name(self, container_name: Optional[str] = "") -> str:
         """Gets a container_name.
 
         If there is more than one container in the Pod a `PromtailDigestError` is raised.
@@ -1362,7 +1393,7 @@ class LogProxyConsumer(RelationManagerBase):
             PromtailDigestError if no `container_name` is passed and there is more than one
                 container in the Pod.
         """
-        if container_name is not None:
+        if container_name:
             return container_name
 
         containers = dict(self._charm.model.unit.containers)
@@ -1376,7 +1407,7 @@ class LogProxyConsumer(RelationManagerBase):
         )
         raise PromtailDigestError(msg)
 
-    def _add_pebble_layer(self):
+    def _add_pebble_layer(self) -> None:
         """Adds Pebble layer that manages Promtail service in Workload container."""
         pebble_layer = {
             "summary": "promtail layer",
@@ -1407,7 +1438,7 @@ class LogProxyConsumer(RelationManagerBase):
         else:
             self._push_binary_to_workload()
 
-    def _push_binary_to_workload(self, resource_path=BINARY_PATH) -> None:
+    def _push_binary_to_workload(self, resource_path: str = BINARY_PATH) -> None:
         with open(resource_path, "rb") as f:
             self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
             logger.debug("The promtail binary file has been pushed to the workload container.")
@@ -1637,7 +1668,7 @@ class LogProxyConsumer(RelationManagerBase):
 
         return static_configs
 
-    def _setup_promtail(self):
+    def _setup_promtail(self) -> None:
         relation = self._charm.model.relations[self._relation_name][0]
         if relation.data[relation.app].get("promtail_binary_zip_url", None) is None:
             return
@@ -1655,7 +1686,7 @@ class LogProxyConsumer(RelationManagerBase):
         if self._current_config["clients"]:
             self._container.restart(WORKLOAD_SERVICE_NAME)
 
-    def _is_promtail_installed(self):
+    def _is_promtail_installed(self) -> bool:
         """Determine if promtail has already been installed to the container."""
         try:
             self._container.list_files(WORKLOAD_BINARY_PATH)
@@ -1664,7 +1695,7 @@ class LogProxyConsumer(RelationManagerBase):
         return True
 
     @property
-    def syslog_port(self):
+    def syslog_port(self) -> int:
         """Gets the port on which promtail is listening for syslog.
 
         Returns:
@@ -1673,7 +1704,7 @@ class LogProxyConsumer(RelationManagerBase):
         return self._syslog_port
 
     @property
-    def rsyslog_config(self):
+    def rsyslog_config(self) -> str:
         """Generates a config line for use with rsyslog.
 
         Returns:
