@@ -1341,7 +1341,10 @@ class LogProxyConsumer(ConsumerBase):
         if new_config != self._current_config:
             self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
 
-        self._container.restart(WORKLOAD_SERVICE_NAME)
+        if new_config["clients"]:
+            self._container.restart(WORKLOAD_SERVICE_NAME)
+        else:
+            self._container.stop(WORKLOAD_SERVICE_NAME)
 
     def _get_container(self, container_name: Optional[str] = "") -> Container:
         """Gets a single container by name or using the only container running in the Pod.
