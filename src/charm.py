@@ -8,8 +8,8 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.log_proxy import LogProxyProvider
 from charms.loki_k8s.v0.loki_push_api import (
+    LogProxyConsumer,
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
@@ -59,7 +59,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self)
-        self._log_proxy = LogProxyProvider(self)
+        self._log_proxy = LogProxyConsumer(self)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
