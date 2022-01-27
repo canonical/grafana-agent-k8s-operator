@@ -48,6 +48,12 @@ Install the [charmcraft tool](https://juju.is/docs/sdk/setting-up-charmcraft) an
     charmcraft pack
 ```
 
+Deploy the charm with:
+
+```bash
+    juju deploy ./grafana-agent-k8s_ubuntu-20.04-amd64.charm --resource agent-image='grafana/agent:v0.20.1'
+```
+
 ## Code Overview
 
 The core implementation of this charm is represented by the [`GrafanaAgentOperatorCharm`](src/charm.py) class.

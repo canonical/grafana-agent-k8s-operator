@@ -3,8 +3,8 @@
 """## Overview.
 
 This document explains how to integrate with the Prometheus charm
-for the purposes of providing a metrics endpoint to Prometheus. It
-also explains how alternative implementations of the Prometheus charm
+for the purpose of providing a metrics endpoint to Prometheus. It
+also explains how alternative implementations of the Prometheus charms
 may maintain the same interface and be backward compatible with all
 currently integrated charms. Finally this document is the
 authoritative reference on the structure of relation data that is
@@ -14,7 +14,7 @@ provide a scrape target for Prometheus.
 ## Provider Library Usage
 
 This Prometheus charm interacts with its scrape targets using its
-charm library. Charms seeking to expose a metric endpoints for the
+charm library. Charms seeking to expose metric endpoints for the
 Prometheus charm, must do so using the `MetricsEndpointProvider`
 object from this charm library. For the simplest use cases, using the
 `MetricsEndpointProvider` object only requires instantiating it,
@@ -22,46 +22,43 @@ typically in the constructor of your charm (the one which exposes a
 metrics endpoint). The `MetricsEndpointProvider` constructor requires
 the name of the relation over which a scrape target (metrics endpoint)
 is exposed to the Prometheus charm. This relation must use the
-`prometheus_scrape` interface. The address of the metrics endpoint is
-set to the unit address, by each unit of the `MetricsEndpointProvider`
-charm. These units set their address in response to a specific
-`CharmEvent`. Hence instantiating the `MetricsEndpointProvider` also
-requires a `CharmEvent` object in response to which each unit will
-post its address into the unit's relation data for the Prometheus
-charm. Since container restarts of Kubernetes charms can result in
-change of IP addresses, this event is typically `PebbleReady`. For
-example, assuming your charm exposes a metrics endpoint over a
-relation named "metrics_endpoint", you may instantiate
-`MetricsEndpointProvider` as follows
+`prometheus_scrape` interface. By default address of the metrics
+endpoint is set to the unit IP address, by each unit of the
+`MetricsEndpointProvider` charm. These units set their address in
+response to the `PebbleReady` event of each container in the unit,
+since container restarts of Kubernetes charms can result in change of
+IP addresses. The default name for the metrics endpoint relation is
+`metrics-endpoint`. It is strongly recommended to use the same
+relation name for consistency across charms and doing so obviates the
+need for an additional constructor argument. The
+`MetricsEndpointProvider` object may be instantiated as follows
 
     from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 
     def __init__(self, *args):
         super().__init__(*args)
         ...
-        self.metrics_endpoint = MetricsEndpointProvider(self, "metrics-endpoint",
-                                                self.on.container_name_pebble_ready)
+        self.metrics_endpoint = MetricsEndpointProvider(self)
         ...
 
-In this example `container_name_pebble_ready` is the `PebbleReady` event
-in response to which each unit will advertise its address. Also note
-that the first argument (`self`) to `MetricsEndpointProvider` is always a
-reference to the parent (scrape target) charm.
+Note that the first argument (`self`) to `MetricsEndpointProvider` is
+always a reference to the parent (scrape target) charm.
 
-An instantiated `MetricsEndpointProvider` object will ensure that each unit of
-its parent charm, is a scrape target for the `MetricsEndpointConsumer`
-(Prometheus). By default `MetricsEndpointProvider` assumes each unit of the
-consumer charm exports its metrics at a path given by `/metrics` on
-port 80. The defaults may be changed by providing the
-`MetricsEndpointProvider` constructor an optional argument (`jobs`) that
-represents list of Prometheus scrape job specification using Python
-standard data structures. This job specification is a subset of
-Prometheus' own [scrape
+An instantiated `MetricsEndpointProvider` object will ensure that each
+unit of its parent charm, is a scrape target for the
+`MetricsEndpointConsumer` (Prometheus) charm. By default
+`MetricsEndpointProvider` assumes each unit of the consumer charm
+exports its metrics at a path given by `/metrics` on port 80. These
+defaults may be changed by providing the `MetricsEndpointProvider`
+constructor an optional argument (`jobs`) that represents a
+Prometheus scrape job specification using Python standard data
+structures. This job specification is a subset of Prometheus' own
+[scrape
 configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config)
 format but represented using Python data structures. More than one job
 may be provided using the `jobs` argument. Hence `jobs` accepts a list
 of dictionaries where each dictionary represents one `<scrape_config>`
-object as described in the Prometheus documentation. The current
+object as described in the Prometheus documentation. The currently
 supported configuration subset is: `job_name`, `metrics_path`,
 `static_configs`
 
@@ -177,7 +174,7 @@ supported in a `MetricsEndpointProvider` job specification are:
 - `sample_limit`
 - `label_limit`
 - `label_name_length_limit`
-- `label_value_lenght_limit`
+- `label_value_length_limit`
 
 ## Consumer Library Usage
 
@@ -185,14 +182,12 @@ The `MetricsEndpointConsumer` object may be used by Prometheus
 charms to manage relations with their scrape targets. For this
 purposes a Prometheus charm needs to do two things
 
-1. Instantiate the `MetricsEndpointConsumer` object providing it
-with three two pieces of information
-
-- A reference to the parent (Prometheus) charm.
-
-- Name of the relation that the Prometheus charm uses to interact with
-  scrape targets. This relation must confirm to the
-  `prometheus_scrape` interface.
+1. Instantiate the `MetricsEndpointConsumer` object by providing it a
+reference to the parent (Prometheus) charm and optionally the name of
+the relation that the Prometheus charm uses to interact with scrape
+targets. This relation must confirm to the `prometheus_scrape`
+interface and it is strongly recommended that this relation be named
+`metrics-endpoint` which is its default value.
 
 For example a Prometheus charm may instantiate the
 `MetricsEndpointConsumer` in its constructor as follows
@@ -202,14 +197,12 @@ For example a Prometheus charm may instantiate the
     def __init__(self, *args):
         super().__init__(*args)
         ...
-        self.metrics_consumer = MetricsEndpointConsumer(
-                self, "metrics-endpoint"
-            )
+        self.metrics_consumer = MetricsEndpointConsumer(self)
         ...
 
 2. A Prometheus charm also needs to respond to the
 `TargetsChangedEvent` event of the `MetricsEndpointConsumer` by adding itself as
-and observer for these events, as in
+an observer for these events, as in
 
     self.framework.observe(
         self.metrics_consumer.on.targets_changed,
@@ -241,10 +234,16 @@ Prometheus charm.  Alert rules are automatically gathered by `MetricsEndpointPro
 charms when using this library, from a directory conventionally named
 `prometheus_alert_rules`. This directory must reside at the top level
 in the `src` folder of the consumer charm. Each file in this directory
-is assumed to be a single alert rule in YAML format. The file name must
-have the `.rule` extension. The format of this alert rule conforms to the
-[Prometheus docs](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
-An example of the contents of one such file is shown below.
+is assumed to be in one of two formats:
+- the official prometheus alert rule format, conforming to the
+[Prometheus docs](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
+- a single rule format, which is a simplified subset of the official format,
+comprising a single alert rule per file, using the same YAML fields.
+
+The file name must have the `.rule` extension.
+
+An example of the contents of such a file in the custom single rule
+format is shown below.
 
 ```
 alert: HighRequestLatency
@@ -270,9 +269,9 @@ expression must include such a topology filter stub.
 
 Gathering alert rules and generating rule files within the Prometheus
 charm is easily done using the `alerts()` method of
-`MetricsEndpointConsumer`. Alerts generated by the Prometheus will
+`MetricsEndpointConsumer`. Alerts generated by Prometheus will
 automatically include Juju topology labels in the alerts. These labels
-indicate the source of the alert. The following lables are
+indicate the source of the alert. The following labels are
 automatically included with each alert
 
 - `juju_model`
@@ -287,23 +286,23 @@ targets. This relation data is in JSON format and it closely resembles
 the YAML structure of Prometheus [scrape configuration]
 (https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config).
 
-Units of consumer charm advertise their address over unit relation
-data using the `prometheus_scrape_host` key. While the
-`scrape_metadata`, `scrape_jobs` and `alert_rules` keys in application
-relation data provide eponymous information.
-
+Units of Metrics provider charms advertise their names and addresses
+over unit relation data using the `prometheus_scrape_unit_name` and
+`prometheus_scrape_unit_address` keys. While the `scrape_metadata`,
+`scrape_jobs` and `alert_rules` keys in application relation data
+of Metrics provider charms hold eponymous information.
 """
 
 import json
 import logging
-import sys
-from enum import Enum
+import os
+from collections import OrderedDict
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import yaml
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationRole
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
-from ops.model import ModelError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bc84295fef5f4049878f07b131968ee2"
@@ -313,7 +312,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 13
 
 
 logger = logging.getLogger(__name__)
@@ -339,79 +338,116 @@ DEFAULT_JOB = {
 }
 
 
+DEFAULT_RELATION_NAME = "metrics-endpoint"
 RELATION_INTERFACE_NAME = "prometheus_scrape"
 
-
-class RelationDirection(Enum):
-    """Relations can be either provided or required by a charm."""
-
-    PROVIDED = 1
-    REQUIRED = 2
+DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/prometheus_alert_rules"
 
 
-class NoRelationWithInterfaceFoundError(Exception):
-    """No relations with the given interface are found in the charm meta."""
+class RelationNotFoundError(Exception):
+    """Raised if there is no relation with the given name is found."""
 
-    def __init__(self, charm: CharmBase, relation_interface: str):
-        self.charm = charm
-        self.relation_interface = relation_interface
+    def __init__(self, relation_name: str):
+        self.relation_name = relation_name
+        self.message = "No relation named '{}' found".format(relation_name)
+
+        super().__init__(self.message)
+
+
+class RelationInterfaceMismatchError(Exception):
+    """Raised if the relation with the given name has a different interface."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_interface: str,
+        actual_relation_interface: str,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_interface
+        self.actual_relation_interface = actual_relation_interface
         self.message = (
-            f"No relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.meta.name}' charm"
+            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
+                relation_name, actual_relation_interface, expected_relation_interface
+            )
         )
 
         super().__init__(self.message)
 
 
-class MultipleRelationsWithInterfaceFoundError(Exception):
-    """Multiple relations with the given interface are found in the charm meta."""
+class RelationRoleMismatchError(Exception):
+    """Raised if the relation with the given name has a different role."""
 
-    def __init__(self, charm: CharmBase, relation_interface: str, relations: list):
-        self.charm = charm
-        self.relation_interface = relation_interface
-        self.relations = relations
-        self.message = (
-            f"Multiple relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.name}' charm"
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_role: RelationRole,
+        actual_relation_role: RelationRole,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_role
+        self.actual_relation_role = actual_relation_role
+        self.message = "The '{}' relation has role '{}' rather than the expected '{}'".format(
+            relation_name, repr(actual_relation_role), repr(expected_relation_role)
         )
 
         super().__init__(self.message)
 
 
-def _get_single_relation_by_interface(
-    charm: CharmBase, relation_interface: str, relation_direction: RelationDirection
-) -> str:
-    """Retrive the only relation in the charm meta that uses the given interface.
+def _validate_relation_by_interface_and_direction(
+    charm: CharmBase,
+    relation_name: str,
+    expected_relation_interface: str,
+    expected_relation_role: RelationRole,
+):
+    """Verifies that a relation has the necessary characteristics.
+
+    Verifies that the `relation_name` provided: (1) exists in metadata.yaml,
+    (2) declares as interface the interface name passed as `relation_interface`
+    and (3) has the right "direction", i.e., it is a relation that `charm`
+    provides or requires.
 
     Args:
         charm: a `CharmBase` object to scan for the matching relation.
-        relation_interface: the string name of the relation interface to look up.
-            If `charm` has exactly one relation with this interface, the relation's
-            name is returned. If none or multiple relations with the provided interface
-            are found, this method will raise either an exception of type
-            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
-            respectively.
-        relation_direction: whether the relation to look up is either one of the provided
-            or required relations.
+        relation_name: the name of the relation to be verified.
+        expected_relation_interface: the interface name to be matched by the
+            relation named `relation_name`.
+        expected_relation_role: whether the `relation_name` must be either
+            provided or required by `charm`.
+
+    Raises:
+        RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+            with the same name as provided via `relation_name` argument.
+        RelationInterfaceMismatchError: The relation with the same name as provided
+            via `relation_name` argument does not have the same relation interface
+            as specified via the `expected_relation_interface` argument.
+        RelationRoleMismatchError: If the relation with the same name as provided
+            via `relation_name` argument does not have the same role as specified
+            via the `expected_relation_role` argument.
     """
-    relations_with_right_direction = (
-        charm.meta.provides
-        if relation_direction == RelationDirection.PROVIDED
-        else charm.meta.requires
-    )
+    if relation_name not in charm.meta.relations:
+        raise RelationNotFoundError(relation_name)
 
-    relations = [
-        relation_name
-        for relation_name, relation_meta in relations_with_right_direction.items()
-        if relation_meta.interface_name == relation_interface
-    ]
+    relation = charm.meta.relations[relation_name]
 
-    if len(relations) == 1:
-        return relations[0]
-    elif len(relations) == 0:
-        raise NoRelationWithInterfaceFoundError(charm, relation_interface)
+    actual_relation_interface = relation.interface_name
+    if actual_relation_interface != expected_relation_interface:
+        raise RelationInterfaceMismatchError(
+            relation_name, expected_relation_interface, actual_relation_interface
+        )
+
+    if expected_relation_role == RelationRole.provides:
+        if relation_name not in charm.meta.provides:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.provides, RelationRole.requires
+            )
+    elif expected_relation_role == RelationRole.requires:
+        if relation_name not in charm.meta.requires:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.requires, RelationRole.provides
+            )
     else:
-        raise MultipleRelationsWithInterfaceFoundError(charm, relation_interface, relations)
+        raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
 
 def _sanitize_scrape_configuration(job) -> dict:
@@ -439,6 +475,423 @@ def _sanitize_scrape_configuration(job) -> dict:
     return sanitized_job
 
 
+class JujuTopology:
+    """Class for storing and formatting juju topology information."""
+
+    STUB = "%%juju_topology%%"
+
+    def __new__(cls, *args, **kwargs):
+        """Reject instantiation of a base JujuTopology class. Children only."""
+        if cls is JujuTopology:
+            raise TypeError("only children of '{}' may be instantiated".format(cls.__name__))
+        return object.__new__(cls)
+
+    def __init__(
+        self,
+        model: str,
+        model_uuid: str,
+        application: str,
+        unit: Optional[str] = "",
+        charm_name: Optional[str] = "",
+    ):
+        """Build a JujuTopology object.
+
+        A `JujuTopology` object is used for storing and transforming
+        Juju Topology information. This information is used to
+        annotate Prometheus scrape jobs and alert rules. Such
+        annotation when applied to scrape jobs helps in identifying
+        the source of the scrapped metrics. On the other hand when
+        applied to alert rules topology information ensures that
+        evaluation of alert expressions is restricted to the source
+        (charm) from which the alert rules were obtained.
+
+        Args:
+            model: a string name of the Juju model
+            model_uuid: a globally unique string identifier for the Juju model
+            application: an application name as a string
+            unit: a unit name as a string
+            charm_name: name of charm as a string
+        """
+        self.model = model
+        self.model_uuid = model_uuid
+        self.application = application
+        self.charm_name = charm_name
+        self.unit = unit
+
+    @classmethod
+    def from_charm(cls, charm):
+        """Factory method for creating `JujuTopology` children from a given charm.
+
+        Args:
+            charm: a `CharmBase` object for which the `JujuTopology` has to be constructed
+
+        Returns:
+            a `JujuTopology` object.
+        """
+        return cls(
+            model=charm.model.name,
+            model_uuid=charm.model.uuid,
+            application=charm.model.app.name,
+            unit=charm.model.unit.name,
+            charm_name=charm.meta.name,
+        )
+
+    @classmethod
+    def from_relation_data(cls, data: dict):
+        """Factory method for creating `JujuTopology` children from a dictionary.
+
+        Args:
+            data: a dictionary with four keys providing topology information. The keys are
+                - "model"
+                - "model_uuid"
+                - "application"
+                - "unit"
+                - "charm_name"
+
+                `unit` and `charm_name` may be empty, but will result in more limited
+                labels. However, this allows us to support payload-only charms.
+
+        Returns:
+            a `JujuTopology` object.
+        """
+        return cls(
+            model=data["model"],
+            model_uuid=data["model_uuid"],
+            application=data["application"],
+            unit=data.get("unit", ""),
+            charm_name=data.get("charm_name", ""),
+        )
+
+    @property
+    def identifier(self) -> str:
+        """Format the topology information into a terse string."""
+        # This is odd, but may have `None` as a model key
+        return "_".join([str(val) for val in self.as_dict().values()])
+
+    @property
+    def promql_labels(self) -> str:
+        """Format the topology information into a verbose string."""
+        return ", ".join(
+            [
+                'juju_{}="{}"'.format(key, value)
+                for key, value in self.as_dict(rename_keys={"charm_name": "charm"}).items()
+            ]
+        )
+
+    def as_dict(self, rename_keys: Optional[Dict[str, str]] = None) -> OrderedDict:
+        """Format the topology information into a dict.
+
+        Use an OrderedDict so we can rely on the insertion order on Python 3.5 (and 3.6,
+        which still does not guarantee it).
+
+        Args:
+            rename_keys: A dictionary mapping old key names to new key names, which will
+                be substituted when invoked.
+        """
+        ret = OrderedDict(
+            [
+                ("model", self.model),
+                ("model_uuid", self.model_uuid),
+                ("application", self.application),
+                ("unit", self.unit),
+                ("charm_name", self.charm_name),
+            ]
+        )
+
+        ret["unit"] or ret.pop("unit")
+        ret["charm_name"] or ret.pop("charm_name")
+
+        # If a key exists in `rename_keys`, replace the value
+        if rename_keys:
+            ret = OrderedDict(
+                (rename_keys.get(k), v) if rename_keys.get(k) else (k, v) for k, v in ret.items()  # type: ignore
+            )
+
+        return ret
+
+    def as_promql_label_dict(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        vals = {
+            "juju_{}".format(key): val
+            for key, val in self.as_dict(rename_keys={"charm_name": "charm"}).items()
+        }
+
+        return vals
+
+    def render(self, template: str):
+        """Render a juju-topology template string with topology info."""
+        return template.replace(JujuTopology.STUB, self.promql_labels)
+
+
+class AggregatorTopology(JujuTopology):
+    """Class for initializing topology information for MetricsEndpointAggregator."""
+
+    @classmethod
+    def create(cls, model: str, model_uuid: str, application: str, unit: str):
+        """Factory method for creating the `AggregatorTopology` dataclass from a given charm.
+
+        Args:
+            model: a string representing the model
+            model_uuid: the model UUID as a string
+            application: the application name
+            unit: the unit name
+
+        Returns:
+            a `AggregatorTopology` object.
+        """
+        return cls(
+            model=model,
+            model_uuid=model_uuid,
+            application=application,
+            unit=unit,
+        )
+
+    def as_promql_label_dict(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        vals = {"juju_{}".format(key): val for key, val in self.as_dict().items()}
+
+        # FIXME: Why is this different? I have no idea. The uuid length should be the same
+        vals["juju_model_uuid"] = vals["juju_model_uuid"][:7]
+
+        return vals
+
+
+class ProviderTopology(JujuTopology):
+    """Class for initializing topology information for MetricsEndpointProvider."""
+
+    @property
+    def scrape_identifier(self):
+        """Format the topology information into a scrape identifier."""
+        # This is used only by Metrics[Consumer|Provider] and does not need a
+        # unit name, so only check for the charm name
+        return "juju_{}_prometheus_scrape".format(
+            "_".join([self.model, self.model_uuid[:7], self.application, self.charm_name])  # type: ignore
+        )
+
+
+class InvalidAlertRulePathError(Exception):
+    """Raised if the alert rules folder cannot be found or is otherwise invalid."""
+
+    def __init__(
+        self,
+        alert_rules_absolute_path: Path,
+        message: str,
+    ):
+        self.alert_rules_absolute_path = alert_rules_absolute_path
+        self.message = message
+
+        super().__init__(self.message)
+
+
+def _is_official_alert_rule_format(rules_dict: dict) -> bool:
+    """Are alert rules in the upstream format as supported by Prometheus.
+
+    Alert rules in dictionary format are in "official" form if they
+    contain a "groups" key, since this implies they contain a list of
+    alert rule groups.
+
+    Args:
+        rules_dict: a set of alert rules in Python dictionary format
+
+    Returns:
+        True if alert rules are in official Prometheus file format.
+    """
+    return "groups" in rules_dict
+
+
+def _is_single_alert_rule_format(rules_dict: dict) -> bool:
+    """Are alert rules in single rule format.
+
+    The Prometheus charm library supports reading of alert rules in a
+    custom format that consists of a single alert rule per file. This
+    does not conform to the official Prometheus alert rule file format
+    which requires that each alert rules file consists of a list of
+    alert rule groups and each group consists of a list of alert
+    rules.
+
+    Alert rules in dictionary form are considered to be in single rule
+    format if in the least it contains two keys corresponding to the
+    alert rule name and alert expression.
+
+    Returns:
+        True if alert rule is in single rule file format.
+    """
+    # one alert rule per file
+    return set(rules_dict) >= {"alert", "expr"}
+
+
+class AlertRules:
+    """Utility class for amalgamating prometheus alert rule files and injecting juju topology.
+
+    An `AlertRules` object supports aggregating alert rules from files and directories in both
+    official and single rule file formats using the `add_path()` method. All the alert rules
+    read are annotated with Juju topology labels and amalgamated into a single data structure
+    in the form of a Python dictionary using the `as_dict()` method. Such a dictionary can be
+    easily dumped into JSON format and exchanged over relation data. The dictionary can also
+    be dumped into YAML format and written directly into an alert rules file that is read by
+    Prometheus. Note that multiple `AlertRules` objects must not be written into the same file,
+    since Prometheus allows only a single list of alert rule groups per alert rules file.
+
+    The official Prometheus format is a YAML file conforming to the Prometheus documentation
+    (https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+    The custom single rule format is a subsection of the official YAML, having a single alert
+    rule, effectively "one alert per file".
+    """
+
+    # This class uses the following terminology for the various parts of a rule file:
+    # - alert rules file: the entire groups[] yaml, including the "groups:" key.
+    # - alert groups (plural): the list of groups[] (a list, i.e. no "groups:" key) - it is a list
+    #   of dictionaries that have the "name" and "rules" keys.
+    # - alert group (singular): a single dictionary that has the "name" and "rules" keys.
+    # - alert rules (plural): all the alerts in a given alert group - a list of dictionaries with
+    #   the "alert" and "expr" keys.
+    # - alert rule (singular): a single dictionary that has the "alert" and "expr" keys.
+
+    def __init__(self, topology: Optional[JujuTopology] = None):
+        """Build and alert rule object.
+
+        Args:
+            topology: an optional `JujuTopology` instance that is used to annotate all alert rules.
+        """
+        self.topology = topology
+        self.alert_groups = []  # type: List[dict]
+
+    def _from_file(self, root_path: Path, file_path: Path) -> List[dict]:
+        """Read a rules file from path, injecting juju topology.
+
+        Args:
+            root_path: full path to the root rules folder (used only for generating group name)
+            file_path: full path to a *.rule file.
+
+        Returns:
+            A list of dictionaries representing the rules file, if file is valid (the structure is
+            formed by `yaml.safe_load` of the file); an empty list otherwise.
+        """
+        with file_path.open() as rf:
+            # Load a list of rules from file then add labels and filters
+            try:
+                rule_file = yaml.safe_load(rf)
+
+            except Exception as e:
+                logger.error("Failed to read alert rules from %s: %s", file_path.name, e)
+                return []
+
+            if _is_official_alert_rule_format(rule_file):
+                alert_groups = rule_file["groups"]
+            elif _is_single_alert_rule_format(rule_file):
+                # convert to list of alert groups
+                # group name is made up from the file name
+                alert_groups = [{"name": file_path.stem, "rules": [rule_file]}]
+            else:
+                # invalid/unsupported
+                logger.error("Invalid rules file: %s", file_path.name)
+                return []
+
+            # update rules with additional metadata
+            for alert_group in alert_groups:
+                # update group name with topology and sub-path
+                alert_group["name"] = self._group_name(
+                    str(root_path),
+                    str(file_path),
+                    alert_group["name"],
+                )
+
+                # add "juju_" topology labels
+                for alert_rule in alert_group["rules"]:
+                    if "labels" not in alert_rule:
+                        alert_rule["labels"] = {}
+
+                    if self.topology:
+                        alert_rule["labels"].update(self.topology.as_promql_label_dict())
+                        # insert juju topology filters into a prometheus alert rule
+                        alert_rule["expr"] = self.topology.render(alert_rule["expr"])
+
+            return alert_groups
+
+    def _group_name(self, root_path: str, file_path: str, group_name: str) -> str:
+        """Generate group name from path and topology.
+
+        The group name is made up of the relative path between the root dir_path, the file path,
+        and topology identifier.
+
+        Args:
+            root_path: path to the root rules dir.
+            file_path: path to rule file.
+            group_name: original group name to keep as part of the new augmented group name
+
+        Returns:
+            New group name, augmented by juju topology and relative path.
+        """
+        rel_path = os.path.relpath(os.path.dirname(file_path), root_path)
+        rel_path = "" if rel_path == "." else rel_path.replace(os.path.sep, "_")
+
+        # Generate group name:
+        #  - name, from juju topology
+        #  - suffix, from the relative path of the rule file;
+        group_name_parts = [self.topology.identifier] if self.topology else []
+        group_name_parts.extend([rel_path, group_name, "alerts"])
+        # filter to remove empty strings
+        return "_".join(filter(None, group_name_parts))
+
+    def _from_dir(self, dir_path: Path, recursive: bool) -> List[dict]:
+        """Read all rule files in a directory.
+
+        All rules from files for the same directory are loaded into a single
+        group. The generated name of this group includes juju topology.
+        By default, only the top directory is scanned; for nested scanning, pass `recursive=True`.
+
+        Args:
+            dir_path: directory containing *.rule files (alert rules without groups).
+            recursive: flag indicating whether to scan for rule files recursively.
+
+        Returns:
+            a list of dictionaries representing prometheus alert rule groups, each dictionary
+            representing an alert group (structure determined by `yaml.safe_load`).
+        """
+        alert_groups = []  # type: List[dict]
+
+        # Gather all alerts into a list of groups
+        paths = dir_path.glob("**/*.rule" if recursive else "*.rule")
+        for file_path in filter(Path.is_file, paths):
+            alert_groups_from_file = self._from_file(dir_path, file_path)
+            if alert_groups_from_file:
+                logger.debug("Reading alert rule from %s", file_path)
+                alert_groups.extend(alert_groups_from_file)
+
+        return alert_groups
+
+    def add_path(self, path: str, *, recursive: bool = False) -> None:
+        """Add rules from a dir path.
+
+        All rules from files are aggregated into a data structure representing a single rule file.
+        All group names are augmented with juju topology.
+
+        Args:
+            path: either a rules file or a dir of rules files.
+            recursive: whether to read files recursively or not (no impact if `path` is a file).
+
+        Returns:
+            True if path was added else False.
+        """
+        path = Path(path)  # type: Path
+        if path.is_dir():
+            self.alert_groups.extend(self._from_dir(path, recursive))
+        elif path.is_file():
+            self.alert_groups.extend(self._from_file(path.parent, path))
+        else:
+            logger.warning("path does not exist: %s", path)
+
+    def as_dict(self) -> dict:
+        """Return standard alert rules file in dict representation.
+
+        Returns:
+            a dictionary containing a single list of alert rule groups.
+            The list of alert rule groups is provided as value of the
+            "groups" dictionary key.
+        """
+        return {"groups": self.alert_groups} if self.alert_groups else {}
+
+
 class TargetsChangedEvent(EventBase):
     """Event emitted when Prometheus scrape targets change."""
 
@@ -462,38 +915,35 @@ class MonitoringEvents(ObjectEvents):
 
 
 class MetricsEndpointConsumer(Object):
-    """A Prometheus based Monitoring service provider."""
+    """A Prometheus based Monitoring service."""
 
     on = MonitoringEvents()
 
-    def __init__(self, charm: CharmBase, relation_name: str = None):
-        """A Prometheus based Monitoring service provider.
+    def __init__(self, charm: CharmBase, relation_name: str = DEFAULT_RELATION_NAME):
+        """A Prometheus based Monitoring service.
 
         Args:
             charm: a `CharmBase` instance that manages this
                 instance of the Prometheus service.
-            relation_name: string name of the relation over which scrape target
-                information is gathered by the Prometheus charm.
+            relation_name: an optional string name of the relation between `charm`
+                and the Prometheus charmed service. The default is "metrics-endpoint".
+                It is strongly advised not to change the default, so that people
+                deploying your charm will have a consistent experience with all
+                other charms that consume metrics endpoints.
+
+        Raises:
+            RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+                with the same name as provided via `relation_name` argument.
+            RelationInterfaceMismatchError: The relation with the same name as provided
+                via `relation_name` argument does not have the `prometheus_scrape` relation
+                interface.
+            RelationRoleMismatchError: If the relation with the same name as provided
+                via `relation_name` argument does not have the `RelationRole.requires`
+                role.
         """
-        if not relation_name:
-            relation_interface = RELATION_INTERFACE_NAME
-            try:
-                # Check if there is just one relation with the right interface
-                relation_name = _get_single_relation_by_interface(
-                    charm, relation_interface, RelationDirection.REQUIRED
-                )
-            except NoRelationWithInterfaceFoundError:
-                raise ModelError(
-                    f"No required relation with the '{relation_interface}' interface found; "
-                    f"did you add a relation with the '{relation_interface}' interface in the charm's "
-                    "metadata.yaml file?"
-                )
-            except MultipleRelationsWithInterfaceFoundError as e:
-                raise ModelError(
-                    f"Multiple required relations with the '{relation_interface}' interface found: "
-                    f"{e.relations}; you must specify which relation should be managed by this "
-                    f"{type(self)} by providing the `relation_name` argument."
-                )
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
+        )
 
         super().__init__(charm, relation_name)
         self._charm = charm
@@ -505,7 +955,7 @@ class MetricsEndpointConsumer(Object):
         )
 
     def _on_metrics_provider_relation_changed(self, event):
-        """Handle changes in related consumers.
+        """Handle changes with related metrics providers.
 
         Anytime there are changes in relations between Prometheus
         and metrics provider charms the Prometheus charm is informed,
@@ -521,12 +971,12 @@ class MetricsEndpointConsumer(Object):
         self.on.targets_changed.emit(relation_id=rel_id)
 
     def _on_metrics_provider_relation_departed(self, event):
-        """Update job config when consumers depart.
+        """Update job config when a metrics provider departs.
 
-        When a metrics provider departs the scrape configuration
-        for that provider is removed from the list of scrape jobs and
-        the Prometheus is informed through a `TargetsChangedEvent`
-        event.
+        When a metrics provider departs the Prometheus charm is informed
+        through a `TargetsChangedEvent` event so that it can update its
+        scrape configuration to ensure that the departed metrics provider
+        is removed from the list of scrape jobs and
 
         Args:
             event: a `CharmEvent` that indicates a metrics provider
@@ -560,30 +1010,40 @@ class MetricsEndpointConsumer(Object):
         executed. This method returns all the alert rules provided by each
         related metrics provider charm. These rules may be used to generate a
         separate alert rules file for each relation since the returned list
-        of alert groups are indexed by relation ID. Also for each relation ID
-        associated scrape metadata such as Juju model, UUID and application
-        name are provided so the a unique name may be generated for the rules
-        file. For each relation the structure of data returned is a dictionary
-        with four keys
+        of alert groups are indexed by that relations Juju topology identifier.
+        The Juju topology identifier string includes substrings that identify
+        alert rule related metadata such as the Juju model, model UUID and the
+        application name from where the alert rule originates. Since this
+        topology identifier is globally unique, it may be used for instance as
+        the name for the file into which the list of alert rule groups are
+        written. For each relation, the structure of data returned is a dictionary
+        representation of a standard prometheus rules file:
 
-        - groups
-        - model
-        - model_uuid
-        - application
+        {"groups": [{"name": ...}, ...]}
+
+        per official prometheus documentation
+        https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
 
         The value of the `groups` key is such that it may be used to generate
         a Prometheus alert rules file directly using `yaml.dump` but the
-        `groups` key itself must be included as this is required by Prometheus,
-        for example as in `yaml.dump({"groups": alerts["groups"]})`.
+        `groups` key itself must be included as this is required by Prometheus.
 
-        Currently the `MetricsEndpointProvider` only accepts a list of rules and these
-        rules are all placed into a single group, even though Prometheus itself
-        allows for multiple groups within a single alert rules file.
+        For example the list of alert rule groups returned by this method may
+        be written into files consumed by Prometheus as follows
+
+        ```
+        for topology_identifier, alert_rule_groups in self.metrics_consumer.alerts().items():
+            filename = "juju_" + topology_identifier + ".rules"
+            path = os.path.join(PROMETHEUS_RULES_DIR, filename)
+            rules = yaml.dump(alert_rule_groups)
+            container.push(path, rules, make_dirs=True)
+        ```
 
         Returns:
-            a dictionary mapping the name of an alert rule group to the group.
+            A dictionary mapping the Juju topology identifier of the source charm to
+            its list of alert rule groups.
         """
-        alerts = {}
+        alerts = {}  # type: Dict[str, dict] # mapping b/w juju identifiers and alert rule files
         for relation in self._charm.model.relations[self._relation_name]:
             if not relation.units:
                 continue
@@ -593,14 +1053,31 @@ class MetricsEndpointConsumer(Object):
                 continue
 
             try:
-                for group in alert_rules["groups"]:
-                    alerts[group["name"]] = group
+                scrape_metadata = json.loads(relation.data[relation.app]["scrape_metadata"])
+                identifier = ProviderTopology.from_relation_data(scrape_metadata).identifier
+                alerts[identifier] = alert_rules
             except KeyError as e:
-                logger.error(
-                    "Relation %s has invalid data : %s",
+                logger.warning(
+                    "Relation %s has no 'scrape_metadata': %s",
                     relation.id,
                     e,
                 )
+
+                if "groups" not in alert_rules:
+                    logger.warning("No alert groups were found in relation data")
+                    continue
+                # Construct an ID based on what's in the alert rules
+                for group in alert_rules["groups"]:
+                    try:
+                        labels = group["rules"][0]["labels"]
+                        identifier = "{}_{}_{}".format(
+                            labels["juju_model"],
+                            labels["juju_model_uuid"],
+                            labels["juju_application"],
+                        )
+                        alerts[identifier] = alert_rules
+                    except KeyError:
+                        logger.error("Alert rules were found but no usable labels were present")
 
         return alerts
 
@@ -629,11 +1106,7 @@ class MetricsEndpointConsumer(Object):
         if not scrape_metadata:
             return scrape_jobs
 
-        job_name_prefix = "juju_{}_{}_{}_prometheus_scrape".format(
-            scrape_metadata["model"],
-            scrape_metadata["model_uuid"][:7],
-            scrape_metadata["application"],
-        )
+        job_name_prefix = ProviderTopology.from_relation_data(scrape_metadata).scrape_identifier
 
         hosts = self._relation_hosts(relation)
 
@@ -650,21 +1123,28 @@ class MetricsEndpointConsumer(Object):
         return labeled_job_configs
 
     def _relation_hosts(self, relation) -> dict:
-        """Fetch host names and address of all consumer units for a single relation.
+        """Fetch unit names and address of all metrics provider units for a single relation.
 
         Args:
-            relation: An `ops.model.Relation` object for which the host name to
+            relation: An `ops.model.Relation` object for which the unit name to
                 address mapping is required.
 
         Returns:
             A dictionary that maps unit names to unit addresses for
             the specified relation.
         """
-        return {
-            unit.name: relation.data[unit].get("prometheus_scrape_host")
-            for unit in relation.units
-            if relation.data[unit].get("prometheus_scrape_host")
-        }
+        hosts = {}
+        for unit in relation.units:
+            # TODO deprecate and remove unit.name
+            unit_name = relation.data[unit].get("prometheus_scrape_unit_name") or unit.name
+            # TODO deprecate and remove "prometheus_scrape_host"
+            unit_address = relation.data[unit].get(
+                "prometheus_scrape_unit_address"
+            ) or relation.data[unit].get("prometheus_scrape_host")
+            if unit_name and unit_address:
+                hosts.update({unit_name: unit_address})
+
+        return hosts
 
     def _labeled_static_job_config(self, job, job_name_prefix, hosts, scrape_metadata) -> dict:
         """Construct labeled job configuration for a single job.
@@ -674,8 +1154,8 @@ class MetricsEndpointConsumer(Object):
             job: a dictionary representing the job configuration as obtained from
                 `MetricsEndpointProvider` over relation data.
             job_name_prefix: a string that may either be used as the
-                job name if none is provided or used as a prefix for
-                the provided job name.
+                job name if the job has no associated name or used as a prefix for
+                the job if it does have a job name.
             hosts: a dictionary mapping host names to host address for
                 all units of the relation for which this job configuration
                 must be constructed.
@@ -688,7 +1168,7 @@ class MetricsEndpointConsumer(Object):
             for a single job.
         """
         name = job.get("job_name")
-        job_name = f"{job_name_prefix}_{name}" if name else job_name_prefix
+        job_name = "{}_{}".format(job_name_prefix, name) if name else job_name_prefix
 
         labeled_job = job.copy()
         labeled_job["job_name"] = job_name
@@ -696,6 +1176,8 @@ class MetricsEndpointConsumer(Object):
         static_configs = job.get("static_configs")
         labeled_job["static_configs"] = []
 
+        # relabel instance labels so that instance identifiers are globally unique
+        # stable over unit recreation
         instance_relabel_config = {
             "source_labels": ["juju_model", "juju_model_uuid", "juju_application"],
             "separator": "_",
@@ -721,7 +1203,7 @@ class MetricsEndpointConsumer(Object):
                 else:
                     unitless_targets.append(target)
 
-            # label scrape targets that do not have unit lables
+            # label scrape targets that do not have unit labels
             if unitless_targets:
                 unitless_config = self._labeled_unitless_config(
                     unitless_targets, labels, scrape_metadata
@@ -735,7 +1217,7 @@ class MetricsEndpointConsumer(Object):
                 )
                 labeled_job["static_configs"].append(static_config)
                 if "juju_unit" not in instance_relabel_config["source_labels"]:
-                    instance_relabel_config["source_labels"].append("juju_unit")
+                    instance_relabel_config["source_labels"].append("juju_unit")  # type: ignore
 
         # ensure topology relabeling of instance label is last in order of relabelings
         relabel_configs = job.get("relabel_configs", [])
@@ -749,7 +1231,7 @@ class MetricsEndpointConsumer(Object):
 
         Args:
             labels: a dictionary containing Prometheus metric labels.
-            scrape_metadata: scrape related metadata provied by
+            scrape_metadata: scrape related metadata provided by
                 `MetricsEndpointProvider`.
 
         Returns:
@@ -757,9 +1239,9 @@ class MetricsEndpointConsumer(Object):
             topology information with the exception of unit name.
         """
         juju_labels = labels.copy()  # deep copy not needed
-        juju_labels["juju_model"] = f"{scrape_metadata['model']}"
-        juju_labels["juju_model_uuid"] = f"{scrape_metadata['model_uuid']}"
-        juju_labels["juju_application"] = f"{format(scrape_metadata['application'])}"
+        juju_labels.update(
+            ProviderTopology.from_relation_data(scrape_metadata).as_promql_label_dict()
+        )
 
         return juju_labels
 
@@ -767,15 +1249,18 @@ class MetricsEndpointConsumer(Object):
         """Static scrape configuration for fully qualified host addresses.
 
         Fully qualified hosts are those scrape targets for which the
-        address are not automatically determined by
-        `MetricsEndpointConsumer` but instead are specified by the
-        `MetricsEndpointProvider`.
+        address are specified by the `MetricsEndpointProvider` as part
+        of the scrape job specification set in application relation data.
+        The address specified need not belong to any unit of the
+        `MetricsEndpointProvider` charm. As a result there is no reliable
+        way to determine the name (Juju topology unit name) for such a
+        target.
 
         Args:
             targets: a list of addresses of fully qualified hosts.
             labels: labels specified by `MetricsEndpointProvider` clients
                  which are associated with `targets`.
-            scrape_metadata: scrape related metadata provied by `MetricsEndpointProvider`.
+            scrape_metadata: scrape related metadata provided by `MetricsEndpointProvider`.
 
         Returns:
             A dictionary containing the static scrape configuration
@@ -786,21 +1271,23 @@ class MetricsEndpointConsumer(Object):
         return unitless_config
 
     def _labeled_unit_config(
-        self, host_name, host_address, ports, labels, scrape_metadata
+        self, unit_name, host_address, ports, labels, scrape_metadata
     ) -> dict:
         """Static scrape configuration for a wildcard host.
 
-        Wildcard hosts are those scrape targets whose address is
-        automatically determined by `MetricsEndpointConsumer`.
+        Wildcard hosts are those scrape targets whose name (Juju unit
+        name) and address (unit IP address) is set into unit relation
+        data by the `MetricsEndpointProvider` charm, which sets this
+        data for ALL its units.
 
         Args:
-            host_name: a string representing the unit name of the wildcard host.
+            unit_name: a string representing the unit name of the wildcard host.
             host_address: a string representing the address of the wildcard host.
             ports: list of ports on which this wildcard host exposes its metrics.
             labels: a dictionary of labels provided by
                 `MetricsEndpointProvider` intended to be associated with
                 this wildcard host.
-            scrape_metadata: scrape related metadata provied by `MetricsEndpointProvider`.
+            scrape_metadata: scrape related metadata provided by `MetricsEndpointProvider`.
 
         Returns:
             A dictionary containing the static scrape configuration
@@ -808,65 +1295,80 @@ class MetricsEndpointConsumer(Object):
         """
         juju_labels = self._set_juju_labels(labels, scrape_metadata)
 
-        # '/' is not allowed in Prometheus label names. It technically works,
-        # but complex queries silently fail
-        juju_labels["juju_unit"] = f"{host_name.replace('/', '-')}"
+        juju_labels["juju_unit"] = unit_name
 
         static_config = {"labels": juju_labels}
 
         if ports:
             targets = []
             for port in ports:
-                targets.append(f"{host_address}:{port}")
-            static_config["targets"] = targets
+                targets.append("{}:{}".format(host_address, port))
+            static_config["targets"] = targets  # type: ignore
         else:
-            static_config["targets"] = [host_address]
+            static_config["targets"] = [host_address]  # type: ignore
 
         return static_config
 
 
-def resolve_dir_against_main_path(*path_elements: str) -> str:
+def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
     """Resolve the provided path items against the directory of the main file.
 
-    Look up the directory of the main .py file being executed. This is normally
+    Look up the directory of the `main.py` file being executed. This is normally
     going to be the charm.py file of the charm including this library. Then, resolve
     the provided path elements and, if the result path exists and is a directory,
-    return its absolute path; otherwise, return `None`.
+    return its absolute path; otherwise, raise en exception.
+
+    Raises:
+        InvalidAlertRulePathError, if the path does not exist or is not a directory.
     """
-    charm_file = sys.path[0]
+    charm_dir = Path(str(charm.charm_dir))
+    if not charm_dir.exists() or not charm_dir.is_dir():
+        # Operator Framework does not currently expose a robust
+        # way to determine the top level charm source directory
+        # that is consistent across deployed charms and unit tests
+        # Hence for unit tests the current working directory is used
+        # TODO: updated this logic when the following ticket is resolved
+        # https://github.com/canonical/operator/issues/643
+        charm_dir = Path(os.getcwd())
 
-    default_alerts_dir = Path(charm_file).joinpath(*path_elements)
+    alerts_dir_path = charm_dir.absolute().joinpath(*path_elements)
 
-    if default_alerts_dir.exists() and default_alerts_dir.is_dir:
-        return str(default_alerts_dir.absolute())
+    if not alerts_dir_path.exists():
+        raise InvalidAlertRulePathError(alerts_dir_path, "directory does not exist")
+    if not alerts_dir_path.is_dir():
+        raise InvalidAlertRulePathError(alerts_dir_path, "is not a directory")
 
-    return None
+    return str(alerts_dir_path)
 
 
 class MetricsEndpointProvider(Object):
-    """Construct a metrics provider for a Prometheus charm."""
+    """A metrics endpoint for Prometheus."""
 
     def __init__(
         self,
         charm,
-        relation_name=None,
-        jobs=[],
-        alert_rules_path=None,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        jobs=None,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
     ):
         """Construct a metrics provider for a Prometheus charm.
 
         If your charm exposes a Prometheus metrics endpoint, the
         `MetricsEndpointProvider` object enables your charm to easily
-        communicate to a consumer how to reach that metrics endpoint.
+        communicate how to reach that metrics endpoint.
 
-        A charm instantiating this object has the metrics endpoints
-        of each of its units scraped by the related Prometheus
+        By default, a charm instantiating this object has the metrics
+        endpoints of each of its units scraped by the related Prometheus
         charms. The scraped metrics are automatically tagged by the
         Prometheus charms with Juju topology data via the
         `juju_model_name`, `juju_model_uuid`, `juju_application_name`
-        and `juju_unit` labels.
+        and `juju_unit` labels. To support such tagging `MetricsEndpointProvider`
+        automatically forwards scrape metadata to a `MetricsEndpointConsumer`
+        (Prometheus charm).
 
-        In case of a charm exposing the metrics endpoint for each of its
+        Scrape targets provided by `MetricsEndpointProvider` can be
+        customized when instantiating this object. For example in the
+        case of a charm exposing the metrics endpoint for each of its
         units on port 8080 and the `/metrics` path, the
         `MetricsEndpointProvider` can be instantiated as follows:
 
@@ -890,16 +1392,17 @@ class MetricsEndpointProvider(Object):
                 }])
 
         Note how the `jobs` argument is a list: this allows you to expose multiple
-        combinations of paths "metrics_path" and "static_configs" in case you charm
+        combinations of paths "metrics_path" and "static_configs" in case your charm
         exposes multiple endpoints, which could happen, for example, when you have
         multiple workload containers, with applications in each needing to be scraped.
-        The structure of the objects in the `jobs` list is one-to-one the one of the
-        `scrape_config` configuration item of Prometheus (see
+        The structure of the objects in the `jobs` list is one-to-one with the
+        `scrape_config` configuration item of Prometheus' own configuration (see
         https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config
-        ), with only a subset of the fields allowed, see the `ALLOWED_KEYS` field for that.
+        ), but with only a subset of the fields allowed. The permitted fields are
+        listed in `ALLOWED_KEYS` object in this charm library module.
 
         It is also possible to specify alert rules. By default, this library will look
-        into the `<charm_parent_dir>/prometheus_alert_rules`, which in standard charm
+        into the `<charm_parent_dir>/prometheus_alert_rules`, which in a standard charm
         layouts resolves to `src/prometheus_alert_rules`. Each alert rule goes into a
         separate `*.rule` file. If the syntax of a rule is invalid,
         the  `MetricsEndpointProvider` logs an error and does not load the particular
@@ -922,8 +1425,8 @@ class MetricsEndpointProvider(Object):
         The `%%juju_topology%%` token will be replaced with label filters ensuring that
         the only timeseries evaluated are those scraped from this charm, and no other.
         Failing to ensure that the `%%juju_topology%%` token is applied to each and every
-        of the queries timeseries will lead to unpredictable alert rule evaluation
-        if your charm is deployed multiple times and various of its instances are
+        queried timeseries which will lead to unpredictable alert rule evaluation
+        if your charm is deployed multiple times and all these instances are
         monitored by the same Prometheus.
 
         Args:
@@ -931,16 +1434,10 @@ class MetricsEndpointProvider(Object):
                 `MetricsEndpointProvider` object. Typically this is
                 `self` in the instantiating class.
             relation_name: an optional string name of the relation between `charm`
-                and the Prometheus charmed service. You will need to specify this
-                parameter only if your charm provides more than one relation with
-                `prometheus_scrape` as interface, which is very uncommon: if your
-                charm has multiple metrics endpoints, you can expose them over
-                one relation as separate entries in the `jobs` list.
-                If `relation_name` is not specified, the
-                `MetricsEndpointProvider` will look for the existence of precisely
-                one relation provided by the charm and using the `prometheus_scrape`
-                interface and, if none or multiple are found, it will raise a
-                ops.model.ModelError exception.
+                and the Prometheus charmed service. The default is "metrics-endpoint".
+                It is strongly advised not to change the default, so that people
+                deploying your charm will have a consistent experience with all
+                other charms that provide metrics endpoints.
             jobs: an optional list of dictionaries where each
                 dictionary represents the Prometheus scrape
                 configuration for a single job. When not provided, a
@@ -949,45 +1446,47 @@ class MetricsEndpointProvider(Object):
                 using the `MetricsEndpointProvider` object.
             alert_rules_path: an optional path for the location of alert rules
                 files.  Defaults to "./prometheus_alert_rules",
-                resolved from the directory hosting the charm entry file.
-                The alert rules are automatically update on charm upgrade.
-        """
-        if not relation_name:
-            relation_interface = RELATION_INTERFACE_NAME
-            try:
-                # Check if there is just one relation with the right interface
-                relation_name = _get_single_relation_by_interface(
-                    charm, relation_interface, RelationDirection.PROVIDED
-                )
-            except NoRelationWithInterfaceFoundError:
-                raise ModelError(
-                    f"No provided relation with the '{relation_interface}' interface found; "
-                    f"did you add a relation with the '{relation_interface}' interface in the charm's "
-                    "metadata.yaml file?"
-                )
-            except MultipleRelationsWithInterfaceFoundError as e:
-                raise ModelError(
-                    f"Multiple provided relations with the '{relation_interface}' interface found: "
-                    f"{e.relations}; you must specify which relation should be managed by this "
-                    f"{type(self)} by providing the `relation_name` argument."
-                )
+                resolved relative to the directory hosting the charm entry file.
+                The alert rules are automatically updated on charm upgrade.
 
-        if not alert_rules_path:
-            alert_rules_path = resolve_dir_against_main_path("prometheus_alert_rules")
+        Raises:
+            RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+                with the same name as provided via `relation_name` argument.
+            RelationInterfaceMismatchError: The relation with the same name as provided
+                via `relation_name` argument does not have the `prometheus_scrape` relation
+                interface.
+            RelationRoleMismatchError: If the relation with the same name as provided
+                via `relation_name` argument does not have the `RelationRole.provides`
+                role.
+        """
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
+        )
+
+        try:
+            alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
+        except InvalidAlertRulePathError as e:
+            logger.warning(
+                "Invalid Prometheus alert rules folder at %s: %s",
+                e.alert_rules_absolute_path,
+                e.message,
+            )
 
         super().__init__(charm, relation_name)
+        self.topology = ProviderTopology.from_charm(charm)
 
         self._charm = charm
-        self._ALERT_RULES_PATH = alert_rules_path
+        self._alert_rules_path = alert_rules_path
         self._relation_name = relation_name
-        # Sanitize job configurations to the supported subset of parameters
+        # sanitize job configurations to the supported subset of parameters
+        jobs = [] if jobs is None else jobs
         self._jobs = [_sanitize_scrape_configuration(job) for job in jobs]
 
         events = self._charm.on[self._relation_name]
         self.framework.observe(events.relation_joined, self._set_scrape_job_spec)
         self.framework.observe(events.relation_changed, self._set_scrape_job_spec)
 
-        # DIRTY FIX: Set the ip address when the containers start, as a workaround
+        # dirty fix: set the ip address when the containers start, as a workaround
         # for not being able to lookup the pod ip
         for container_name in charm.unit.containers:
             self.framework.observe(
@@ -998,12 +1497,12 @@ class MetricsEndpointProvider(Object):
         self.framework.observe(self._charm.on.upgrade_charm, self._set_scrape_job_spec)
 
     def _set_scrape_job_spec(self, event):
-        """Ensure scrape target information is made available to Prometheus.
+        """Ensure scrape target information is made available to prometheus.
 
-        When a metrics provider charm is related to a Prometheus charm, the
-        metrics provider sets metadata related to its own scrape
-        configutation.  This metadata is set using Juju application
-        data.  In addition each of the consumer units also sets its own
+        When a metrics provider charm is related to a prometheus charm, the
+        metrics provider sets specification and metadata related to its own
+        scrape configuration. This information is set using Juju application
+        data. In addition each of the consumer units also sets its own
         host address in Juju unit relation data.
         """
         self._set_unit_ip(event)
@@ -1011,109 +1510,38 @@ class MetricsEndpointProvider(Object):
         if not self._charm.unit.is_leader():
             return
 
+        alert_rules = AlertRules(topology=self.topology)
+        alert_rules.add_path(self._alert_rules_path, recursive=True)
+        alert_rules_as_dict = alert_rules.as_dict()
+
         for relation in self._charm.model.relations[self._relation_name]:
             relation.data[self._charm.app]["scrape_metadata"] = json.dumps(self._scrape_metadata)
             relation.data[self._charm.app]["scrape_jobs"] = json.dumps(self._scrape_jobs)
 
-            if alert_groups := self._labeled_alert_groups:
-                relation.data[self._charm.app]["alert_rules"] = json.dumps(
-                    {"groups": alert_groups}
-                )
+            if alert_rules_as_dict:
+                # Update relation data with the string representation of the rule file.
+                # Juju topology is already included in the "scrape_metadata" field above.
+                # The consumer side of the relation uses this information to name the rules file
+                # that is written to the filesystem.
+                relation.data[self._charm.app]["alert_rules"] = json.dumps(alert_rules_as_dict)
 
-    def _set_unit_ip(self, _: EventBase):
+    def _set_unit_ip(self, _):
         """Set unit host address.
 
         Each time a metrics provider charm container is restarted it updates its own
-        host address in the unit relation data for the Prometheus charm.
+        host address in the unit relation data for the prometheus charm.
 
-        The only argument specified is an event and it ignored. This is for expediency
+        The only argument specified is an event and it ignored. this is for expediency
         to be able to use this method as an event handler, although no access to the
         event is actually needed.
         """
         for relation in self._charm.model.relations[self._relation_name]:
-            relation.data[self._charm.unit]["prometheus_scrape_host"] = str(
+            relation.data[self._charm.unit]["prometheus_scrape_unit_address"] = str(
                 self._charm.model.get_binding(relation).network.bind_address
             )
-
-    def _label_alert_topology(self, rule) -> dict:
-        """Insert juju topology labels into an alert rule.
-
-        Args:
-            rule: a dictionary representing a Prometheus alert rule.
-
-        Returns:
-            a dictionary representing Prometheus alert rule with Juju
-            topology labels.
-        """
-        metadata = self._scrape_metadata
-        labels = rule.get("labels", {})
-        labels["juju_model"] = metadata["model"]
-        labels["juju_model_uuid"] = metadata["model_uuid"]
-        labels["juju_application"] = metadata["application"]
-        rule["labels"] = labels
-        return rule
-
-    def _label_alert_expression(self, rule) -> dict:
-        """Insert juju topology filters into a Prometheus alert rule.
-
-        Args:
-            rule: a dictionary representing a Prometheus alert rule.
-
-        Returns:
-            a dictionary representing a Prometheus alert rule that filters based
-            on juju topology.
-        """
-        metadata = self._scrape_metadata
-        topology = 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
-            metadata["model"], metadata["model_uuid"], metadata["application"]
-        )
-
-        if expr := rule.get("expr", None):
-            expr = expr.replace("%%juju_topology%%", topology)
-            rule["expr"] = expr
-        else:
-            logger.error("Invalid alert expression in %s", rule.get("alert"))
-
-        return rule
-
-    @property
-    def _labeled_alert_groups(self) -> list:
-        """Load alert rules from rule files.
-
-        All rules from files for a consumer charm are loaded into a single
-        group. The generated name of this group includes Juju topology
-        prefixes.
-
-        Returns:
-            a list of Prometheus alert rule groups.
-        """
-        alerts = []
-        for path in Path(self._ALERT_RULES_PATH).glob("*.rule"):
-            if not path.is_file():
-                continue
-
-            logger.debug("Reading alert rule from %s", path)
-            with path.open() as rule_file:
-                # Load a list of rules from file then add labels and filters
-                try:
-                    rule = yaml.safe_load(rule_file)
-                    rule = self._label_alert_topology(rule)
-                    rule = self._label_alert_expression(rule)
-                    alerts.append(rule)
-                except Exception as e:
-                    logger.error("Failed to read alert rules from %s: %s", path.name, str(e))
-
-        # Gather all alerts into a list of one group since Prometheus
-        # requires alerts be part of some group
-        groups = []
-        if alerts:
-            metadata = self._scrape_metadata
-            group = {
-                "name": "{model}_{model_uuid}_{application}_alerts".format(**metadata),
-                "rules": alerts,
-            }
-            groups.append(group)
-        return groups
+            relation.data[self._charm.unit]["prometheus_scrape_unit_name"] = str(
+                self._charm.model.unit.name
+            )
 
     @property
     def _scrape_jobs(self) -> list:
@@ -1123,22 +1551,90 @@ class MetricsEndpointProvider(Object):
            A list of dictionaries, where each dictionary specifies a
            single scrape job for Prometheus.
         """
-        default_job = [{"metrics_path": "/metrics"}]
-        return self._jobs if self._jobs else default_job
+        return self._jobs if self._jobs else [DEFAULT_JOB]
 
     @property
     def _scrape_metadata(self) -> dict:
         """Generate scrape metadata.
 
         Returns:
-            Scrape configutation metadata for this metrics provider charm.
+            Scrape configuration metadata for this metrics provider charm.
         """
-        metadata = {
-            "model": f"{self._charm.model.name}",
-            "model_uuid": f"{self._charm.model.uuid}",
-            "application": f"{self._charm.model.app.name}",
-        }
-        return metadata
+        return self.topology.as_dict()
+
+
+class PrometheusRulesProvider(Object):
+    """Forward rules to Prometheus.
+
+    This object may be used to forward rules to Prometheus. At present it only supports
+    forwarding alert rules. This is unlike :class:`MetricsEndpointProvider`, which
+    is used for forwarding both scrape targets and associated alert rules. This object
+    is typically used when there is a desire to forward rules that apply globally (across
+    all deployed charms and units) rather than to a single charm. All rule files are
+    forwarded using the same 'prometheus_scrape' interface that is also used by
+    `MetricsEndpointProvider`.
+
+    Args:
+        charm: A charm instance that `provides` a relation with the `prometheus_scrape` interface.
+        relation_name: Name of the relation in `metadata.yaml` that
+            has the `prometheus_scrape` interface.
+        dir_path: Root directory for the collection of rule files.
+        recursive: Whether or not to scan for rule files recursively.
+    """
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        dir_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        recursive=True,
+    ):
+        super().__init__(charm, relation_name)
+        self._charm = charm
+        self._relation_name = relation_name
+        self.topology = ProviderTopology.from_charm(charm)
+        self._recursive = recursive
+
+        try:
+            dir_path = _resolve_dir_against_charm_path(charm, dir_path)
+        except InvalidAlertRulePathError as e:
+            logger.warning(
+                "Invalid Prometheus alert rules folder at %s: %s",
+                e.alert_rules_absolute_path,
+                e.message,
+            )
+        self.dir_path = dir_path
+
+        events = self._charm.on[self._relation_name]
+        event_sources = [
+            events.relation_joined,
+            events.relation_changed,
+            self._charm.on.leader_elected,
+            self._charm.on.upgrade_charm,
+        ]
+
+        for event_source in event_sources:
+            self.framework.observe(event_source, self._update_relation_data)
+
+    def _reinitialize_alert_rules(self):
+        """Reloads alert rules and updates all relations."""
+        self._update_relation_data(None)
+
+    def _update_relation_data(self, _):
+        """Update application relation data with alert rules for all relations."""
+        if not self._charm.unit.is_leader():
+            return
+
+        alert_rules = AlertRules()
+        alert_rules.add_path(self.dir_path, recursive=self._recursive)
+        alert_rules_as_dict = alert_rules.as_dict()
+
+        logger.info("Updating relation data with rule files from disk")
+        for relation in self._charm.model.relations[self._relation_name]:
+            relation.data[self._charm.app]["alert_rules"] = json.dumps(
+                alert_rules_as_dict,
+                sort_keys=True,  # sort, to prevent unnecessary relation_changed events
+            )
 
 
 class MetricsEndpointAggregator(Object):
@@ -1253,12 +1749,14 @@ class MetricsEndpointAggregator(Object):
         """
         jobs = []  # list of scrape jobs, one per relation
         for relation in self.model.relations[self._target_relation]:
-            if targets := self._get_targets(relation):
+            targets = self._get_targets(relation)
+            if targets:
                 jobs.append(self._static_scrape_job(targets, relation.app.name))
 
         groups = []  # list of alert rule groups, one group per relation
         for relation in self.model.relations[self._alert_rules_relation]:
-            if unit_rules := self._get_alert_rules(relation):
+            unit_rules = self._get_alert_rules(relation)
+            if unit_rules:
                 appname = relation.app.name
                 rules = self._label_alert_rules(unit_rules, appname)
                 group = {"name": self._group_name(appname), "rules": rules}
@@ -1274,7 +1772,8 @@ class MetricsEndpointAggregator(Object):
         target, the Prometheus scrape job, for that specific target is
         updated.
         """
-        if not (targets := self._get_targets(event.relation)):
+        targets = self._get_targets(event.relation)
+        if not targets:
             return
 
         # new scrape job for the relation that has changed
@@ -1282,7 +1781,7 @@ class MetricsEndpointAggregator(Object):
 
         for relation in self.model.relations[self._prometheus_relation]:
             jobs = json.loads(relation.data[self._charm.app].get("scrape_jobs", "[]"))
-            # list of scrape jobs that have not chagned
+            # list of scrape jobs that have not changed
             jobs = [job for job in jobs if updated_job["job_name"] != job["job_name"]]
             jobs.append(updated_job)
             relation.data[self._charm.app]["scrape_jobs"] = json.dumps(jobs)
@@ -1297,10 +1796,12 @@ class MetricsEndpointAggregator(Object):
         unit_name = event.unit.name
 
         for relation in self.model.relations[self._prometheus_relation]:
-            if not (jobs := json.loads(relation.data[self._charm.app].get("scrape_jobs", "[]"))):
+            jobs = json.loads(relation.data[self._charm.app].get("scrape_jobs", "[]"))
+            if not jobs:
                 continue
 
-            if not (changed_job := [j for j in jobs if j.get("job_name") == job_name]):
+            changed_job = [j for j in jobs if j.get("job_name") == job_name]
+            if not changed_job:
                 continue
             changed_job = changed_job[0]
 
@@ -1310,12 +1811,12 @@ class MetricsEndpointAggregator(Object):
             # list of scrape jobs for units of the same application that still exist
             configs_kept = [
                 config
-                for config in changed_job["static_configs"]
+                for config in changed_job["static_configs"]  # type: ignore
                 if config.get("labels", {}).get("juju_unit") != unit_name
             ]
 
             if configs_kept:
-                changed_job["static_configs"] = configs_kept
+                changed_job["static_configs"] = configs_kept  # type: ignore
                 jobs.append(changed_job)
 
             relation.data[self._charm.app]["scrape_jobs"] = json.dumps(jobs)
@@ -1327,7 +1828,8 @@ class MetricsEndpointAggregator(Object):
         scrape target, the list of alert rules for that specific
         target is updated.
         """
-        if not (unit_rules := self._get_alert_rules(event.relation)):
+        unit_rules = self._get_alert_rules(event.relation)
+        if not unit_rules:
             return
 
         appname = event.relation.app.name
@@ -1357,7 +1859,8 @@ class MetricsEndpointAggregator(Object):
             if not alert_rules:
                 continue
 
-            if not (groups := alert_rules.get("groups", [])):
+            groups = alert_rules.get("groups", [])
+            if not groups:
                 continue
 
             changed_group = [group for group in groups if group["name"] == group_name]
@@ -1371,12 +1874,12 @@ class MetricsEndpointAggregator(Object):
             # list of alert rules not associated with departing unit
             rules_kept = [
                 rule
-                for rule in changed_group.get("rules")
+                for rule in changed_group.get("rules")  # type: ignore
                 if rule.get("labels").get("juju_unit") != unit_name
             ]
 
             if rules_kept:
-                changed_group["rules"] = rules_kept
+                changed_group["rules"] = rules_kept  # type: ignore
                 groups.append(changed_group)
 
             relation.data[self._charm.app]["alert_rules"] = (
@@ -1406,7 +1909,8 @@ class MetricsEndpointAggregator(Object):
         targets = {}
         for unit in relation.units:
             port = relation.data[unit].get("port", 80)
-            if hostname := relation.data[unit].get("hostname"):
+            hostname = relation.data[unit].get("hostname")
+            if hostname:
                 targets.update({unit.name: {"hostname": hostname, "port": port}})
 
         return targets
@@ -1431,7 +1935,8 @@ class MetricsEndpointAggregator(Object):
         """
         rules = {}
         for unit in relation.units:
-            if unit_rules := yaml.safe_load(relation.data[unit].get("groups", "")):
+            unit_rules = yaml.safe_load(relation.data[unit].get("groups", ""))
+            if unit_rules:
                 rules.update({unit.name: unit_rules})
 
         return rules
@@ -1445,10 +1950,12 @@ class MetricsEndpointAggregator(Object):
         Args:
             appname: string name of a related application.
 
-        Retruns:
+        Returns:
             a string Prometheus scrape job name for the application.
         """
-        return f"juju_{self.model.name}_{self.model.uuid[:7]}_{appname}_prometheus_scrape"
+        return "juju_{}_{}_{}_prometheus_scrape".format(
+            self.model.name, self.model.uuid[:7], appname
+        )
 
     def _group_name(self, appname) -> str:
         """Construct name for an alert rule group.
@@ -1460,27 +1967,10 @@ class MetricsEndpointAggregator(Object):
         Args:
             appname: string name of a related application.
 
-        Retruns:
+        Returns:
             a string Prometheus alert rules group name for the application.
         """
-        return f"juju_{self.model.name}_{self.model.uuid[:7]}_{appname}_alert_rules"
-
-    def _juju_topology(self, unit_name, appname) -> dict:
-        """Construct juju topology labels.
-
-        Args:
-            unit_name: a string name of a unit.
-            appname: a string name of an application.
-
-        Returns:
-            a dictionary containing Juju topology labels.
-        """
-        return {
-            "juju_model": self.model.name,
-            "juju_model_uuid": self.model.uuid[:7],
-            "juju_application": appname,
-            "juju_unit": unit_name,
-        }
+        return "juju_{}_{}_{}_alert_rules".format(self.model.name, self.model.uuid[:7], appname)
 
     def _label_alert_rules(self, unit_rules, appname) -> list:
         """Apply juju topology labels to alert rules.
@@ -1497,7 +1987,11 @@ class MetricsEndpointAggregator(Object):
         labeled_rules = []
         for unit_name, rules in unit_rules.items():
             for rule in rules:
-                rule["labels"].update(self._juju_topology(unit_name, appname))
+                rule["labels"].update(
+                    AggregatorTopology.create(
+                        self.model.name, self.model.uuid, appname, unit_name
+                    ).as_promql_label_dict()
+                )
                 labeled_rules.append(rule)
 
         return labeled_rules
@@ -1514,7 +2008,6 @@ class MetricsEndpointAggregator(Object):
             application_name: a string name of the application for
                 which this static scrape job is being constructed.
 
-
         Returns:
             A dictionary corresponding to a Prometheus static scrape
             job configuration for one application. The returned
@@ -1527,7 +2020,7 @@ class MetricsEndpointAggregator(Object):
             "job_name": self._job_name(application_name),
             "static_configs": [
                 {
-                    "targets": [f"{target['hostname']}:{target['port']}"],
+                    "targets": ["{}:{}".format(target["hostname"], target["port"])],
                     "labels": {
                         "juju_model": juju_model,
                         "juju_model_uuid": juju_model_uuid,
@@ -1545,7 +2038,7 @@ class MetricsEndpointAggregator(Object):
 
     @property
     def _relabel_configs(self) -> list:
-        """Create Juju topology relabeling configuation.
+        """Create Juju topology relabeling configuration.
 
         Using Juju topology for instance labels ensures that these
         labels are stable across unit recreation.
