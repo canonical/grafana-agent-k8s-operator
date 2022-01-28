@@ -305,7 +305,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                     "configs": [
                         {
                             "name": "promtail",
-                            "clients": self._loki_consumer.loki_writers,
+                            "clients": self._loki_consumer.loki_endpoints,
                             "positions": {"filename": f"{self._promtail_positions}"},
                             "scrape_configs": [
                                 {
