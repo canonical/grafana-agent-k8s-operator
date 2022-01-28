@@ -9,6 +9,7 @@ import logging
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import (
+    LogProxyConsumer,
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
@@ -163,7 +164,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 logger.info("Successfully patched the Kubernetes service!")
 
     def _update_config(self, event=None):
-
         if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
             self.unit.status = WaitingStatus("waiting for agent container to start")
@@ -205,7 +205,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
         config.update(self._server_config())
         config.update(self._integrations_config())
         config.update(self._prometheus_config())
-        config.update(self._loki_config(event))
+
+        # Don't accidentally destroy the Loki config by passing it
+        # `None` or `PebbleReady` or a `RelationEvent`
+        if isinstance(event, (LokiPushApiEndpointJoined, LokiPushApiEndpointDeparted)):
+            config.update(self._loki_config(event))
 
         return yaml.dump(config)
 

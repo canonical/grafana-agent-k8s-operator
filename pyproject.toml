@@ -1,12 +1,5 @@
-[project]
-name = "cassandra-operator"
-description = "Kubernetes charm for Apache Cassandra"
-license = "Apache 2.0"
-python = "^3.8"
-readme = "README.md"
-homepage = "https://charmhub.io/grafana-agent-k8s"
-repository = "https://github.com/canonical/grafana-agent-operator"
-documentation = "https://charmhub.io/grafana-agent-k8s/docs"
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -44,7 +37,7 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 # Static analysis tools configuration
 [tool.mypy]
 pretty = true
-python_version = 3.8 
+python_version = 3.8
 mypy_path = "$MYPY_CONFIG_FILE_DIR/src:$MYPY_CONFIG_FILE_DIR/lib:$MYPY_CONFIG_FILE_DIR/tests/unit"
 follow_imports = "normal"
 warn_redundant_casts = true
@@ -59,10 +52,14 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["ops.*", "requests.packages.urllib3.*"]
+module = ["ops.*", "pytest_operator.*", "requests.packages.urllib3.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["charms.prometheus_k8s.v0.*"]
+module = ["charms.prometheus_k8s.*"]
 follow_imports = "silent"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
