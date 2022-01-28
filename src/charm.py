@@ -9,7 +9,6 @@ import logging
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import (
-    LogProxyConsumer,
     LokiPushApiConsumer,
     LokiPushApiEndpointDeparted,
     LokiPushApiEndpointJoined,
