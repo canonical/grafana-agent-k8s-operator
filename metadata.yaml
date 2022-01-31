@@ -3,9 +3,15 @@
 
 name: grafana-agent-k8s
 
-summary: Charm for Grafana Agent
 description: |
+  Grafana Agent for Kubernetes cluster
+summary: |
   Grafana Agent is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
+
+maintainers:
+    - Jose Massón <jose.masson@canonical.com>
+
+docs: https://discourse.charmhub.io/t/grafana-agent-k8s-docs-index/5605
 
 containers:
   agent:
