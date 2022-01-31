@@ -1145,7 +1145,7 @@ class LokiPushApiProvider(RelationManagerBase):
         if self.container.can_connect():
             try:
                 self.container.make_dir(self._rules_dir, make_parents=True)
-            except (FileNotFoundError, ProtocolError, PathError) as e:
+            except (FileNotFoundError, ProtocolError, PathError):
                 logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
@@ -1487,7 +1487,7 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", '[]'))
+            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
 
