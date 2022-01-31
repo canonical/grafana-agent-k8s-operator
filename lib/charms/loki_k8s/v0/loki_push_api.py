@@ -442,7 +442,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 9
 
 logger = logging.getLogger(__name__)
 
@@ -673,7 +673,7 @@ class JujuTopology:
     def identifier(self) -> str:
         """Format the topology information into a terse string."""
         # This is odd, but may have `None` as a model key
-        return "_".join([str(val) for val in self.as_dict().values()])
+        return "_".join([str(val) for val in self.as_dict().values()]).replace("/", "_")
 
     @property
     def promql_labels(self) -> str:
@@ -1142,7 +1142,11 @@ class LokiPushApiProvider(RelationManagerBase):
         self._rules_dir = os.path.join(rules_dir, tenant_id)
         # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
         # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
-        self.container.make_dir(self._rules_dir, make_parents=True)
+        if self.can_connect():
+            try:
+                self.container.make_dir(self._rules_dir, make_parents=True)
+            except (FileNotFoundError, ProtocolError, PathError) as e:
+                logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
@@ -1189,11 +1193,11 @@ class LokiPushApiProvider(RelationManagerBase):
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
 
-    def _endpoints(self):
+    def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
         return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
 
-    def _url(self, unit_number):
+    def _url(self, unit_number) -> str:
         """Get the url for a given unit."""
         return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
             self._charm.app.name,
@@ -1483,7 +1487,7 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app]["endpoints"])
+            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", '[]'))
         return endpoints
 
 
