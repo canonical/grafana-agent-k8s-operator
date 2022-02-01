@@ -14,6 +14,7 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiEndpointJoined,
     LokiPushApiProvider,
 )
+from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -53,6 +54,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
+        self.service_patch = KubernetesServicePatch(
+            self,
+            [
+                (f"{self.app.name}-http-listen-port", self._http_listen_port),
+                (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
+            ],
+        )
         self._remote_write = PrometheusRemoteWriteConsumer(self)
         self._scrape = MetricsEndpointConsumer(self)
 

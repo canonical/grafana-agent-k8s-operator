@@ -3,3 +3,5 @@
 git+https://github.com/canonical/operator/#egg=ops
 requests
 kubernetes
+lightkube
+lightkube-models
