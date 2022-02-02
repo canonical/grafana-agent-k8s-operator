@@ -14,6 +14,7 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiEndpointJoined,
     LokiPushApiProvider,
 )
+from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -26,8 +27,6 @@ from ops.pebble import PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-
-from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +54,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
+        self.service_patch = KubernetesServicePatch(
+            self,
+            [
+                (f"{self.app.name}-http-listen-port", self._http_listen_port),
+                (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
+            ],
+        )
         self._remote_write = PrometheusRemoteWriteConsumer(self)
         self._scrape = MetricsEndpointConsumer(self)
 
@@ -63,7 +69,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self, relation_name="logging-provider", port=self._http_listen_port
         )
 
-        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
             self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
@@ -77,10 +82,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._loki_consumer.on.loki_push_api_endpoint_departed,
             self._on_loki_push_api_endpoint_departed,
         )
-
-    def _on_install(self, _):
-        """Handler for the install event during which we will update the K8s service."""
-        self._patch_k8s_service()
 
     def _on_loki_push_api_endpoint_joined(self, event) -> None:
         """Event handler for the logging relation changed event."""
@@ -138,29 +139,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             return
 
         self.unit.status = ActiveStatus()
-
-    def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:
-            service_ports = [
-                (
-                    f"{self.app.name}-http-listen-port",
-                    self._http_listen_port,
-                    self._http_listen_port,
-                ),
-                (
-                    f"{self.app.name}-grpc-listen-port",
-                    self._grpc_listen_port,
-                    self._grpc_listen_port,
-                ),
-            ]
-            try:
-                K8sServicePatch.set_ports(self.app.name, service_ports)
-            except PatchFailed as e:
-                logger.error("Unable to patch the Kubernetes service: %s", str(e))
-            else:
-                self._stored.k8s_service_patched = True
-                logger.info("Successfully patched the Kubernetes service!")
 
     def _update_config(self, event=None):
         if not self._container.can_connect():
