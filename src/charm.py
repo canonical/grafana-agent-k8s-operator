@@ -53,7 +53,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(k8s_service_patched=False, config="")
+        self._stored.set_default(agent_config="")
         self.service_patch = KubernetesServicePatch(
             self,
             [
@@ -98,8 +98,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
             event: The event object of the pebble ready event
         """
         container = event.workload
-        config = self._config_file(event)
-        container.push(CONFIG_PATH, config)
+        if not self._stored.agent_config:
+            config = self._config_file(event)
+            container.push(CONFIG_PATH, config)
+            self._stored.agent_config = config
+        else:
+            container.push(CONFIG_PATH, self._stored.agent_config)
+
         pebble_layer = {
             "summary": "agent layer",
             "description": "pebble config layer for Grafana Agent",
@@ -157,6 +162,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         try:
             if yaml.safe_load(config) != yaml.safe_load(old_config):
                 self._container.push(CONFIG_PATH, config)
+                self._stored.agent_config = config
                 # FIXME: #19
                 # self._reload_config()
                 self._container.restart(self._name)
