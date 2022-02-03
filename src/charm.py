@@ -23,7 +23,7 @@ from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase, StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import PathError
+from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -122,14 +122,14 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         self._update_status()
 
-    def on_scrape_targets_changed(self, _) -> None:
+    def on_scrape_targets_changed(self, event) -> None:
         """Event handler for the scrape targets changed event."""
-        self._update_config()
+        self._update_config(event)
         self._update_status()
 
-    def on_remote_write_changed(self, _: RelationChangedEvent) -> None:
+    def on_remote_write_changed(self, event: RelationChangedEvent) -> None:
         """Event handler for the remote write changed event."""
-        self._update_config()
+        self._update_config(event)
         self._update_status()
 
     def _update_status(self) -> None:
@@ -149,6 +149,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
             self.unit.status = WaitingStatus("waiting for agent container to start")
+            event.defer()
             return
 
         config = self._config_file(event)
@@ -167,6 +168,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 # self._reload_config()
                 self._container.restart(self._name)
                 self.unit.status = ActiveStatus()
+        except APIError as e:
+            self.unit.status = WaitingStatus(str(e))
+            event.defer()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
 
