@@ -23,7 +23,7 @@ from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase, StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import PathError
+from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -53,7 +53,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(k8s_service_patched=False, config="")
+        self._stored.set_default(agent_config="")
         self.service_patch = KubernetesServicePatch(
             self,
             [
@@ -98,8 +98,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
             event: The event object of the pebble ready event
         """
         container = event.workload
-        config = self._config_file(event)
-        container.push(CONFIG_PATH, config)
+        if not self._stored.agent_config:
+            config = self._config_file(event)
+            container.push(CONFIG_PATH, config)
+            self._stored.agent_config = config
+        else:
+            container.push(CONFIG_PATH, self._stored.agent_config)
+
         pebble_layer = {
             "summary": "agent layer",
             "description": "pebble config layer for Grafana Agent",
@@ -117,14 +122,14 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         self._update_status()
 
-    def on_scrape_targets_changed(self, _) -> None:
+    def on_scrape_targets_changed(self, event) -> None:
         """Event handler for the scrape targets changed event."""
-        self._update_config()
+        self._update_config(event)
         self._update_status()
 
-    def on_remote_write_changed(self, _: RelationChangedEvent) -> None:
+    def on_remote_write_changed(self, event: RelationChangedEvent) -> None:
         """Event handler for the remote write changed event."""
-        self._update_config()
+        self._update_config(event)
         self._update_status()
 
     def _update_status(self) -> None:
@@ -157,10 +162,19 @@ class GrafanaAgentOperatorCharm(CharmBase):
         try:
             if yaml.safe_load(config) != yaml.safe_load(old_config):
                 self._container.push(CONFIG_PATH, config)
+                self._stored.agent_config = config
                 # FIXME: #19
                 # self._reload_config()
                 self._container.restart(self._name)
                 self.unit.status = ActiveStatus()
+        except APIError as e:
+            # When Juju creates a new unit (because the previous one was killed)
+            # the `_on_loki_push_api_endpoint_joined` event is fired before `pebble-ready` event,
+            # BUT when Pebble is actually ready (self._container.can_connect() is True).
+            # APIError is raised because "agent" service doesn't exist yet since we add that
+            # layer in on_pebble_ready.
+            self.unit.status = WaitingStatus(str(e))
+            event.defer()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
 
