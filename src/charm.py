@@ -168,6 +168,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 self._container.restart(self._name)
                 self.unit.status = ActiveStatus()
         except APIError as e:
+            # When Juju creates a new unit (because the previous one was killed)
+            # the `_on_loki_push_api_endpoint_joined` event is fired before `pebble-ready` event,
+            # BUT when Pebble is actually ready (self._container.can_connect() is True).
+            # APIError is raised because "agent" service doesn't exist yet since we add that
+            # layer in on_pebble_ready.
             self.unit.status = WaitingStatus(str(e))
             event.defer()
         except GrafanaAgentReloadError as e:
