@@ -8,12 +8,7 @@
 import logging
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import (
-    LokiPushApiConsumer,
-    LokiPushApiEndpointDeparted,
-    LokiPushApiEndpointJoined,
-    LokiPushApiProvider,
-)
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,

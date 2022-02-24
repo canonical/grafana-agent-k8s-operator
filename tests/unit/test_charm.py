@@ -217,6 +217,7 @@ class TestCharm(unittest.TestCase):
             {"url": "http://loki:3100:/loki/api/v1/push"}
         ]
 
+        self.harness.add_relation("receive-remote-write", "otherapp")
         handle = Handle(None, "kind", "Key")
         event = LokiPushApiEndpointJoined(handle)
         self.harness.charm._on_loki_push_api_endpoint_joined(event)
