@@ -197,11 +197,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         config.update(self._server_config())
         config.update(self._integrations_config())
         config.update(self._prometheus_config())
-
-        # Don't accidentally destroy the Loki config by passing it
-        # `None` or `PebbleReady` or a `RelationEvent`
-        if isinstance(event, (LokiPushApiEndpointJoined, LokiPushApiEndpointDeparted)):
-            config.update(self._loki_config(event))
+        config.update(self._loki_config())
 
         return yaml.dump(config)
 
@@ -286,16 +282,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
             }
         }
 
-    def _loki_config(self, event: EventBase) -> dict:
+    def _loki_config(self) -> dict:
         """Modifies the loki section of the config.
 
         Returns:
             a dict with Loki config
         """
-        if isinstance(event, LokiPushApiEndpointDeparted):
-            return {"loki": {}}
-
-        if isinstance(event, LokiPushApiEndpointJoined):
+        if self.model.relations["receive-remote-write"]:
             return {
                 "loki": {
                     "configs": [
