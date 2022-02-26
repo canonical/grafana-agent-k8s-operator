@@ -182,8 +182,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
 
-    def _config_file(self, event: EventBase) -> str:
-        """Generates config file str based on the event received.
+    def _config_file(self) -> str:
+        """Generates config file str.
 
         Returns:
             A yaml string with grafana agent config
@@ -283,7 +283,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        if self.model.relations["receive-remote-write"]:
+        if self.model.relations["logging-provider"]:
             return {
                 "loki": {
                     "configs": [
