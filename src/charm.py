@@ -95,7 +95,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         container = event.workload
         if not self._stored.agent_config:
-            config = self._config_file(event)
+            config = self._config_file()
             container.push(CONFIG_PATH, config)
             self._stored.agent_config = config
         else:
@@ -147,7 +147,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("waiting for agent container to start")
             return
 
-        config = self._config_file(event)
+        config = self._config_file()
 
         try:
             old_config = self._container.pull(CONFIG_PATH)
