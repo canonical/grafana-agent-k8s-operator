@@ -6,6 +6,8 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 
 import logging
+import os
+import shutil
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
@@ -26,7 +28,10 @@ from requests.packages.urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
-REMOTE_WRITE_RELATION_NAME = "receive-remote-write"
+METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
+METRICS_RULES_PATH = "./prometheus_alert_rules"
+REMOTE_WRITE_RELATION_NAME = "send-remote-write"
+SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 
 class GrafanaAgentReloadError(Exception):
@@ -50,6 +55,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(agent_config="")
+        self._metrics_rules_src_path = os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH)
+        self._metrics_rules_path = os.path.join(self.charm_dir, METRICS_RULES_PATH)
         self.service_patch = KubernetesServicePatch(
             self,
             [
@@ -57,7 +64,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
             ],
         )
-        self._remote_write = PrometheusRemoteWriteConsumer(self)
+
+        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_path, dirs_exist_ok=True)
+        self._remote_write = PrometheusRemoteWriteConsumer(
+            self, alert_rules_path=self._metrics_rules_path
+        )
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
@@ -69,6 +80,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self.framework.observe(
             self.on[REMOTE_WRITE_RELATION_NAME].relation_changed, self.on_remote_write_changed
         )
+        self.framework.observe(
+            self.on[SCRAPE_RELATION_NAME].relation_changed, self.update_metrics_rules
+        )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
@@ -78,6 +92,20 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._loki_consumer.on.loki_push_api_endpoint_departed,
             self._on_loki_push_api_endpoint_departed,
         )
+
+    def update_metrics_rules(self, _):
+        """Copy alert rules from relations and save them to disk."""
+        rules = self._scrape.alerts()
+        shutil.rmtree(self._metrics_rules_path)
+        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_path)
+        for topology_identifier, rule in rules.items():
+            filename = "juju_" + topology_identifier + ".rules"
+            path = os.path.join(self._metrics_rules_path, filename)
+            file_content = yaml.dump(rule)
+            with open(path, "w") as f:
+                f.write(file_content)
+            logger.debug("updated alert rules file {}".format(filename))
+        self._remote_write.reload_alerts()
 
     def _on_loki_push_api_endpoint_joined(self, event) -> None:
         """Event handler for the logging relation changed event."""

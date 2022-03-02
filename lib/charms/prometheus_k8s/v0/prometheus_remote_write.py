@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_RELATION_NAME = "receive-remote-write"
+DEFAULT_CONSUMER_NAME = "send-remote-write"
 RELATION_INTERFACE_NAME = "prometheus_remote_write"
 
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/prometheus_alert_rules"
@@ -732,7 +733,7 @@ class PrometheusRemoteWriteConsumer(Object):
     def __init__(
         self,
         charm: CharmBase,
-        relation_name: str = DEFAULT_RELATION_NAME,
+        relation_name: str = DEFAULT_CONSUMER_NAME,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
     ):
         """API to manage a required relation with the `prometheus_remote_write` interface.
@@ -792,7 +793,7 @@ class PrometheusRemoteWriteConsumer(Object):
     def _push_alerts_on_relation_joined(self, event: RelationEvent) -> None:
         self._push_alerts_to_relation_databag(event.relation)
 
-    def _push_alerts_to_all_relation_databags(self, _: HookEvent) -> None:
+    def _push_alerts_to_all_relation_databags(self, _: Optional[HookEvent]) -> None:
         for relation in self.model.relations[self._relation_name]:
             self._push_alerts_to_relation_databag(relation)
 
@@ -807,6 +808,10 @@ class PrometheusRemoteWriteConsumer(Object):
 
         if alert_rules_as_dict:
             relation.data[self._charm.app]["alert_rules"] = json.dumps(alert_rules_as_dict)
+
+    def reload_alerts(self) -> None:
+        """Reload alert rules from disk and push to relation data."""
+        self._push_alerts_to_all_relation_databags(None)
 
     @property
     def endpoints(self) -> List[Dict[str, str]]:
