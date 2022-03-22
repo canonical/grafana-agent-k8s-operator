@@ -103,7 +103,7 @@ class TestCharm(unittest.TestCase):
             status=200,
         )
 
-        rel_id = self.harness.add_relation("receive-remote-write", "prometheus")
+        rel_id = self.harness.add_relation("send-remote-write", "prometheus")
 
         self.harness.add_relation_unit(rel_id, "prometheus/0")
         self.harness.update_relation_data(
@@ -217,7 +217,7 @@ class TestCharm(unittest.TestCase):
             {"url": "http://loki:3100:/loki/api/v1/push"}
         ]
 
-        self.harness.add_relation("receive-remote-write", "otherapp")
+        self.harness.add_relation("logging-provider", "otherapp")
         handle = Handle(None, "kind", "Key")
         event = LokiPushApiEndpointJoined(handle)
         self.harness.charm._on_loki_push_api_endpoint_joined(event)

@@ -65,7 +65,10 @@ class GrafanaAgentOperatorCharm(CharmBase):
             ],
         )
 
-        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_path, dirs_exist_ok=True)
+        if not os.path.isdir(self._metrics_rules_path):
+            shutil.copytree(
+                self._metrics_rules_src_path, self._metrics_rules_path, dirs_exist_ok=True
+            )
         self._remote_write = PrometheusRemoteWriteConsumer(
             self, alert_rules_path=self._metrics_rules_path
         )
@@ -81,7 +84,14 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self.on[REMOTE_WRITE_RELATION_NAME].relation_changed, self.on_remote_write_changed
         )
         self.framework.observe(
+            self.on[REMOTE_WRITE_RELATION_NAME].relation_joined, self.update_metrics_rules
+        )
+        self.framework.observe(self.on.upgrade_charm, self.update_metrics_rules)
+        self.framework.observe(
             self.on[SCRAPE_RELATION_NAME].relation_changed, self.update_metrics_rules
+        )
+        self.framework.observe(
+            self.on[SCRAPE_RELATION_NAME].relation_broken, self.update_metrics_rules
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
@@ -99,7 +109,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         shutil.rmtree(self._metrics_rules_path)
         shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_path)
         for topology_identifier, rule in rules.items():
-            filename = "juju_" + topology_identifier + ".rules"
+            filename = "juju_{}.rules".format(topology_identifier)
             path = os.path.join(self._metrics_rules_path, filename)
             file_content = yaml.dump(rule)
             with open(path, "w") as f:
