@@ -7,6 +7,7 @@
 
 import logging
 import os
+import pathlib
 import shutil
 
 import yaml
@@ -109,12 +110,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
         shutil.rmtree(self._metrics_rules_path)
         shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_path)
         for topology_identifier, rule in rules.items():
-            filename = "juju_{}.rules".format(topology_identifier)
-            path = os.path.join(self._metrics_rules_path, filename)
-            file_content = yaml.dump(rule)
-            with open(path, "w") as f:
-                f.write(file_content)
-            logger.debug("updated alert rules file {}".format(filename))
+            file_handle = pathlib.Path(
+                self._metrics_rules_path, "juju_{}.rules".format(topology_identifier)
+            )
+            file_handle.write_text(yaml.dump(rule))
+            logger.debug("updated alert rules file {}".format(file_handle.absolute()))
         self._remote_write.reload_alerts()
 
     def _on_loki_push_api_endpoint_joined(self, event) -> None:
