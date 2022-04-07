@@ -188,9 +188,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         try:
             if config != old_config:
                 self._container.push(CONFIG_PATH, yaml.dump(config), make_dirs=True)
-                # FIXME: #19
-                # self._reload_config()
-                self._container.replan()
+                # FIXME: change this to self._reload_config when #19 is fixed
+                # Restart the service to pick up the new config
+                self._container.restart(self._name)
                 self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
