@@ -19,19 +19,6 @@ from ops.testing import Harness
 
 from charm import GrafanaAgentOperatorCharm, GrafanaAgentReloadError
 
-
-def pull_empty_fake_file(self, _):
-    return FakeFile("")
-
-
-class FakeFile:
-    def __init__(self, content=""):
-        self.content = content
-
-    def read(self, *args, **kwargs):
-        return self.content
-
-
 SCRAPE_METADATA = {
     "model": "consumer-model",
     "model_uuid": "abcdef",
@@ -88,20 +75,19 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_model_info(name="lma", uuid="1234567890")
         self.harness.set_leader(True)
-        self.harness.begin()
+        self.harness.begin_with_initial_hooks()
 
     @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
     @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test_remote_write_configuration(self, mock_push: MagicMock, mock_restart: MagicMock):
-        mock_push.push.return_value = None
+    def test_remote_write_configuration(self, mock_restart: MagicMock):
         mock_restart.restart.return_value = True
         responses.add(
             responses.POST,
             "http://localhost/-/reload",
             status=200,
         )
+
+        agent_container = self.harness.charm.unit.get_container("agent")
 
         rel_id = self.harness.add_relation("send-remote-write", "prometheus")
 
@@ -119,8 +105,6 @@ class TestCharm(unittest.TestCase):
             {"remote_write": json.dumps({"url": "http://1.1.1.2:9090/api/v1/write"})},
         )
 
-        path, content = mock_push.call_args[0]
-        content = yaml.safe_load(content)
         expected_config: Dict[str, Any] = {
             "integrations": {
                 "agent": {
@@ -145,24 +129,39 @@ class TestCharm(unittest.TestCase):
                 ]
             },
             "server": {"log_level": "info"},
+            "loki": {},
         }
-        self.assertEqual(path, "/etc/agent/agent.yaml")
 
-        self.assertEqual(
-            DeepDiff(content["integrations"], expected_config["integrations"], ignore_order=True),
-            {},
-        )
+        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+
+        self.assertEqual(DeepDiff(expected_config, config, ignore_order=True), {})
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
+        # Test scale down
+        self.harness.remove_relation_unit(rel_id, "prometheus/1")
+
+        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+
+        self.assertEqual(
+            config["integrations"]["prometheus_remote_write"],
+            [{"url": "http://1.1.1.1:9090/api/v1/write"}],
+        )
+        self.assertEqual(
+            config["prometheus"]["configs"][0]["remote_write"],
+            [{"url": "http://1.1.1.1:9090/api/v1/write"}],
+        )
+
+        # Test scale to zero
+        self.harness.remove_relation_unit(rel_id, "prometheus/0")
+
+        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+
+        self.assertEqual(config["integrations"]["prometheus_remote_write"], [])
+        self.assertEqual(config["prometheus"]["configs"][0]["remote_write"], [])
+
     @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
-    @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test_scrape_without_remote_write_configuration(
-        self, mock_push: MagicMock, mock_restart: MagicMock
-    ):
-        mock_push.push.return_value = None
-        mock_restart.restart.return_value = True
+    def test_scrape_without_remote_write_configuration(self):
+        agent_container = self.harness.charm.unit.get_container("agent")
 
         responses.add(
             responses.POST,
@@ -182,10 +181,9 @@ class TestCharm(unittest.TestCase):
             },
         )
 
-        path, content = mock_push.call_args[0]
-        self.assertEqual(path, "/etc/agent/agent.yaml")
+        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
         self.assertDictEqual(
-            yaml.safe_load(content)["integrations"],
+            config["integrations"],
             {
                 "agent": {
                     "enabled": True,
@@ -204,14 +202,10 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
     @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
-    @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_joined(
-        self, mock_push: MagicMock, mock_restart: MagicMock
-    ):
+    def test__on_loki_push_api_endpoint_joined(self):
         """Test Loki config is in config file when LokiPushApiEndpointJoined is fired."""
-        mock_restart.restart.return_value = True
+        agent_container = self.harness.charm.unit.get_container("agent")
+
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_endpoints = [
             {"url": "http://loki:3100:/loki/api/v1/push"}
@@ -222,9 +216,8 @@ class TestCharm(unittest.TestCase):
         event = LokiPushApiEndpointJoined(handle)
         self.harness.charm._on_loki_push_api_endpoint_joined(event)
 
-        path, content = mock_push.call_args[0]
+        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
 
-        self.assertEqual(path, "/etc/agent/agent.yaml")
         expected = {
             "configs": [
                 {
@@ -245,17 +238,13 @@ class TestCharm(unittest.TestCase):
                 }
             ]
         }
-        self.assertDictEqual(yaml.safe_load(content)["loki"], expected)
+        self.assertDictEqual(config["loki"], expected)
 
     @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
-    @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_departed(
-        self, mock_push: MagicMock, mock_restart: MagicMock
-    ):
+    def test__on_loki_push_api_endpoint_departed(self):
         """Test Loki config is not in config file when LokiPushApiEndpointDeparted is fired."""
-        mock_restart.restart.return_value = True
+        agent_container = self.harness.charm.unit.get_container("agent")
+
         self.harness.charm._loki_consumer = Mock()
         self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
 
@@ -263,20 +252,12 @@ class TestCharm(unittest.TestCase):
         event = LokiPushApiEndpointDeparted(handle)
         self.harness.charm._on_loki_push_api_endpoint_departed(event)
 
-        path, content = mock_push.call_args[0]
+        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
 
-        self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertTrue(yaml.safe_load(content)["loki"] == {})
+        self.assertTrue(config["loki"] == {})
 
-    def test__update_config_pebble_ready(self):
-        self.harness.charm._container.restart = Mock(return_value=True)
-        self.harness.charm._container.pull = Mock(return_value="")
-        self.harness.charm._container.push = Mock(return_value=True)
-        self.harness.charm._reload_config = Mock(return_value=True)
-        self.harness.charm._update_config()
-        self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
-
-        self.harness.charm._container.restart = Mock(side_effect=GrafanaAgentReloadError)
+    def test__agent_reload_fails(self):
+        self.harness.charm._container.replan = Mock(side_effect=GrafanaAgentReloadError)
         self.harness.charm._update_config()
         self.assertEqual(
             self.harness.charm.unit.status, BlockedStatus("could not reload configuration")

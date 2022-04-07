@@ -9,6 +9,7 @@ import logging
 import os
 import pathlib
 import shutil
+from typing import Any, Dict
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
@@ -18,10 +19,10 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from ops.charm import CharmBase, RelationChangedEvent
-from ops.framework import EventBase, StoredState
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import APIError, PathError
+from ops.pebble import PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -46,7 +47,6 @@ class GrafanaAgentReloadError(Exception):
 class GrafanaAgentOperatorCharm(CharmBase):
     """Grafana Agent Charm."""
 
-    _stored = StoredState()
     _name = "agent"
     _promtail_positions = "/tmp/positions.yaml"
     _http_listen_port = 3500
@@ -55,7 +55,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(agent_config="")
         self._metrics_rules_src_path = os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH)
         self._metrics_rules_path = os.path.join(self.charm_dir, METRICS_RULES_PATH)
         self.service_patch = KubernetesServicePatch(
@@ -81,20 +80,16 @@ class GrafanaAgentOperatorCharm(CharmBase):
         )
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
+        self.framework.observe(self.on.upgrade_charm, self.update_alerts_rules)
+
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
-        self.framework.observe(
-            self.on[REMOTE_WRITE_RELATION_NAME].relation_joined, self.update_metrics_rules
-        )
-        self.framework.observe(self.on.upgrade_charm, self.update_metrics_rules)
-        self.framework.observe(
-            self.on[SCRAPE_RELATION_NAME].relation_changed, self.update_metrics_rules
-        )
-        self.framework.observe(
-            self.on[SCRAPE_RELATION_NAME].relation_broken, self.update_metrics_rules
-        )
+        self.framework.observe(self._remote_write.on.endpoints_changed, self.update_alerts_rules)
+
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+        self.framework.observe(self._scrape.on.targets_changed, self.update_alerts_rules)
+
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
             self._on_loki_push_api_endpoint_joined,
@@ -104,7 +99,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._on_loki_push_api_endpoint_departed,
         )
 
-    def update_metrics_rules(self, _):
+    def update_alerts_rules(self, _):
         """Copy alert rules from relations and save them to disk."""
         rules = self._scrape.alerts()
         shutil.rmtree(self._metrics_rules_path)
@@ -125,19 +120,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Event handler for the loki departed."""
         self._update_config(event)
 
-    def on_pebble_ready(self, event: EventBase) -> None:
+    def on_pebble_ready(self, _: EventBase) -> None:
         """Event handler for the pebble ready event.
 
         Args:
             event: The event object of the pebble ready event
         """
-        container = event.workload
-        if not self._stored.agent_config:
-            config = self._config_file()
-            container.push(CONFIG_PATH, config)
-            self._stored.agent_config = config
-        else:
-            container.push(CONFIG_PATH, self._stored.agent_config)
+        self._container.push(CONFIG_PATH, yaml.dump(self._config_file()), make_dirs=True)
 
         pebble_layer = {
             "summary": "agent layer",
@@ -183,32 +172,25 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
             self.unit.status = WaitingStatus("waiting for agent container to start")
-            return
+            event.defer()
 
         config = self._config_file()
+        old_config = None
 
         try:
-            old_config = self._container.pull(CONFIG_PATH)
-        except PathError:
-            # If the file does not yet exist, pebble_ready has not run yet
+            old_config = yaml.safe_load(self._container.pull(CONFIG_PATH))
+        except (FileNotFoundError, PathError):
+            # If the file does not yet exist, pebble_ready has not run yet,
+            # and we may be processing a deferred event
             pass
 
         try:
-            if yaml.safe_load(config) != yaml.safe_load(old_config):
-                self._container.push(CONFIG_PATH, config)
-                self._stored.agent_config = config
+            if config != old_config:
+                self._container.push(CONFIG_PATH, yaml.dump(config), make_dirs=True)
                 # FIXME: #19
                 # self._reload_config()
-                self._container.restart(self._name)
+                self._container.replan()
                 self.unit.status = ActiveStatus()
-        except APIError as e:
-            # When Juju creates a new unit (because the previous one was killed)
-            # the `_on_loki_push_api_endpoint_joined` event is fired before `pebble-ready` event,
-            # BUT when Pebble is actually ready (self._container.can_connect() is True).
-            # APIError is raised because "agent" service doesn't exist yet since we add that
-            # layer in on_pebble_ready.
-            self.unit.status = WaitingStatus(str(e))
-            event.defer()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
 
@@ -220,7 +202,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
 
-    def _config_file(self) -> str:
+    def _config_file(self) -> Dict[str, Any]:
         """Generates config file str.
 
         Returns:
@@ -232,7 +214,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         config.update(self._prometheus_config())
         config.update(self._loki_config())
 
-        return yaml.dump(config)
+        return config
 
     def _server_config(self) -> dict:
         """Return the server section of the config.
