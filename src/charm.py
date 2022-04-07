@@ -200,7 +200,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         # Don't accidentally destroy the Loki config by passing it
         # `None` or `PebbleReady` or a `RelationEvent`
         if isinstance(event, (LokiPushApiEndpointJoined, LokiPushApiEndpointDeparted)):
-            config.update(self._loki_config(event))
+            config.update(self._loki_config())
 
         return yaml.dump(config)
 
@@ -285,40 +285,37 @@ class GrafanaAgentOperatorCharm(CharmBase):
             }
         }
 
-    def _loki_config(self, event: EventBase) -> dict:
+    def _loki_config(self) -> dict:
         """Modifies the loki section of the config.
 
         Returns:
             a dict with Loki config
         """
-        if isinstance(event, LokiPushApiEndpointDeparted):
+        if not self._loki_consumer.loki_endpoints:
             return {"loki": {}}
 
-        if isinstance(event, LokiPushApiEndpointJoined):
-            return {
-                "loki": {
-                    "configs": [
-                        {
-                            "name": "promtail",
-                            "clients": self._loki_consumer.loki_endpoints,
-                            "positions": {"filename": f"{self._promtail_positions}"},
-                            "scrape_configs": [
-                                {
-                                    "job_name": "loki",
-                                    "loki_push_api": {
-                                        "server": {
-                                            "http_listen_port": self._http_listen_port,
-                                            "grpc_listen_port": self._grpc_listen_port,
-                                        },
+        return {
+            "loki": {
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": self._loki_consumer.loki_endpoints,
+                        "positions": {"filename": f"{self._promtail_positions}"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": self._http_listen_port,
+                                        "grpc_listen_port": self._grpc_listen_port,
                                     },
-                                }
-                            ],
-                        }
-                    ]
-                }
+                                },
+                            }
+                        ],
+                    }
+                ]
             }
-
-        return {"loki": {}}
+        }
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
