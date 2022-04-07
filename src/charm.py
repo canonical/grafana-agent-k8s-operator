@@ -82,7 +82,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
-            self.on[REMOTE_WRITE_RELATION_NAME].relation_changed, self.on_remote_write_changed
+            self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
         self.framework.observe(
             self.on[REMOTE_WRITE_RELATION_NAME].relation_joined, self.update_metrics_rules
