@@ -103,7 +103,7 @@ class TestCharm(unittest.TestCase):
             status=200,
         )
 
-        rel_id = self.harness.add_relation("prometheus-remote-write", "prometheus")
+        rel_id = self.harness.add_relation("send-remote-write", "prometheus")
 
         self.harness.add_relation_unit(rel_id, "prometheus/0")
         self.harness.update_relation_data(

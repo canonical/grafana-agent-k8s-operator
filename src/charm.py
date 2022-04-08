@@ -71,7 +71,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(
-            self.on["prometheus-remote-write"].relation_changed, self.on_remote_write_changed
+            self.on["send-remote-write"].relation_changed, self.on_remote_write_changed
         )
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(
@@ -135,7 +135,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def _update_status(self) -> None:
         """Update the status to reflect the status quo."""
         if len(self.model.relations["metrics-endpoint"]):
-            if not len(self.model.relations["prometheus-remote-write"]):
+            if not len(self.model.relations["send-remote-write"]):
                 self.unit.status = BlockedStatus("no related Prometheus remote-write")
                 return
 
