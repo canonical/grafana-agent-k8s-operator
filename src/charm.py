@@ -155,9 +155,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         try:
             old_config = self._container.pull(CONFIG_PATH)
-        except PathError:
+        except (PathError, FileNotFoundError):
             # If the file does not yet exist, pebble_ready has not run yet
-            pass
+            old_config = ""
 
         try:
             if yaml.safe_load(config) != yaml.safe_load(old_config):

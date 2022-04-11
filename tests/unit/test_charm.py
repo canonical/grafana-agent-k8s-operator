@@ -4,7 +4,7 @@
 import json
 import unittest
 from typing import Any, Dict
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import responses
 import yaml
@@ -267,53 +267,51 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(path, "/etc/agent/agent.yaml")
         self.assertTrue(yaml.safe_load(content)["loki"] == {})
 
-    @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
-    @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_departed_2_endpoints(
-        self, mock_push: MagicMock, mock_restart: MagicMock
-    ):
-        """Test Loki config is not in config file when LokiPushApiEndpointDeparted is fired."""
-        mock_restart.restart.return_value = True
-        self.harness.charm._loki_consumer = Mock()
-        self.harness.charm._loki_consumer.loki_endpoints = [
+    def test__loki_config_no_endpoints(self):
+        consumer = self.harness.charm._loki_consumer
+        endpoints = PropertyMock(return_value="")
+        type(consumer).loki_endpoints = endpoints
+        expected: Dict = {"loki": {}}
+        self.assertEqual(
+            DeepDiff(expected, self.harness.charm._loki_config(), ignore_order=True), {}
+        )
+
+    def test__loki_config_with_endpoints(self):
+        loki_endpoints = [
             {"url": "http://loki1:3100:/loki/api/v1/push"},
             {"url": "http://loki2:3100:/loki/api/v1/push"},
         ]
-
+        consumer = self.harness.charm._loki_consumer
+        endpoints = PropertyMock(return_value=loki_endpoints)
+        type(consumer).loki_endpoints = endpoints
         expected = {
-            "configs": [
-                {
-                    "name": "promtail",
-                    "clients": [
-                        {"url": "http://loki1:3100:/loki/api/v1/push"},
-                        {"url": "http://loki2:3100:/loki/api/v1/push"},
-                    ],
-                    "positions": {"filename": "/tmp/positions.yaml"},
-                    "scrape_configs": [
-                        {
-                            "job_name": "loki",
-                            "loki_push_api": {
-                                "server": {
-                                    "http_listen_port": 3500,
-                                    "grpc_listen_port": 3600,
+            "loki": {
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": [
+                            {"url": "http://loki1:3100:/loki/api/v1/push"},
+                            {"url": "http://loki2:3100:/loki/api/v1/push"},
+                        ],
+                        "positions": {"filename": "/tmp/positions.yaml"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": 3500,
+                                        "grpc_listen_port": 3600,
+                                    },
                                 },
-                            },
-                        }
-                    ],
-                }
-            ]
+                            }
+                        ],
+                    }
+                ]
+            }
         }
-
-        handle = Handle(None, "kind", "Key")
-        event = LokiPushApiEndpointDeparted(handle)
-        self.harness.charm._on_loki_push_api_endpoint_departed(event)
-
-        path, content = mock_push.call_args[0]
-
-        self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertTrue(yaml.safe_load(content)["loki"] == expected)
+        self.assertEqual(
+            DeepDiff(expected, self.harness.charm._loki_config(), ignore_order=True), {}
+        )
 
     def test__update_config_pebble_ready(self):
         self.harness.charm._container.restart = Mock(return_value=True)
