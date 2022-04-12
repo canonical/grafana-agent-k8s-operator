@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
 METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
-METRICS_RULES_PATH = "./prometheus_alert_rules"
+METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
@@ -56,7 +56,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._metrics_rules_src_path = os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH)
-        self._metrics_rules_path = os.path.join(self.charm_dir, METRICS_RULES_PATH)
+        self._metrics_rules_dest_path = os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH)
         self.service_patch = KubernetesServicePatch(
             self,
             [
@@ -65,12 +65,12 @@ class GrafanaAgentOperatorCharm(CharmBase):
             ],
         )
 
-        if not os.path.isdir(self._metrics_rules_path):
+        if not os.path.isdir(self._metrics_rules_dest_path):
             shutil.copytree(
-                self._metrics_rules_src_path, self._metrics_rules_path, dirs_exist_ok=True
+                self._metrics_rules_src_path, self._metrics_rules_dest_path, dirs_exist_ok=True
             )
         self._remote_write = PrometheusRemoteWriteConsumer(
-            self, alert_rules_path=self._metrics_rules_path
+            self, alert_rules_path=self._metrics_rules_dest_path
         )
         self._scrape = MetricsEndpointConsumer(self)
 
@@ -102,11 +102,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def update_alerts_rules(self, _):
         """Copy alert rules from relations and save them to disk."""
         rules = self._scrape.alerts()
-        shutil.rmtree(self._metrics_rules_path)
-        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_path)
+        shutil.rmtree(self._metrics_rules_dest_path)
+        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_dest_path)
         for topology_identifier, rule in rules.items():
             file_handle = pathlib.Path(
-                self._metrics_rules_path, "juju_{}.rules".format(topology_identifier)
+                self._metrics_rules_dest_path, "juju_{}.rules".format(topology_identifier)
             )
             file_handle.write_text(yaml.dump(rule))
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
