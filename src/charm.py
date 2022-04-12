@@ -211,6 +211,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         config = {}
         config.update(self._server_config())
+        config.update(self._integrations_config())
         config.update(self._prometheus_config())
         config.update(self._loki_config())
 
@@ -224,42 +225,59 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         return {"server": {"log_level": "info"}}
 
-    def _self_monitoring_scrape_job(self) -> dict:
-        job_name = "agent_self_monitoring_{}_{}_{}".format(
-            self.model.name,
-            self.model.uuid,
-            self.unit.name.replace("/", "-"),
-        )
+    def _integrations_config(self) -> dict:
+        """Return the integrations section of the config.
+
+        Returns:
+            The dict representing the config
+        """
+        juju_model = self.model.name
+        juju_model_uuid = self.model.uuid
+        juju_application = self.model.app.name
+        juju_unit = self.unit.name
+
+        instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
         return {
-            "job_name": job_name,
-            "metrics_path": "/metrics",
-            "relabel_configs": [
-                {
-                    "regex": "(.*)",
-                    "separator": "_",
-                    "source_labels": [
-                        "juju_model",
-                        "juju_model_uuid",
-                        "juju_application",
-                        "juju_unit",
+            "integrations": {
+                "agent": {
+                    "enabled": True,
+                    # Align the "instance" able with the rest of the Juju-collected metrics
+                    "relabel_configs": [
+                        {
+                            "target_label": "instance",
+                            "regex": "(.*)",
+                            "replacement": instance_value,
+                        },
+                        {  # To add a label, we create a relabelling that replaces a built-in
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_charm",
+                            "replacement": self.meta.name,
+                        },
+                        {  # To add a label, we create a relabelling that replaces a built-in
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model",
+                            "replacement": juju_model,
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_model_uuid",
+                            "replacement": juju_model_uuid,
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_application",
+                            "replacement": juju_application,
+                        },
+                        {
+                            "source_labels": ["__address__"],
+                            "target_label": "juju_unit",
+                            "replacement": juju_unit,
+                        },
                     ],
-                    "target_label": "instance",
-                }
-            ],
-            "scrape_interval": "5s",
-            "static_configs": [
-                {
-                    "labels": {
-                        "juju_charm": self.meta.name,
-                        "juju_model": self.model.name,
-                        "juju_model_uuid": self.model.uuid,
-                        "juju_application": self.app.name,
-                        "juju_unit": self.unit.name,
-                    },
-                    "targets": ["localhost"],
-                }
-            ],
+                },
+                "prometheus_remote_write": self._remote_write.endpoints,
+            }
         }
 
     def _prometheus_config(self) -> dict:
@@ -268,14 +286,12 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The dict representing the config
         """
-        scrape_jobs = [self._self_monitoring_scrape_job()] + (self._scrape.jobs() or [])
-
         return {
             "prometheus": {
                 "configs": [
                     {
-                        "name": "send_remote_write",
-                        "scrape_configs": scrape_jobs,
+                        "name": "agent_scraper",
+                        "scrape_configs": self._scrape.jobs(),
                         "remote_write": self._remote_write.endpoints,
                     }
                 ]
