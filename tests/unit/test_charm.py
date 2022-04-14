@@ -4,20 +4,18 @@
 import json
 import unittest
 from typing import Any, Dict
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
+import ops.testing
 import responses
 import yaml
-from charms.loki_k8s.v0.loki_push_api import (
-    LokiPushApiEndpointDeparted,
-    LokiPushApiEndpointJoined,
-)
 from deepdiff import DeepDiff  # type: ignore
-from ops.framework import Handle
 from ops.model import ActiveStatus, BlockedStatus, Container
 from ops.testing import Harness
 
 from charm import GrafanaAgentOperatorCharm, GrafanaAgentReloadError
+
+ops.testing.SIMULATE_CAN_CONNECT = True
 
 
 def pull_empty_fake_file(self, _):
@@ -95,6 +93,7 @@ class TestCharm(unittest.TestCase):
     @patch.object(Container, "restart")
     @patch.object(Container, "push")
     def test_remote_write_configuration(self, mock_push: MagicMock, mock_restart: MagicMock):
+        self.harness.set_can_connect("agent", True)
         mock_push.push.return_value = None
         mock_restart.restart.return_value = True
         responses.add(
@@ -161,6 +160,7 @@ class TestCharm(unittest.TestCase):
     def test_scrape_without_remote_write_configuration(
         self, mock_push: MagicMock, mock_restart: MagicMock
     ):
+        self.harness.set_can_connect("agent", True)
         mock_push.push.return_value = None
         mock_restart.restart.return_value = True
 
@@ -203,87 +203,26 @@ class TestCharm(unittest.TestCase):
         expected = "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
-    @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
-    @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_joined(
-        self, mock_push: MagicMock, mock_restart: MagicMock
-    ):
-        """Test Loki config is in config file when LokiPushApiEndpointJoined is fired."""
-        mock_restart.restart.return_value = True
-        self.harness.charm._loki_consumer = Mock()
-        self.harness.charm._loki_consumer.loki_endpoints = [
-            {"url": "http://loki:3100:/loki/api/v1/push"}
-        ]
-
-        handle = Handle(None, "kind", "Key")
-        event = LokiPushApiEndpointJoined(handle)
-        self.harness.charm._on_loki_push_api_endpoint_joined(event)
-
-        path, content = mock_push.call_args[0]
-
-        self.assertEqual(path, "/etc/agent/agent.yaml")
-        expected = {
-            "configs": [
-                {
-                    "name": "promtail",
-                    "clients": [{"url": "http://loki:3100:/loki/api/v1/push"}],
-                    "positions": {"filename": "/tmp/positions.yaml"},
-                    "scrape_configs": [
-                        {
-                            "job_name": "loki",
-                            "loki_push_api": {
-                                "server": {
-                                    "http_listen_port": 3500,
-                                    "grpc_listen_port": 3600,
-                                },
-                            },
-                        }
-                    ],
-                }
-            ]
-        }
-        self.assertDictEqual(yaml.safe_load(content)["loki"], expected)
-
-    @responses.activate
-    @patch.object(Container, "pull", new=pull_empty_fake_file)
-    @patch.object(Container, "restart")
-    @patch.object(Container, "push")
-    def test__on_loki_push_api_endpoint_departed_0_endpoints(
-        self, mock_push: MagicMock, mock_restart: MagicMock
-    ):
-        """Test Loki config is not in config file when LokiPushApiEndpointDeparted is fired."""
-        mock_restart.restart.return_value = True
-        self.harness.charm._loki_consumer = Mock()
-        self.harness.charm._loki_consumer.loki_endpoints = []
-
-        handle = Handle(None, "kind", "Key")
-        event = LokiPushApiEndpointDeparted(handle)
-        self.harness.charm._on_loki_push_api_endpoint_departed(event)
-
-        path, content = mock_push.call_args[0]
-
-        self.assertEqual(path, "/etc/agent/agent.yaml")
-        self.assertTrue(yaml.safe_load(content)["loki"] == {})
-
-    def test__loki_config_no_endpoints(self):
-        consumer = self.harness.charm._loki_consumer
-        endpoints = PropertyMock(return_value="")
-        type(consumer).loki_endpoints = endpoints
+    def test__loki_config_no_loki_endpoints(self):
+        rel_id = self.harness.add_relation("logging-consumer", "loki")
+        self.harness.add_relation_unit(rel_id, "loki/0")
+        endpoints = json.dumps([])
+        self.harness.update_relation_data(rel_id, "loki", {"endpoints": endpoints})
         expected: Dict = {"loki": {}}
         self.assertEqual(
             DeepDiff(expected, self.harness.charm._loki_config(), ignore_order=True), {}
         )
 
-    def test__loki_config_with_endpoints(self):
-        loki_endpoints = [
-            {"url": "http://loki1:3100:/loki/api/v1/push"},
-            {"url": "http://loki2:3100:/loki/api/v1/push"},
-        ]
-        consumer = self.harness.charm._loki_consumer
-        endpoints = PropertyMock(return_value=loki_endpoints)
-        type(consumer).loki_endpoints = endpoints
+    def test__loki_config_with_loki_endpoints(self):
+        rel_id = self.harness.add_relation("logging-consumer", "loki")
+        self.harness.add_relation_unit(rel_id, "loki/0")
+        endpoints = json.dumps(
+            [
+                {"url": "http://loki1:3100:/loki/api/v1/push"},
+                {"url": "http://loki2:3100:/loki/api/v1/push"},
+            ]
+        )
+        self.harness.update_relation_data(rel_id, "loki", {"endpoints": endpoints})
         expected = {
             "loki": {
                 "configs": [
@@ -314,6 +253,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def test__update_config_pebble_ready(self):
+        self.harness.set_can_connect("agent", True)
         self.harness.charm._container.restart = Mock(return_value=True)
         self.harness.charm._container.pull = Mock(return_value="")
         self.harness.charm._container.push = Mock(return_value=True)
