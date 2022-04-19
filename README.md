@@ -3,6 +3,13 @@
 ## Description
 [Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
 
+As a single entry point to the observability stack, the grafana agent charm brings several conveniences when deployed inside a monitored cluster:
+- Charms are related to the grafana agent charm, instead of to prometheus and loki individually.
+- Conversion from scraping to remote writing: grafana agent would collect telemetry inside the cluster network 
+  and _push_ it to the COS cluster (via `loki_push_api` and `prometheus_remote_write`), which simplifies firewall 
+  configuration, as only outgoing connections would need to established.
+
+
 ## Usage
 
 Create a Juju model for your operators, say "lma"
