@@ -11,18 +11,19 @@ brings several conveniences when deployed inside a monitored cluster:
 ```mermaid
 flowchart LR
     subgraph COS Lite
-        P(Prometheus)
-        L(Loki)
+        prometheus
+        loki
     end
     subgraph K8s cluster
-        P --- |remote_write| GA(grafana-agent)
-        L --- |loki_push_api| GA
-        GA --- |prometheus_scrape| PSC(prom-scrape-config)
-        PSC --- |prometheus_scrape| C1(Sidecar Charm 1)
-        C1 --> |promtail| GA
+        prometheus               ---      |remote_write| grafana-agent
+        loki                     ---     |loki_push_api| grafana-agent
+        grafana-agent            --- |prometheus_scrape| prometheus-scrape-config
 
-        GA --- |prometheus_scrape| C2(Sidecar Charm 2)
-        C2 --> |promtail| GA
+        grafana-agent            --- |prometheus_scrape| C1(Sidecar Charm 1)
+        C1                       ---     |loki_push_api| grafana-agent
+
+        prometheus-scrape-config --- |prometheus_scrape| C2(Sidecar Charm 2)
+        C2                       ---     |loki_push_api| grafana-agent
     end
 ```
 
