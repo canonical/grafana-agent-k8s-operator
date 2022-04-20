@@ -7,6 +7,25 @@ stack.
 
 As a single entry point to the observability stack, the grafana agent charm
 brings several conveniences when deployed inside a monitored cluster:
+
+```mermaid
+flowchart LR
+    subgraph COS Lite
+        P(Prometheus)
+        L(Loki)
+    end
+    subgraph K8s cluster
+        P --- |remote_write| GA(grafana-agent)
+        L --- |loki_push_api| GA
+        GA --- |prometheus_scrape| PSC(prom-scrape-config)
+        PSC --- |prometheus_scrape| C1(Sidecar Charm 1)
+        C1 --> |promtail| GA
+
+        GA --- |prometheus_scrape| C2(Sidecar Charm 2)
+        C2 --> |promtail| GA
+    end
+```
+
 - Charms are related to the grafana agent charm, instead of to prometheus and
   loki individually. In typical deployments this would reduce the number of
   cross-model relations that would have been otherwise needed.
