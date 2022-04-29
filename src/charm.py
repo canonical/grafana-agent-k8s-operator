@@ -236,9 +236,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         juju_application = self.model.app.name
         juju_unit = self.unit.name
 
-        job_name = (
-            f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
-        )
+        job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
         instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
         return {
