@@ -236,14 +236,23 @@ class GrafanaAgentOperatorCharm(CharmBase):
         juju_application = self.model.app.name
         juju_unit = self.unit.name
 
+        job_name = (
+            f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
+        )
         instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
         return {
             "integrations": {
                 "agent": {
                     "enabled": True,
-                    # Align the "instance" able with the rest of the Juju-collected metrics
                     "relabel_configs": [
+                        # Align the "job" name with those of prometheus_scrape
+                        {
+                            "target_label": "job",
+                            "regex": "(.*)",
+                            "replacement": job_name,
+                        },
+                        # Align the "instance" label with the rest of the Juju-collected metrics
                         {
                             "target_label": "instance",
                             "regex": "(.*)",

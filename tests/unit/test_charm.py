@@ -36,6 +36,11 @@ SCRAPE_JOBS = [
 
 REWRITE_CONFIGS = [
     {
+        "target_label": "job",
+        "regex": "(.*)",
+        "replacement": "juju_lma_1234567890_grafana-agent-k8s_self-monitoring",
+    },
+    {
         "target_label": "instance",
         "regex": "(.*)",
         "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
