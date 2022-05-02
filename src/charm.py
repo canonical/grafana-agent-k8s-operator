@@ -173,7 +173,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             # Pebble is not ready yet so no need to update config
             self.unit.status = WaitingStatus("waiting for agent container to start")
             return
-            return
 
         config = self._config_file()
         old_config = None
