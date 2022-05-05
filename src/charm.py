@@ -6,24 +6,23 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 
 import logging
+import os
+import pathlib
+import shutil
+from typing import Any, Dict
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import (
-    LokiPushApiConsumer,
-    LokiPushApiEndpointDeparted,
-    LokiPushApiEndpointJoined,
-    LokiPushApiProvider,
-)
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from ops.charm import CharmBase, RelationChangedEvent
-from ops.framework import EventBase, StoredState
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import APIError, PathError
+from ops.pebble import PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -31,6 +30,10 @@ from requests.packages.urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
+METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
+METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
+REMOTE_WRITE_RELATION_NAME = "send-remote-write"
+SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 
 class GrafanaAgentReloadError(Exception):
@@ -44,7 +47,6 @@ class GrafanaAgentReloadError(Exception):
 class GrafanaAgentOperatorCharm(CharmBase):
     """Grafana Agent Charm."""
 
-    _stored = StoredState()
     _name = "agent"
     _promtail_positions = "/tmp/positions.yaml"
     _http_listen_port = 3500
@@ -53,7 +55,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(agent_config="")
+        self._metrics_rules_src_path = os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH)
+        self._metrics_rules_dest_path = os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH)
         self.service_patch = KubernetesServicePatch(
             self,
             [
@@ -61,7 +64,14 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
             ],
         )
-        self._remote_write = PrometheusRemoteWriteConsumer(self)
+
+        if not os.path.isdir(self._metrics_rules_dest_path):
+            shutil.copytree(
+                self._metrics_rules_src_path, self._metrics_rules_dest_path, dirs_exist_ok=True
+            )
+        self._remote_write = PrometheusRemoteWriteConsumer(
+            self, alert_rules_path=self._metrics_rules_dest_path
+        )
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
@@ -70,10 +80,16 @@ class GrafanaAgentOperatorCharm(CharmBase):
         )
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
+        self.framework.observe(self.on.upgrade_charm, self.update_alerts_rules)
+
         self.framework.observe(
-            self.on["send-remote-write"].relation_changed, self.on_remote_write_changed
+            self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
+        self.framework.observe(self._remote_write.on.endpoints_changed, self.update_alerts_rules)
+
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+        self.framework.observe(self._scrape.on.targets_changed, self.update_alerts_rules)
+
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
             self._on_loki_push_api_endpoint_joined,
@@ -83,6 +99,19 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._on_loki_push_api_endpoint_departed,
         )
 
+    def update_alerts_rules(self, _):
+        """Copy alert rules from relations and save them to disk."""
+        rules = self._scrape.alerts()
+        shutil.rmtree(self._metrics_rules_dest_path)
+        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_dest_path)
+        for topology_identifier, rule in rules.items():
+            file_handle = pathlib.Path(
+                self._metrics_rules_dest_path, "juju_{}.rules".format(topology_identifier)
+            )
+            file_handle.write_text(yaml.dump(rule))
+            logger.debug("updated alert rules file {}".format(file_handle.absolute()))
+        self._remote_write.reload_alerts()
+
     def _on_loki_push_api_endpoint_joined(self, event) -> None:
         """Event handler for the logging relation changed event."""
         self._update_config(event)
@@ -91,19 +120,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Event handler for the loki departed."""
         self._update_config(event)
 
-    def on_pebble_ready(self, event: EventBase) -> None:
+    def on_pebble_ready(self, _: EventBase) -> None:
         """Event handler for the pebble ready event.
 
         Args:
             event: The event object of the pebble ready event
         """
-        container = event.workload
-        if not self._stored.agent_config:
-            config = self._config_file(event)
-            container.push(CONFIG_PATH, config)
-            self._stored.agent_config = config
-        else:
-            container.push(CONFIG_PATH, self._stored.agent_config)
+        self._container.push(CONFIG_PATH, yaml.dump(self._config_file()), make_dirs=True)
 
         pebble_layer = {
             "summary": "agent layer",
@@ -135,7 +158,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def _update_status(self) -> None:
         """Update the status to reflect the status quo."""
         if len(self.model.relations["metrics-endpoint"]):
-            if not len(self.model.relations["send-remote-write"]):
+            if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                 self.unit.status = BlockedStatus("no related Prometheus remote-write")
                 return
 
@@ -151,30 +174,23 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("waiting for agent container to start")
             return
 
-        config = self._config_file(event)
+        config = self._config_file()
+        old_config = None
 
         try:
-            old_config = self._container.pull(CONFIG_PATH)
-        except (PathError, FileNotFoundError):
-            # If the file does not yet exist, pebble_ready has not run yet
-            old_config = ""
+            old_config = yaml.safe_load(self._container.pull(CONFIG_PATH))
+        except (FileNotFoundError, PathError):
+            # If the file does not yet exist, pebble_ready has not run yet,
+            # and we may be processing a deferred event
+            pass
 
         try:
-            if yaml.safe_load(config) != yaml.safe_load(old_config):
-                self._container.push(CONFIG_PATH, config)
-                self._stored.agent_config = config
-                # FIXME: #19
-                # self._reload_config()
+            if config != old_config:
+                self._container.push(CONFIG_PATH, yaml.dump(config), make_dirs=True)
+                # FIXME: change this to self._reload_config when #19 is fixed
+                # Restart the service to pick up the new config
                 self._container.restart(self._name)
                 self.unit.status = ActiveStatus()
-        except APIError as e:
-            # When Juju creates a new unit (because the previous one was killed)
-            # the `_on_loki_push_api_endpoint_joined` event is fired before `pebble-ready` event,
-            # BUT when Pebble is actually ready (self._container.can_connect() is True).
-            # APIError is raised because "agent" service doesn't exist yet since we add that
-            # layer in on_pebble_ready.
-            self.unit.status = WaitingStatus(str(e))
-            event.defer()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
 
@@ -186,8 +202,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """
         return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
 
-    def _config_file(self, event: EventBase) -> str:
-        """Generates config file str based on the event received.
+    def _config_file(self) -> Dict[str, Any]:
+        """Generates config file str.
 
         Returns:
             A yaml string with grafana agent config
@@ -196,13 +212,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         config.update(self._server_config())
         config.update(self._integrations_config())
         config.update(self._prometheus_config())
-
-        # Don't accidentally destroy the Loki config by passing it
-        # `None` or `PebbleReady` or a `RelationEvent`
-        if isinstance(event, (LokiPushApiEndpointJoined, LokiPushApiEndpointDeparted)):
-            config.update(self._loki_config())
-
-        return yaml.dump(config)
+        config.update(self._loki_config())
+        return config
 
     def _server_config(self) -> dict:
         """Return the server section of the config.
@@ -223,14 +234,21 @@ class GrafanaAgentOperatorCharm(CharmBase):
         juju_application = self.model.app.name
         juju_unit = self.unit.name
 
+        job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
         instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
         return {
             "integrations": {
                 "agent": {
                     "enabled": True,
-                    # Align the "instance" able with the rest of the Juju-collected metrics
                     "relabel_configs": [
+                        # Align the "job" name with those of prometheus_scrape
+                        {
+                            "target_label": "job",
+                            "regex": "(.*)",
+                            "replacement": job_name,
+                        },
+                        # Align the "instance" label with the rest of the Juju-collected metrics
                         {
                             "target_label": "instance",
                             "regex": "(.*)",
@@ -291,31 +309,31 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        if not self._loki_consumer.loki_endpoints:
-            return {"loki": {}}
-
-        return {
-            "loki": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": self._loki_consumer.loki_endpoints,
-                        "positions": {"filename": f"{self._promtail_positions}"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": self._http_listen_port,
-                                        "grpc_listen_port": self._grpc_listen_port,
+        if self.model.relations["logging-provider"]:
+            return {
+                "loki": {
+                    "configs": [
+                        {
+                            "name": "promtail",
+                            "clients": self._loki_consumer.loki_endpoints,
+                            "positions": {"filename": f"{self._promtail_positions}"},
+                            "scrape_configs": [
+                                {
+                                    "job_name": "loki",
+                                    "loki_push_api": {
+                                        "server": {
+                                            "http_listen_port": self._http_listen_port,
+                                            "grpc_listen_port": self._grpc_listen_port,
+                                        },
                                     },
-                                },
-                            }
-                        ],
-                    }
-                ]
+                                }
+                            ],
+                        }
+                    ]
+                }
             }
-        }
+
+        return {"loki": {}}
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
