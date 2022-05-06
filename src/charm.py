@@ -309,31 +309,31 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        if self.model.relations["logging-provider"]:
-            return {
-                "loki": {
-                    "configs": [
-                        {
-                            "name": "promtail",
-                            "clients": self._loki_consumer.loki_endpoints,
-                            "positions": {"filename": f"{self._promtail_positions}"},
-                            "scrape_configs": [
-                                {
-                                    "job_name": "loki",
-                                    "loki_push_api": {
-                                        "server": {
-                                            "http_listen_port": self._http_listen_port,
-                                            "grpc_listen_port": self._grpc_listen_port,
-                                        },
-                                    },
-                                }
-                            ],
-                        }
-                    ]
-                }
-            }
+        if not self._loki_consumer.loki_endpoints:
+            return {"loki": {}}
 
-        return {"loki": {}}
+        return {
+            "loki": {
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": self._loki_consumer.loki_endpoints,
+                        "positions": {"filename": f"{self._promtail_positions}"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": self._http_listen_port,
+                                        "grpc_listen_port": self._grpc_listen_port,
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
