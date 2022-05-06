@@ -4,20 +4,18 @@
 import json
 import unittest
 from typing import Any, Dict
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
+import ops.testing
 import responses
 import yaml
-from charms.loki_k8s.v0.loki_push_api import (
-    LokiPushApiEndpointDeparted,
-    LokiPushApiEndpointJoined,
-)
 from deepdiff import DeepDiff  # type: ignore
-from ops.framework import Handle
 from ops.model import ActiveStatus, BlockedStatus, Container
 from ops.testing import Harness
 
 from charm import GrafanaAgentOperatorCharm
+
+ops.testing.SIMULATE_CAN_CONNECT = True
 
 SCRAPE_METADATA = {
     "model": "consumer-model",
@@ -85,6 +83,7 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     def test_remote_write_configuration(self):
+        self.harness.set_can_connect("agent", True)
         responses.add(
             responses.POST,
             "http://localhost/-/reload",
@@ -165,6 +164,7 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     def test_scrape_without_remote_write_configuration(self):
+        self.harness.set_can_connect("agent", True)
         agent_container = self.harness.charm.unit.get_container("agent")
 
         responses.add(
@@ -205,61 +205,6 @@ class TestCharm(unittest.TestCase):
         expected = "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
-    @responses.activate
-    def test__on_loki_push_api_endpoint_joined(self):
-        """Test Loki config is in config file when LokiPushApiEndpointJoined is fired."""
-        agent_container = self.harness.charm.unit.get_container("agent")
-
-        self.harness.charm._loki_consumer = Mock()
-        self.harness.charm._loki_consumer.loki_endpoints = [
-            {"url": "http://loki:3100:/loki/api/v1/push"}
-        ]
-
-        self.harness.add_relation("logging-provider", "otherapp")
-        handle = Handle(None, "kind", "Key")
-        event = LokiPushApiEndpointJoined(handle)
-        self.harness.charm._on_loki_push_api_endpoint_joined(event)
-
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
-
-        expected = {
-            "configs": [
-                {
-                    "name": "promtail",
-                    "clients": [{"url": "http://loki:3100:/loki/api/v1/push"}],
-                    "positions": {"filename": "/tmp/positions.yaml"},
-                    "scrape_configs": [
-                        {
-                            "job_name": "loki",
-                            "loki_push_api": {
-                                "server": {
-                                    "http_listen_port": 3500,
-                                    "grpc_listen_port": 3600,
-                                },
-                            },
-                        }
-                    ],
-                }
-            ]
-        }
-        self.assertDictEqual(config["loki"], expected)
-
-    @responses.activate
-    def test__on_loki_push_api_endpoint_departed(self):
-        """Test Loki config is not in config file when LokiPushApiEndpointDeparted is fired."""
-        agent_container = self.harness.charm.unit.get_container("agent")
-
-        self.harness.charm._loki_consumer = Mock()
-        self.harness.charm._loki_consumer.loki_push_api = "http://loki:3100:/loki/api/v1/push"
-
-        handle = Handle(None, "kind", "Key")
-        event = LokiPushApiEndpointDeparted(handle)
-        self.harness.charm._on_loki_push_api_endpoint_departed(event)
-
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
-
-        self.assertTrue(config["loki"] == {})
-
     # Leaving this test here as we need to use it again when we figure out how to
     # fix _reload_config.
 
@@ -269,3 +214,47 @@ class TestCharm(unittest.TestCase):
     #     self.assertEqual(
     #         self.harness.charm.unit.status, BlockedStatus("could not reload configuration")
     #     )
+
+    def test_loki_config_with_without_loki_endpoints(self):
+        self.harness.set_can_connect("agent", True)
+        rel_id = self.harness.add_relation("logging-consumer", "loki")
+
+        self.harness.add_relation_unit(rel_id, "loki/0")
+        endpoint0 = json.dumps({"url": "http://loki0:3100:/loki/api/v1/push"})
+        self.harness.update_relation_data(rel_id, "loki/0", {"endpoint": endpoint0})
+
+        self.harness.add_relation_unit(rel_id, "loki/1")
+        endpoint1 = json.dumps({"url": "http://loki1:3100:/loki/api/v1/push"})
+        self.harness.update_relation_data(rel_id, "loki/1", {"endpoint": endpoint1})
+
+        expected = {
+            "loki": {
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": [
+                            {"url": "http://loki0:3100:/loki/api/v1/push"},
+                            {"url": "http://loki1:3100:/loki/api/v1/push"},
+                        ],
+                        "positions": {"filename": "/tmp/positions.yaml"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": 3500,
+                                        "grpc_listen_port": 3600,
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        self.assertEqual(
+            DeepDiff(expected, self.harness.charm._loki_config(), ignore_order=True), {}
+        )
+
+        self.harness.remove_relation(rel_id)
+        self.assertEqual({"loki": {}}, self.harness.charm._loki_config())
