@@ -22,7 +22,7 @@ from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import PathError
+from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -193,6 +193,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
+        except APIError as e:
+            self.unit.status = WaitingStatus(str(e))
 
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
@@ -213,7 +215,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
         config.update(self._integrations_config())
         config.update(self._prometheus_config())
         config.update(self._loki_config())
-
         return config
 
     def _server_config(self) -> dict:
@@ -310,31 +311,31 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        if self.model.relations["logging-provider"]:
-            return {
-                "loki": {
-                    "configs": [
-                        {
-                            "name": "promtail",
-                            "clients": self._loki_consumer.loki_endpoints,
-                            "positions": {"filename": f"{self._promtail_positions}"},
-                            "scrape_configs": [
-                                {
-                                    "job_name": "loki",
-                                    "loki_push_api": {
-                                        "server": {
-                                            "http_listen_port": self._http_listen_port,
-                                            "grpc_listen_port": self._grpc_listen_port,
-                                        },
-                                    },
-                                }
-                            ],
-                        }
-                    ]
-                }
-            }
+        if not self._loki_consumer.loki_endpoints:
+            return {"loki": {}}
 
-        return {"loki": {}}
+        return {
+            "loki": {
+                "configs": [
+                    {
+                        "name": "promtail",
+                        "clients": self._loki_consumer.loki_endpoints,
+                        "positions": {"filename": f"{self._promtail_positions}"},
+                        "scrape_configs": [
+                            {
+                                "job_name": "loki",
+                                "loki_push_api": {
+                                    "server": {
+                                        "http_listen_port": self._http_listen_port,
+                                        "grpc_listen_port": self._grpc_listen_port,
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
