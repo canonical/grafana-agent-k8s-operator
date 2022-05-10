@@ -22,7 +22,7 @@ from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import PathError
+from ops.pebble import PathError, APIError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -193,6 +193,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
+        except APIError as e:
+            self.unit.status = WaitingStatus(str(e))
 
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
