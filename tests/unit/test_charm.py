@@ -80,10 +80,10 @@ class TestCharm(unittest.TestCase):
         self.harness.set_model_info(name="lma", uuid="1234567890")
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("agent")
 
     @responses.activate
     def test_remote_write_configuration(self):
-        self.harness.set_can_connect("agent", True)
         responses.add(
             responses.POST,
             "http://localhost/-/reload",
@@ -164,7 +164,6 @@ class TestCharm(unittest.TestCase):
 
     @responses.activate
     def test_scrape_without_remote_write_configuration(self):
-        self.harness.set_can_connect("agent", True)
         agent_container = self.harness.charm.unit.get_container("agent")
 
         responses.add(
@@ -215,17 +214,13 @@ class TestCharm(unittest.TestCase):
     #         self.harness.charm.unit.status, BlockedStatus("could not reload configuration")
     #     )
 
-    def test_loki_config_with_without_loki_endpoints(self):
-        self.harness.set_can_connect("agent", True)
+    def test_loki_config_with_and_without_loki_endpoints(self):
         rel_id = self.harness.add_relation("logging-consumer", "loki")
 
-        self.harness.add_relation_unit(rel_id, "loki/0")
-        endpoint0 = json.dumps({"url": "http://loki0:3100:/loki/api/v1/push"})
-        self.harness.update_relation_data(rel_id, "loki/0", {"endpoint": endpoint0})
-
-        self.harness.add_relation_unit(rel_id, "loki/1")
-        endpoint1 = json.dumps({"url": "http://loki1:3100:/loki/api/v1/push"})
-        self.harness.update_relation_data(rel_id, "loki/1", {"endpoint": endpoint1})
+        for u in range(2):
+            self.harness.add_relation_unit(rel_id, f"loki/{u}")
+            endpoint = json.dumps({"url": f"http://loki{u}:3100:/loki/api/v1/push"})
+            self.harness.update_relation_data(rel_id, f"loki/{u}", {"endpoint": endpoint})
 
         expected = {
             "loki": {
