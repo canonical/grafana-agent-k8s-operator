@@ -1,7 +1,23 @@
 # Grafana agent operator for Kubernetes
 
 ## Description
-[Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
+[Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for
+sending metrics, logs, and trace data to the opinionated Grafana observability
+stack.
+
+As a single entry point to the observability stack, the grafana agent charm
+brings several conveniences when deployed inside a monitored cluster:
+
+- Charms are related to the grafana agent charm, instead of to prometheus and
+  loki individually. In typical deployments this would reduce the number of
+  cross-model relations that would have been otherwise needed.
+- Conversion from scraping to remote writing: grafana agent would collect
+  telemetry inside the cluster network and _push_ it to the COS cluster (via
+  `loki_push_api` and `prometheus_remote_write`), which simplifies firewall
+  configuration, as only outgoing connections would need to be established.
+
+See [deployment scenarios](https://github.com/canonical/grafana-agent-k8s-operator/blob/main/INTEGRATING.md#deployment-scenarios)
+for further detail.
 
 ## Usage
 
