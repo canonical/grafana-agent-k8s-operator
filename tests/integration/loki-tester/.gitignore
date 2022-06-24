@@ -1,9 +1,7 @@
 venv/
 build/
 *.charm
+
 .coverage
 __pycache__/
 *.py[cod]
-.tox
-.idea/
-tests/integration/*-tester/lib/
