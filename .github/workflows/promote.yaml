@@ -13,8 +13,8 @@ on:
         type: choice
         description: Channel to promote from
         options:
-          - beta
           - edge
+          - beta
 
 jobs:
   promote:
@@ -27,5 +27,5 @@ jobs:
         with:
           credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          destination-channel: ${{ github.event.inputs.destination-channel }}
-          origin-channel: ${{ github.event.inputs.origin-channel }}
+          destination-channel: ${{ github.event.inputs.promote-to }}
+          origin-channel: ${{ github.event.inputs.promote-from }}
