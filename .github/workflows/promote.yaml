@@ -1,0 +1,31 @@
+name: Promote Charm
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote-to:
+        type: choice
+        description: Channel to promote to
+        options:
+          - beta
+          - stable
+      promote-from:
+        type: choice
+        description: Channel to promote from
+        options:
+          - beta
+          - edge
+
+jobs:
+  promote:
+    name: Promote Charm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Promote Charm
+        uses: canonical/charming-actions/release-charm@1.0.3
+        with:
+          credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          destination-channel: ${{ github.event.inputs.destination-channel }}
+          origin-channel: ${{ github.event.inputs.origin-channel }}
