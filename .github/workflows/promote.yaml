@@ -8,6 +8,7 @@ on:
         description: Channel to promote to
         options:
           - beta
+          - candidate
           - stable
       promote-from:
         type: choice
@@ -15,6 +16,7 @@ on:
         options:
           - edge
           - beta
+          - candidate
 
 jobs:
   promote:
