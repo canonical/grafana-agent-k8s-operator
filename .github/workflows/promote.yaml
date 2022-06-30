@@ -34,5 +34,5 @@ jobs:
         with:
           credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          destination-channel: ${{ env.promote-to }}
-          origin-channel: ${{ github.event.inputs.promote-from }}
+          destination-channel: latest/${{ env.promote-to }}
+          origin-channel: latest/${{ github.event.inputs.promote-from }}
