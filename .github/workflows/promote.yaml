@@ -3,13 +3,13 @@ name: Promote Charm
 on:
   workflow_dispatch:
     inputs:
-      promote-from:
+      promotion:
         type: choice
         description: Channel to promote from
         options:
-          - edge
-          - beta
-          - candidate
+          - edge -> beta
+          - beta -> candidate
+          - candidate -> stable
 
 jobs:
   promote:
@@ -20,19 +20,23 @@ jobs:
         uses: actions/checkout@v2
       - name: Set target channel
         env:
-          PROMOTE_FROM: ${{ github.event.inputs.promote-from }}
+          PROMOTE_FROM: ${{ github.event.inputs.promotion }}
         run: |
-          if [ ${PROMOTE_FROM} == "edge" ]; then
+          if [ ${PROMOTE_FROM} == "edge -> beta" ]; then
+            echo "promote-from=edge" >> ${GITHUB_ENV}
             echo "promote-to=beta" >> ${GITHUB_ENV}
-          elif [ ${PROMOTE_FROM} == "beta" ]; then
+          elif [ ${PROMOTE_FROM} == "beta -> candidate" ]; then
+            echo "promote-from=beta" >> ${GITHUB_ENV}
             echo "promote-to=candidate" >> ${GITHUB_ENV}
-          elif [ ${PROMOTE_FROM} == "candidate" ]; then
+          elif [ ${PROMOTE_FROM} == "candidate -> stable" ]; then
+            echo "promote-from=candidate" >> ${GITHUB_ENV}
             echo "promote-to=stable" >> ${GITHUB_ENV}
           fi
       - name: Promote Charm
         uses: canonical/charming-actions/release-charm@1.0.3
         with:
-          credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
+          credentials: ${{ secrets.CHARMHUB_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           destination-channel: latest/${{ env.promote-to }}
-          origin-channel: latest/${{ github.event.inputs.promote-from }}
+          origin-channel: latest/${{ env.promote-from }}
+          charmcraft-channel: latest/stable
