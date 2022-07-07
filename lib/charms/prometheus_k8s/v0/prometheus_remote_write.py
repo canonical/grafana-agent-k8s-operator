@@ -15,6 +15,7 @@ import logging
 import os
 import platform
 import re
+import socket
 import subprocess
 from collections import OrderedDict
 from pathlib import Path
@@ -23,7 +24,7 @@ from typing import Dict, List, Optional, Union
 import yaml
 from ops.charm import CharmBase, HookEvent, RelationEvent, RelationMeta, RelationRole
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
-from ops.model import ModelError, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "f783823fa75f4b7880eb70f2077ec259"
@@ -33,7 +34,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 5
 
 
 logger = logging.getLogger(__name__)
@@ -518,7 +519,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            logger.warning("path does not exist: %s", path)
+            logger.debug("Alert rules path does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -921,8 +922,7 @@ class PrometheusRemoteWriteProvider(Object):
             endpoint_address: The URL host for your remote_write endpoint as reachable
                 from the client. This might be either the pod IP, or you might want to
                 expose an address routable from outside the Kubernetes cluster, e.g., the
-                host address of an Ingress. If not provided, it defaults to the relation's
-                `bind_address`.
+                host address of an Ingress. If not provided, it defaults to the unit's FQDN.
             endpoint_port: The URL port for your remote_write endpoint. Defaults to `9090`.
             endpoint_path: The URL path for your remote_write endpoint.
                 Defaults to `/api/v1/write`.
@@ -953,12 +953,15 @@ class PrometheusRemoteWriteProvider(Object):
         on_relation = self._charm.on[self._relation_name]
         self.framework.observe(
             on_relation.relation_created,
-            self._set_endpoint_on_relation_change,
+            self._on_relation_change,
         )
         self.framework.observe(
             on_relation.relation_joined,
-            self._set_endpoint_on_relation_change,
+            self._on_relation_change,
         )
+
+    def _on_relation_change(self, event: RelationEvent) -> None:
+        self.update_endpoint(event.relation)
 
     def update_endpoint(self, relation: Relation = None) -> None:
         """Triggers programmatically the update of the relation data.
@@ -979,19 +982,13 @@ class PrometheusRemoteWriteProvider(Object):
         for relation in relations:
             self._set_endpoint_on_relation(relation)
 
-    def _set_endpoint_on_relation_change(self, event: RelationEvent) -> None:
-        self._set_endpoint_on_relation(event.relation)
-
     def _set_endpoint_on_relation(self, relation: Relation) -> None:
-        """Set the the remote_write endpoint on relations.
+        """Set the remote_write endpoint on relations.
 
         Args:
-            relation: Optional relation. If provided, only this relation will be
-                updated. Otherwise, all instances of the `prometheus_remote_write`
-                relation managed by this `PrometheusRemoteWriteProvider` will be
-                updated.
+            relation: The relation whose data to update.
         """
-        address = self._endpoint_address or self._get_relation_bind_address()
+        address = self._endpoint_address or socket.getfqdn()
 
         path = self._endpoint_path or ""
         if path and not path.startswith("/"):
@@ -1006,10 +1003,6 @@ class PrometheusRemoteWriteProvider(Object):
                 "url": endpoint_url,
             }
         )
-
-    def _get_relation_bind_address(self):
-        network_binding = self._charm.model.get_binding(self._relation_name)
-        return network_binding.network.bind_address
 
     def alerts(self) -> dict:
         """Fetch alert rules from all relations.
@@ -1043,7 +1036,7 @@ class PrometheusRemoteWriteProvider(Object):
         """
         alerts = {}  # type: Dict[str, dict] # mapping b/w juju identifiers and alert rule files
         for relation in self._charm.model.relations[self._relation_name]:
-            if not relation.units:
+            if not relation.units or not relation.app:
                 continue
 
             alert_rules = json.loads(relation.data[relation.app].get("alert_rules", "{}"))
@@ -1052,7 +1045,7 @@ class PrometheusRemoteWriteProvider(Object):
                 continue
 
             if "groups" not in alert_rules:
-                logger.warning("No alert groups were found in relation data")
+                logger.debug("No alert groups were found in relation data")
                 continue
             # Construct an ID based on what's in the alert rules
             for group in alert_rules["groups"]:
@@ -1136,7 +1129,7 @@ class PromqlTransformer:
         try:
             return self._exec(args)
         except Exception as e:
-            logger.debug('Applying the expression failed: "{}", falling back to the original', e)
+            logger.debug('Applying the expression failed: "%s", falling back to the original', e)
             return expression
 
     def _get_transformer_path(self) -> Optional[Path]:
@@ -1144,13 +1137,13 @@ class PromqlTransformer:
         arch = "amd64" if arch == "x86_64" else arch
         res = "promql-transform-{}".format(arch)
         try:
-            path = self._charm.model.resources.fetch(res)
-            os.chmod(path, 0o777)
+            path = Path(res).resolve()
+            path.chmod(0o777)
             return path
         except NotImplementedError:
             logger.debug("System lacks support for chmod")
-        except (NameError, ModelError):
-            logger.debug('No resource available for the platform "{}"'.format(arch))
+        except FileNotFoundError:
+            logger.debug('Could not locate promql transform at: "{}"'.format(res))
         return None
 
     def _exec(self, cmd):
