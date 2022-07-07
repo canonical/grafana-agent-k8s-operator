@@ -17,7 +17,10 @@ from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServ
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from charms.prometheus_k8s.v0.prometheus_scrape import (
+    MetricsEndpointConsumer,
+    MetricsEndpointProvider,
+)
 from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase
 from ops.main import main
@@ -69,6 +72,13 @@ class GrafanaAgentOperatorCharm(CharmBase):
             shutil.copytree(
                 self._metrics_rules_src_path, self._metrics_rules_dest_path, dirs_exist_ok=True
             )
+
+        # Self-monitoring
+        self._scraping = MetricsEndpointProvider(
+            self,
+            relation_name="self-metrics-endpoint",
+            jobs=[{"static_configs": [{"targets": ["*:80"]}]}],
+        )
         self._remote_write = PrometheusRemoteWriteConsumer(
             self, alert_rules_path=self._metrics_rules_dest_path
         )

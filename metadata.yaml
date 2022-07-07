@@ -35,6 +35,8 @@ requires:
     interface: loki_push_api
 
 provides:
+  self-metrics-endpoint:
+    interface: prometheus_scrape
   logging-provider:
     interface: loki_push_api
 
