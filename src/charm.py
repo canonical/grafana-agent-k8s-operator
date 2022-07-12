@@ -12,6 +12,7 @@ import shutil
 from typing import Any, Dict
 
 import yaml
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
@@ -78,6 +79,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self,
             relation_name="self-metrics-endpoint",
             jobs=[{"static_configs": [{"targets": ["*:80"]}]}],
+        )
+        self._grafana_dashboards = GrafanaDashboardProvider(
+            self, relation_name="grafana-dashboard"
         )
         self._remote_write = PrometheusRemoteWriteConsumer(
             self, alert_rules_path=self._metrics_rules_dest_path
