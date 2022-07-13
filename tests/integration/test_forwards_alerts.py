@@ -62,11 +62,7 @@ async def test_relate_to_tester_and_check_alerts(ops_test, loki_tester_charm):
     )
 
     loki_alerts = await loki_rules(ops_test, loki_name)
+    assert len(loki_alerts) == 1
+
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
-
-    import pprint
-
-    logger.warning("LOKI RULES:")
-    logger.warning(pprint.pformat(loki_alerts))
-    logger.warning("PROM RULES:")
-    logger.warning(pprint.pformat(prometheus_alerts))
+    assert len(prometheus_alerts) == 1

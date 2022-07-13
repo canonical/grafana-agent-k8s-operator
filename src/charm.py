@@ -9,7 +9,6 @@ import os
 import pathlib
 import shutil
 from collections import namedtuple
-from types import MethodType
 from typing import Any, Callable, Dict
 
 import yaml
@@ -38,20 +37,6 @@ METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
-
-class Partial:
-    """Create a `functools.partial` which is actually `Callable`."""
-
-    def __init__(self, func, *args, **kwargs):
-        self.func = func
-        self.args = args
-        self.kwargs = kwargs
-
-    def call(self, *args):
-        """Call the partially bound function with additional args (just the event)."""
-        return self.func(*args, *self.args, **self.kwargs)
-
-
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
 
@@ -75,11 +60,11 @@ class GrafanaAgentOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
 
-        self._loki_rules_paths = RulesMapping(
+        self.loki_rules_paths = RulesMapping(
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
         )
-        self._metrics_rules_paths = RulesMapping(
+        self.metrics_rules_paths = RulesMapping(
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
@@ -92,53 +77,37 @@ class GrafanaAgentOperatorCharm(CharmBase):
             ],
         )
 
-        for rules in [self._loki_rules_paths, self._metrics_rules_paths]:
+        for rules in [self.loki_rules_paths, self.metrics_rules_paths]:
             if not os.path.isdir(rules.dest):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
         self._remote_write = PrometheusRemoteWriteConsumer(
-            self, alert_rules_path=self._metrics_rules_paths.dest
+            self, alert_rules_path=self.metrics_rules_paths.dest
         )
         self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(
-            self, relation_name="logging-consumer", alert_rules_path=self._loki_rules_paths.dest
+            self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
         )
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
 
-        self.metrics_alerts = MethodType(
-            Partial(
-                self.update_alerts_rules,
-                alerts_func=self._scrape.alerts,
-                reload_func=self._remote_write.reload_alerts,
-                mapping=self._metrics_rules_paths,
-            ).call,
-            self,
-        )
-
-        self.loki_alerts = MethodType(
-            Partial(
-                self.update_alerts_rules,
-                alerts_func=self._loki_provider.alerts,
-                reload_func=self._loki_consumer._reinitialize_alert_rules,
-                mapping=self._loki_rules_paths,
-            ).call,
-            self,
-        )
-
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
-        self.framework.observe(self.on.upgrade_charm, self.metrics_alerts)
-        self.framework.observe(self.on.upgrade_charm, self.loki_alerts)
+        self.framework.observe(self.on.upgrade_charm, self._metrics_alerts)
+        self.framework.observe(self.on.upgrade_charm, self._loki_alerts)
 
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
-        self.framework.observe(self._remote_write.on.endpoints_changed, self.metrics_alerts)
+        self.framework.observe(self._remote_write.on.endpoints_changed, self._metrics_alerts)
 
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
-        self.framework.observe(self._scrape.on.targets_changed, self.metrics_alerts)
+        self.framework.observe(self._scrape.on.targets_changed, self._metrics_alerts)
+
+        self.framework.observe(
+            self._loki_provider.on.loki_push_api_alert_rules_changed, self._loki_alerts
+        )
 
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
@@ -149,11 +118,35 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._on_loki_push_api_endpoint_departed,
         )
 
+    def _metrics_alerts(self, event):
+        self.update_alerts_rules(
+            event,
+            alerts_func=self._scrape.alerts,
+            reload_func=self._remote_write.reload_alerts,
+            mapping=self.metrics_rules_paths,
+        )
+
+    def _loki_alerts(self, event):
+        self.update_alerts_rules(
+            event,
+            alerts_func=self._loki_provider.alerts,
+            reload_func=self._loki_consumer._reinitialize_alert_rules,
+            mapping=self.loki_rules_paths,
+        )
+
     def update_alerts_rules(
-        self, _, alerts_func: Callable, reload_func: Callable, mapping: RulesMapping
+        self, _, alerts_func: Any, reload_func: Callable, mapping: RulesMapping
     ):
         """Copy alert rules from relations and save them to disk."""
-        rules = alerts_func()
+        rules = {}
+
+        # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
+        # do the right thing
+        if callable(alerts_func):
+            rules = alerts_func()
+        else:
+            rules = alerts_func
+
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
         for topology_identifier, rule in rules.items():
