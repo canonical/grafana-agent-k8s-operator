@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import loki_rules, prometheus_rules
+from helpers import loki_rules, oci_image, prometheus_rules
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -18,6 +18,7 @@ agent_name = "agent"
 loki_name = "loki"
 loki_tester_name = "loki-tester"
 prometheus_name = "prometheus"
+prometheus_tester_name = "prometheus-tester"
 
 
 @pytest.mark.abort_on_fail
@@ -46,15 +47,15 @@ async def test_relate_to_external_apps(ops_test):
         ops_test.model.deploy("prometheus-k8s", channel="edge", application_name=prometheus_name),
     )
     await asyncio.gather(
-        ops_test.model.add_relation(loki_name, agent_name),
-        ops_test.model.add_relation(prometheus_name, agent_name),
+        ops_test.model.add_relation(f"{loki_name}:logging", agent_name),
+        ops_test.model.add_relation(f"{prometheus_name}:receive-remote-write", agent_name),
     )
     await ops_test.model.wait_for_idle(
         apps=[loki_name, prometheus_name, agent_name], status="active", timeout=300
     )
 
 
-async def test_relate_to_tester_and_check_alerts(ops_test, loki_tester_charm):
+async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_charm):
     await ops_test.model.deploy(loki_tester_charm, application_name=loki_tester_name)
     await ops_test.model.add_relation(agent_name, loki_tester_name)
     await ops_test.model.wait_for_idle(
@@ -64,5 +65,21 @@ async def test_relate_to_tester_and_check_alerts(ops_test, loki_tester_charm):
     loki_alerts = await loki_rules(ops_test, loki_name)
     assert len(loki_alerts) == 1
 
+
+async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus_tester_charm):
+    await ops_test.model.deploy(
+        prometheus_tester_charm,
+        resources={
+            "prometheus-tester-image": oci_image(
+                "./tests/integration/prometheus-tester/metadata.yaml", "prometheus-tester-image"
+            )
+        },
+        application_name=prometheus_tester_name,
+    )
+    await ops_test.model.add_relation(agent_name, prometheus_tester_name)
+    await ops_test.model.wait_for_idle(
+        apps=[prometheus_tester_name, agent_name], status="active", timeout=300
+    )
+
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
-    assert len(prometheus_alerts) == 1
+    assert len(prometheus_alerts) == 2
