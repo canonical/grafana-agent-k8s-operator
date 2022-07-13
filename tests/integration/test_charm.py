@@ -45,4 +45,10 @@ async def test_relating_to_loki(ops_test):
 async def test_relating_to_grafana(ops_test):
     await ops_test.model.deploy("grafana-k8s", channel="edge", application_name="grafana")
     await ops_test.model.add_relation("grafana", "agent:grafana-dashboard")
-    await ops_test.model.wait_for_idle(apps=["loki", "grafana"], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=["agent", "grafana"], status="active", timeout=1000)
+
+
+async def test_relating_to_prometheus(ops_test):
+    await ops_test.model.deploy("prometheus-k8s", channel="edge", application_name="prometheus")
+    await ops_test.model.add_relation("prometheus", "agent:self-metrics-endpoint")
+    await ops_test.model.wait_for_idle(apps=["agent", "prometheus"], status="active", timeout=1000)
