@@ -49,6 +49,6 @@ async def test_relating_to_grafana(ops_test):
 
 
 async def test_relating_to_prometheus(ops_test):
-    await ops_test.model.deploy("prometheus-k8s", channel="edge", application_name="prometheus")
+    await ops_test.model.deploy("prometheus-k8s", channel="edge", application_name="prometheus", trust=True)
     await ops_test.model.add_relation("prometheus", "agent:self-metrics-endpoint")
     await ops_test.model.wait_for_idle(apps=["agent", "prometheus"], status="active", timeout=1000)
