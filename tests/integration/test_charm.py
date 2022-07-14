@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from helpers import get_grafana_dashboards, get_prometheus_rules, get_prometheus_active_targets
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
 
@@ -46,9 +47,28 @@ async def test_relating_to_grafana(ops_test):
     await ops_test.model.deploy("grafana-k8s", channel="edge", application_name="grafana")
     await ops_test.model.add_relation("grafana", "agent:grafana-dashboard")
     await ops_test.model.wait_for_idle(apps=["agent", "grafana"], status="active", timeout=1000)
+    dashboards = await get_grafana_dashboards(ops_test, "grafana", 0)
+    assert dashboards[0]["title"] == "Grafana Agent"
 
 
 async def test_relating_to_prometheus(ops_test):
-    await ops_test.model.deploy("prometheus-k8s", channel="edge", application_name="prometheus", trust=True)
+    await ops_test.model.deploy(
+        "prometheus-k8s", channel="edge", application_name="prometheus", trust=True
+    )
     await ops_test.model.add_relation("prometheus", "agent:self-metrics-endpoint")
     await ops_test.model.wait_for_idle(apps=["agent", "prometheus"], status="active", timeout=1000)
+    alert_rules_names = [
+        "GrafanaAgentRequestErrors",
+        "GrafanaAgentRequestLatency",
+        "GrafanaAgentUnavailable",
+    ]
+    alert_rules = await get_prometheus_rules(ops_test, "prometheus", 0)
+    assert len(alert_rules) == 3
+    for group in alert_rules:
+        assert group["rules"][0]["name"] in alert_rules_names
+
+    juju_applications = ["agent", "prometheus"]
+    targets = await get_prometheus_active_targets(ops_test, "prometheus", 0)
+    assert len(targets) == 2
+    for target in targets:
+        assert target["labels"]["juju_application"] in juju_applications
