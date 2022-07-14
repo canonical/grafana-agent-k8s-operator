@@ -20,11 +20,13 @@
   },
   "description": "Dashboard for the Grafana Agent Charmed Operator, powered by Juju",
   "editable": true,
+  "fiscalYearStartMonth": 0,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 18,
-  "iteration": 1657656089297,
+  "id": 13,
+  "iteration": 1657829184872,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
       "collapsed": false,
@@ -83,7 +85,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.1.1",
+      "pluginVersion": "8.2.6",
       "targets": [
         {
           "expr": "agent_build_info",
@@ -158,11 +160,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.1.1",
+      "pluginVersion": "8.2.6",
       "targets": [
         {
           "exemplar": true,
-          "expr": "avg(avg_over_time(up[$interval]) * 100)",
+          "expr": "avg(avg_over_time(up{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_application=\"$juju_application\",juju_unit=\"$juju_unit\"}[$interval]) * 100)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -221,11 +223,11 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.1.1",
+      "pluginVersion": "8.2.6",
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(agent_request_duration_seconds_sum) / sum(agent_request_duration_seconds_count)",
+          "expr": "sum(agent_request_duration_seconds_sum{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_application=\"$juju_application\",juju_unit=\"$juju_unit\"}) / sum(agent_request_duration_seconds_count{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_application=\"$juju_application\",juju_unit=\"$juju_unit\"})",
           "interval": "",
           "legendFormat": "",
           "queryType": "randomWalk",
@@ -282,7 +284,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.1.1",
+      "pluginVersion": "8.2.6",
       "targets": [
         {
           "exemplar": true,
@@ -295,20 +297,191 @@
       ],
       "title": "Size (Kb) of messages received",
       "type": "stat"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 2,
+            "pointSize": 10,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-purple",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "id": 65,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "up{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_application=\"$juju_application\",juju_unit=\"$juju_unit\"}",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Upness (stacked)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${prometheusds}",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "Scrapes",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 7,
+      "links": [],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.2.6",
+      "targets": [
+        {
+          "expr": "sum(rate(prometheus_target_interval_length_seconds_count{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_application=\"$juju_application\",juju_unit=\"$juju_unit\"}[5m])) by (interval)",
+          "format": "time_series",
+          "intervalFactor": 2,
+          "legendFormat": "",
+          "refId": "A",
+          "step": 20
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Target Scrapes / 5m",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
-  "schemaVersion": 30,
+  "schemaVersion": 32,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "juju_cos_f3864160-1d20-4757-81bf-8076a847cdbf_prometheus_0",
-          "value": "juju_cos_f3864160-1d20-4757-81bf-8076a847cdbf_prometheus_0"
-        },
         "description": null,
         "error": null,
         "hide": 0,
@@ -325,11 +498,6 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "prometheus-k8s",
-          "value": "prometheus-k8s"
-        },
         "datasource": "${prometheusds}",
         "definition": "label_values(up{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\",juju_application=\"$juju_application\"},juju_unit)",
         "description": null,
@@ -356,11 +524,6 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "prometheus",
-          "value": "prometheus"
-        },
         "datasource": "${prometheusds}",
         "definition": "label_values(up{juju_model=\"$juju_model\",juju_model_uuid=\"$juju_model_uuid\"},juju_application)",
         "description": null,
@@ -387,11 +550,6 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "f3864160-1d20-4757-81bf-8076a847cdbf",
-          "value": "f3864160-1d20-4757-81bf-8076a847cdbf"
-        },
         "datasource": "${prometheusds}",
         "definition": "label_values(up{juju_model=\"$juju_model\"},juju_model_uuid)",
         "description": null,
@@ -431,7 +589,22 @@
         "multi": false,
         "name": "interval",
         "options": [
-          {
+        {
+            "selected": false,
+            "text": "5m",
+            "value": "5m"
+        },
+        {
+            "selected": false,
+            "text": "15m",
+            "value": "15m"
+         },
+         {
+            "selected": false,
+            "text": "30m",
+            "value": "30m"
+         },
+         {
             "selected": true,
             "text": "1h",
             "value": "1h"
@@ -482,18 +655,13 @@
             "value": "180d"
           }
         ],
-        "query": "1h, 3h, 6h, 12h, 1d, 2d, 7d, 30d, 90d, 180d",
+        "query": "5m, 15m, 30m 1h, 3h, 6h, 12h, 1d, 2d, 7d, 30d, 90d, 180d",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "cos",
-          "value": "cos"
-        },
         "datasource": "${prometheusds}",
         "definition": "label_values(up,juju_model)",
         "description": null,
@@ -517,33 +685,6 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
-      },
-      {
-        "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": "${prometheusds}",
-        "definition": "query_result(up{job=~\"$job\"})",
-        "description": null,
-        "error": null,
-        "hide": 0,
-        "includeAll": true,
-        "label": null,
-        "multi": true,
-        "name": "instance",
-        "options": [],
-        "query": {
-          "query": "query_result(up{job=~\"$job\"})",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "/.*instance=\"([^\"]+).*/",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
       }
     ]
   },
