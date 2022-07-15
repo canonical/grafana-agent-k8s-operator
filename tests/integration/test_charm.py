@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import get_grafana_dashboards, get_prometheus_rules, get_prometheus_active_targets
+from helpers import (
+    get_grafana_dashboards,
+    get_prometheus_active_targets,
+    get_prometheus_rules,
+)
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())

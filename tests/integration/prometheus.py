@@ -6,7 +6,6 @@ import logging
 from typing import List, Literal
 
 import aiohttp
-from prometheus_api_client import PrometheusConnect
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,6 @@ class Prometheus:
         # Set a timeout of 5 second - should be sufficient for all the checks here.
         # The default (5 min) prolongs itests unnecessarily.
         self.timeout = aiohttp.ClientTimeout(total=5)
-
 
     async def rules(self, rules_type: Literal["alert", "record"] = None) -> list:
         """Send a GET request to get Prometheus rules.
