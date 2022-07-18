@@ -35,6 +35,10 @@ requires:
     interface: loki_push_api
 
 provides:
+  self-metrics-endpoint:
+    interface: prometheus_scrape
+  grafana-dashboard:
+    interface: grafana_dashboard
   logging-provider:
     interface: loki_push_api
 

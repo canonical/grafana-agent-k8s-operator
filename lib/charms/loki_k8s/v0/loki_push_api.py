@@ -133,9 +133,8 @@ Once these alert rules are sent over relation data, the `LokiPushApiProvider` ob
 stores these files in the directory `/loki/rules` inside the Loki charm container. After
 storing alert rules files, the object will check alert rules by querying Loki API
 endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
-If there are errors with alert rules a `loki_push_api_alert_rules_changed` event will
-be emitted with `event.error=True`, in the other hand if there are no error a
-`loki_push_api_alert_rules_changed` event will be emitted with `event.error=False`
+If there are changes in the alert rules a `loki_push_api_alert_rules_changed` event will
+be emitted with details about the `RelationEvent` which triggered it.
 
 This events should be observed in the charm that uses `LokiPushApiProvider`:
 
@@ -148,15 +147,6 @@ This events should be observed in the charm that uses `LokiPushApiProvider`:
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
-
-    def _loki_push_api_alert_rules_changed(self, event):
-        if event.error:
-            self.unit.status = BlockedStatus(event.message)
-            return False
-
-        ...
-
-        self.unit.status = ActiveStatus()
 ```
 
 
@@ -217,6 +207,13 @@ self.framework.observe(
 ```
 
 The consumer charm can then choose to update its configuration in both situations.
+
+Note that LokiPushApiConsumer does not add any labels automatically on its own. In
+order to better integrate with the Canonical Observability Stack, you may want to configure your
+software to add Juju topology labels. The
+[observability-libs](https://charmhub.io/observability-libs) library can be used to get topology
+labels in charm code. See :func:`LogProxyConsumer._scrape_configs` for an example of how
+to do this with promtail.
 
 ## LogProxyConsumer Library Usage
 
@@ -329,6 +326,9 @@ juju deploy \
     ./your_charm.charm \
     --resource promtail-bin=/tmp/promtail-linux-amd64
 ```
+
+If a different resource name is used, it can be specified with the `promtail_resource_name`
+argument to the `LogProxyConsumer` constructor.
 
 The object can emit a `PromtailDigestError` event:
 
@@ -450,8 +450,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Union, cast
 from urllib import request
-from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.error import HTTPError
 
 import yaml
 from ops.charm import (
@@ -477,7 +476,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -1157,21 +1156,52 @@ class LokiPushApiEndpointJoined(EventBase):
 
 
 class LokiPushApiAlertRulesChanged(EventBase):
-    """Event emitted if there is an error with Alert Rules."""
+    """Event emitted if there is a change in the alert rules."""
 
-    def __init__(self, handle, error: bool = False, message: str = ""):
+    def __init__(self, handle, relation, relation_id, app=None, unit=None):
+        """Pretend we are almost like a RelationEvent.
+
+        Fields to serialize:
+            {
+                "relation_name": <a relation name as a string>,
+                "relation_id": <a relation id, optional>,
+                "app_name": <app name as a string>,
+                "unit_name": <unit name as a string>
+            }
+
+        In this way, we can transparently use `RelationEvent.snapshot()` to pass
+        it back if we need to log it.
+        """
         super().__init__(handle)
-        self.message = message
-        self.error = error
+        self.relation = relation
+        self.relation_id = relation_id
+        self.app = app
+        self.unit = unit
 
     def snapshot(self) -> Dict:
-        """Save grafana source information."""
-        return {"error": self.error, "message": self.message}
+        """Save event information."""
+        snapshot = {"relation_name": self.relation.name, "relation_id": self.relation.id}
+        if self.app:
+            snapshot["app_name"] = self.app.name
+        if self.unit:
+            snapshot["unit_name"] = self.unit.name
+        return snapshot
 
-    def restore(self, snapshot):
-        """Restore grafana source information."""
-        self.message = snapshot["message"]
-        self.error = snapshot["error"]
+    def restore(self, snapshot: dict):
+        """Restore event information."""
+        self.relation = self.framework.model.get_relation(
+            snapshot["relation_name"], snapshot["relation_id"]
+        )
+        app_name = snapshot.get("app_name")
+        if app_name:
+            self.app = self.framework.model.get_app(app_name)
+        else:
+            self.app = None
+        unit_name = snapshot.get("unit_name")
+        if unit_name:
+            self.unit = self.framework.model.get_unit(unit_name)
+        else:
+            self.unit = None
 
 
 class LokiPushApiEvents(ObjectEvents):
@@ -1193,7 +1223,6 @@ class LokiPushApiProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         *,
         port: Union[str, int] = 3100,
-        rules_dir="/loki/rules",
         scheme: str = "http",
         address: str = "localhost",
         path: str = "loki/api/v1/push",
@@ -1208,8 +1237,6 @@ class LokiPushApiProvider(Object):
                 It is strongly advised not to change the default, so that people
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
-
-            rules_dir: path in workload container where rule files are to be stored.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1233,21 +1260,6 @@ class LokiPushApiProvider(Object):
         self.address = address
         self.path = path
 
-        # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
-        # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
-        # https://grafana.com/docs/loki/latest/rules/#ruler-storage
-        tenant_id = "fake"
-        self._rules_dir = os.path.join(rules_dir, tenant_id)
-        # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
-        # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
-        if self.container.can_connect():
-            try:
-                self.container.make_dir(self._rules_dir, make_parents=True)
-            except (FileNotFoundError, ProtocolError, PathError):
-                logger.debug("Could not create loki directory.")
-            except Exception as e:
-                logger.debug("Could create loki directory: %s", e)
-
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
         self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
@@ -1257,8 +1269,17 @@ class LokiPushApiProvider(Object):
 
     def _on_lifecycle_event(self, _):
         # Upgrade event or other charm-level event
+        should_update = False
         for relation in self._charm.model.relations[self._relation_name]:
-            self._process_logging_relation_changed(relation)
+            # Don't accidentally flip a True result back.
+            should_update = should_update or self._process_logging_relation_changed(relation)
+        if should_update:
+            # We don't have a RelationEvent, so build it up by hand
+            first_rel = self._charm.model.relations[self._relation_name][0]
+            self.on.loki_push_api_alert_rules_changed.emit(
+                relation=first_rel,
+                relation_id=first_rel.id,
+            )
 
     def _on_logging_relation_joined(self, event: RelationJoinedEvent):
         """Set basic data on relation joins.
@@ -1284,7 +1305,14 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        self._process_logging_relation_changed(event.relation)
+        should_update = self._process_logging_relation_changed(event.relation)
+        if should_update:
+            self.on.loki_push_api_alert_rules_changed.emit(
+                relation=event.relation,
+                relation_id=event.relation.id,
+                app=self._charm.app,
+                unit=self._charm.unit,
+            )
 
     def _on_logging_relation_broken(self, event: RelationBrokenEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1293,8 +1321,12 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._regenerate_alert_rules()
-        self._check_alert_rules()
+        self.on.loki_push_api_alert_rules_changed.emit(
+            relation=event.relation,
+            relation_id=event.relation.id,
+            app=self._charm.app,
+            unit=self._charm.unit,
+        )
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1303,27 +1335,44 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._update_alert_rules(event.relation)
-        self._check_alert_rules()
+        self.on.loki_push_api_alert_rules_changed.emit(
+            relation=event.relation,
+            relation_id=event.relation.id,
+            app=self._charm.app,
+            unit=self._charm.unit,
+        )
 
-    def _process_logging_relation_changed(self, relation: Relation):
+    def _should_update_alert_rules(self, relation) -> bool:
+        """Determine whether alert rules should be regenerated.
+
+        If there are alert rules in the relation data bag, tell the charm
+        whether or not to regenerate them based on the boolean returned here.
+        """
+        if relation.data.get(relation.app).get("alert_rules", None) is not None:
+            return True
+        return False
+
+    def _process_logging_relation_changed(self, relation: Relation) -> bool:
         """Handle changes in related consumers.
 
         Anytime there are changes in relations between Loki
         and its consumers charms, Loki set the `loki_push_api`
-        into the relation data.
+        into the relation data. Set the endpoint building
+        appropriately, and if there are alert rules present in
+        the relation, let the caller know.
         Besides Loki generates alert rules files based what
         consumer charms forwards,
 
         Args:
             relation: the `Relation` instance to update.
+
+        Returns:
+            A boolean indicating whether an event should be emitted so we
+            only emit one on lifecycle events
         """
-        relation.data[self._charm.unit]["public_address"] = (
-            str(self._charm.model.get_binding(relation).network.bind_address) or ""
-        )
+        relation.data[self._charm.unit]["public_address"] = socket.getfqdn() or ""
         self.update_endpoint(relation=relation)
-        self._update_alert_rules(relation)
-        self._check_alert_rules()
+        return self._should_update_alert_rules(relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1337,19 +1386,6 @@ class LokiPushApiProvider(Object):
             promtail_binaries[arch] = info
 
         return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
-
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = ""
-        if self._charm.model.relations[self._relation_name]:
-            relation = self._charm.model.relations[self._relation_name][0]
-            bind_address = relation.data[self._charm.unit].get("public_address", "")
-
-        if bind_address:
-            return str(bind_address)
-        logger.warning("No address found")
-        return ""
 
     def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
         """Triggers programmatically the update of endpoint in unit relation data.
@@ -1392,101 +1428,7 @@ class LokiPushApiProvider(Object):
         Returns: str
         """
         endpoint = "/loki/api/v1/push"
-        return {"url": urljoin(url, endpoint)}
-
-    def _regenerate_alert_rules(self):
-        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-
-    def _update_alert_rules(self, relation):
-        if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules()
-
-    def _generate_alert_rules_files(self, container: Container) -> None:
-        """Generate and upload alert rules files.
-
-        Args:
-            container: Container into which alert rules files are going to be uploaded
-        """
-        file_mappings = {}
-
-        for identifier, alert_rules in self.alerts.items():
-            rules = yaml.dump({"groups": alert_rules["groups"]})
-            file_mappings["{}_alert.rules".format(identifier)] = rules
-
-        if not container.can_connect():
-            logger.debug("Cannot connect to container to refresh alert rule files!")
-            return
-
-        self._remove_alert_rules_files(container)
-
-        for filename, content in file_mappings.items():
-            path = os.path.join(self._rules_dir, filename)
-            container.push(path, content, make_dirs=True)
-        logger.debug("Saved alert rules to disk")
-
-    def _remove_alert_rules_files(self, container: Container) -> None:
-        """Remove alert rules files from workload container.
-
-        Args:
-            container: Container which has alert rules files to be deleted
-        """
-        if not container.can_connect():
-            logger.debug("Cannot connect to container to remove alert rule files!")
-            return
-
-        files = container.list_files(self._rules_dir)
-        for f in files:
-            container.remove_path(f.path)
-
-    def _check_alert_rules(self):
-        """Check alert rules using Loki API.
-
-        Returns: bool
-
-        Emits:
-            loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
-        """
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
-        req = request.Request(url)
-        try:
-            request.urlopen(req, timeout=2.0)
-        except HTTPError as e:
-            msg = e.read().decode("utf-8")
-
-            if e.code == 404 and "no rule groups found" in msg:
-                log_msg = "Checking alert rules: No rule groups found"
-                logger.debug(log_msg)
-                self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return
-
-            message = "{} - {}".format(e.code, e.msg)  # type: ignore
-            logger.error("Checking alert rules: %s", message)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
-            )
-            return
-        except URLError as e:
-            logger.error("Checking alert rules: %s", e.reason)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Error connecting to Loki. Check juju debug-log.",
-            )
-            return
-        except Exception as e:
-            logger.error("Checking alert rules: %s", e)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Error connecting to Loki. Check juju debug-log.",
-            )
-            return
-        else:
-            log_msg = "Checking alert rules: Ok"
-            logger.debug(log_msg)
-            self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return
+        return {"url": url.rstrip("/") + endpoint}
 
     @property
     def alerts(self) -> dict:
@@ -1618,7 +1560,7 @@ class ConsumerBase(Object):
 
         for relation in self._charm.model.relations[self._relation_name]:
             for unit in relation.units:
-                if unit.app is self._charm.app:
+                if unit.app == self._charm.app:
                     # This is a peer unit
                     continue
 
@@ -1786,7 +1728,7 @@ class MultipleContainersFoundError(Exception):
 
 
 class PromtailDigestError(EventBase):
-    """Event emitted when there is an error with the Promtail binary file."""
+    """Event emitted when there is an error with Promtail initialization."""
 
     def __init__(self, handle, message):
         super().__init__(handle)
@@ -1845,6 +1787,8 @@ class LogProxyConsumer(ConsumerBase):
             The alert rules are automatically updated on charm upgrade.
         recursive: Whether to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
+        promtail_resource_name: An optional promtail resource name from metadata
+            if it has been modified and attached
 
     Raises:
         RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1868,7 +1812,8 @@ class LogProxyConsumer(ConsumerBase):
         syslog_port: int = 1514,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
-        container_name: Optional[str] = None,
+        container_name: str = "",
+        promtail_resource_name: Optional[str] = None,
     ):
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
@@ -1879,6 +1824,7 @@ class LogProxyConsumer(ConsumerBase):
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = ProviderTopology.from_charm(charm)
+        self._promtail_resource_name = promtail_resource_name or "promtail-bin"
 
         # architechure used for promtail binary
         arch = platform.processor()
@@ -1917,15 +1863,23 @@ class LogProxyConsumer(ConsumerBase):
         if not self._container.can_connect():
             return
         if self.model.relations[self._relation_name]:
-            self._setup_promtail()
-        else:
+            if "promtail" not in self._container.get_plan().services:
+                self._setup_promtail()
+                return
+
             new_config = self._promtail_config
             if new_config != self._current_config:
                 self._container.push(
                     WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
                 )
+
+            # Loki may send endpoints late. Don't necessarily start, there may be
+            # no clients
+            if new_config["clients"]:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
+            else:
+                self.on.promtail_digest_error.emit("No promtail client endpoints available!")
 
     def _on_relation_departed(self, _: RelationEvent) -> None:
         """Event handler for `relation_departed`.
@@ -1949,7 +1903,7 @@ class LogProxyConsumer(ConsumerBase):
             self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
-    def _get_container(self, container_name: str = None) -> Container:
+    def _get_container(self, container_name: str = "") -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
         If there is more than one container in the Pod a `PromtailDigestError` is emitted.
@@ -2041,7 +1995,8 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
         """
         workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_info["filename"])
-        if self._is_promtail_attached(workload_binary_path):
+        if self._promtail_attached_as_resource:
+            self._push_promtail_if_attached(workload_binary_path)
             return
 
         if self._promtail_must_be_downloaded(promtail_info):
@@ -2061,7 +2016,25 @@ class LogProxyConsumer(ConsumerBase):
             self._container.push(workload_binary_path, f, permissions=0o755, make_dirs=True)
             logger.debug("The promtail binary file has been pushed to the workload container.")
 
-    def _is_promtail_attached(self, workload_binary_path: str) -> bool:
+    @property
+    def _promtail_attached_as_resource(self) -> bool:
+        """Checks whether Promtail binary is attached to the charm or not.
+
+        Returns:
+            a boolean representing whether Promtail binary is attached as a resource or not.
+        """
+        try:
+            self._charm.model.resources.fetch(self._promtail_resource_name)
+            return True
+        except ModelError:
+            return False
+        except NameError as e:
+            if "invalid resource name" in str(e):
+                return False
+            else:
+                raise
+
+    def _push_promtail_if_attached(self, workload_binary_path: str) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.
 
         Args:
@@ -2071,17 +2044,8 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             a boolean representing whether Promtail binary is attached or not.
         """
-        try:
-            resource_path = self._charm.model.resources.fetch("promtail-bin")
-        except ModelError:
-            return False
-        except NameError as e:
-            if "invalid resource name" in str(e):
-                return False
-            else:
-                raise
-
         logger.info("Promtail binary file has been obtained from an attached resource.")
+        resource_path = self._charm.model.resources.fetch(self._promtail_resource_name)
         self._push_binary_to_workload(resource_path, workload_binary_path)
         return True
 
@@ -2317,24 +2281,24 @@ class LogProxyConsumer(ConsumerBase):
         if not promtail_binaries:
             return
 
-        if self._is_promtail_installed(promtail_binaries[self._arch]):
-            return
+        if not self._is_promtail_installed(promtail_binaries[self._arch]):
+            try:
+                self._obtain_promtail(promtail_binaries[self._arch])
+            except HTTPError as e:
+                msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
+                logger.warning(msg)
+                self.on.promtail_digest_error.emit(msg)
+                return
+
+        workload_binary_path = os.path.join(
+            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
+        )
 
         self._create_directories()
         self._container.push(
             WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
         )
 
-        try:
-            self._obtain_promtail(promtail_binaries[self._arch])
-        except HTTPError as e:
-            msg = "Promtail binary couldn't be download - {}".format(str(e))
-            logger.warning(msg)
-            self.on.promtail_digest_error.emit(msg)
-
-        workload_binary_path = os.path.join(
-            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
-        )
         self._add_pebble_layer(workload_binary_path)
 
         if self._current_config.get("clients"):
@@ -2344,6 +2308,8 @@ class LogProxyConsumer(ConsumerBase):
                 self.on.promtail_digest_error.emit(str(e))
             else:
                 self.on.log_proxy_endpoint_joined.emit()
+        else:
+            self.on.promtail_digest_error.emit("No promtail client endpoints available!")
 
     def _is_promtail_installed(self, promtail_info: dict) -> bool:
         """Determine if promtail has already been installed to the container.
