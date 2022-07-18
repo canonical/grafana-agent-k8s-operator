@@ -59,17 +59,20 @@ async def test_relating_to_prometheus(ops_test):
     await ops_test.model.deploy(
         "prometheus-k8s", channel="edge", application_name="prometheus", trust=True
     )
+    await ops_test.model.wait_for_idle(apps=["prometheus"], status="active", timeout=1000)
+    alert_rules = await get_prometheus_rules(ops_test, "prometheus", 0)
+    # Check we do not have alert rules in Prometheus
+    assert len(alert_rules) == 0
+
     await ops_test.model.add_relation("prometheus", "agent:self-metrics-endpoint")
     await ops_test.model.wait_for_idle(apps=["agent", "prometheus"], status="active", timeout=1000)
-    alert_rules_names = [
-        "GrafanaAgentRequestErrors",
-        "GrafanaAgentRequestLatency",
-        "GrafanaAgentUnavailable",
-    ]
+
     alert_rules = await get_prometheus_rules(ops_test, "prometheus", 0)
-    assert len(alert_rules) == 3
+
+    # Check now we have alert rules (provided by Grafana Agent)
+    assert len(alert_rules) > 0
     for group in alert_rules:
-        assert group["rules"][0]["name"] in alert_rules_names
+        assert len(group["rules"]) >= 1
 
     juju_applications = ["agent", "prometheus"]
     targets = await get_prometheus_active_targets(ops_test, "prometheus", 0)
