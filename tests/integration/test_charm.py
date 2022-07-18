@@ -52,7 +52,7 @@ async def test_relating_to_grafana(ops_test):
     await ops_test.model.add_relation("grafana", "agent:grafana-dashboard")
     await ops_test.model.wait_for_idle(apps=["agent", "grafana"], status="active", timeout=1000)
     dashboards = await get_grafana_dashboards(ops_test, "grafana", 0)
-    assert dashboards[0]["title"] == "Grafana Agent"
+    assert any(dashboard["title"] == "Grafana Agent" for dashboard in dashboards)
 
 
 async def test_relating_to_prometheus(ops_test):
