@@ -85,6 +85,16 @@ class GrafanaAgentOperatorCharm(CharmBase):
             if not os.path.isdir(rules.dest):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
+        # Self-monitoring
+        self._scraping = MetricsEndpointProvider(
+            self,
+            relation_name="self-metrics-endpoint",
+            jobs=[{"static_configs": [{"targets": ["*:80"]}]}],
+        )
+        self._grafana_dashboards = GrafanaDashboardProvider(
+            self, relation_name="grafana-dashboard"
+        )
+
         self._remote_write = PrometheusRemoteWriteConsumer(
             self, alert_rules_path=self.metrics_rules_paths.dest
         )
