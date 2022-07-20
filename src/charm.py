@@ -12,12 +12,16 @@ from collections import namedtuple
 from typing import Any, Callable, Dict
 
 import yaml
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from charms.prometheus_k8s.v0.prometheus_scrape import (
+    MetricsEndpointConsumer,
+    MetricsEndpointProvider,
+)
 from ops.charm import CharmBase, RelationChangedEvent
 from ops.framework import EventBase
 from ops.main import main
