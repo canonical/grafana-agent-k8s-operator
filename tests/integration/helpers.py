@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -8,8 +7,11 @@ import logging
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import List
 
 import yaml
+from asyncstdlib import functools
+from grafana import Grafana
 from prometheus import Prometheus
 from pytest_operator.plugin import OpsTest
 
@@ -116,21 +118,6 @@ async def loki_alerts(ops_test: str, app_name: str, unit_num: int = 0, retries: 
             break
 
     return alerts
-=======
-#!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
-# See LICENSE file for licensing details.
-
-import logging
-from typing import List
-
-from asyncstdlib import functools
-from grafana import Grafana
-from prometheus import Prometheus
-from pytest_operator.plugin import OpsTest
-
-log = logging.getLogger(__name__)
->>>>>>> main
 
 
 async def unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
@@ -210,6 +197,7 @@ def initial_workload_is_ready(ops_test, app_names) -> bool:
         ops_test.model.applications[name].units[0].workload_status == "active"
         for name in app_names
     )
+
 
 @functools.cache
 async def unit_password(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
