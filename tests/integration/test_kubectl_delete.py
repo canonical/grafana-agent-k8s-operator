@@ -16,12 +16,14 @@ app_name = METADATA["name"]
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_from_local_path(ops_test, charm_under_test):
+async def test_deploy_from_local_path(ops_test, grafana_agent_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
 
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
-    await ops_test.model.deploy(charm_under_test, application_name=app_name, resources=resources)
+    await ops_test.model.deploy(
+        grafana_agent_charm, application_name=app_name, resources=resources
+    )
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 

@@ -4,12 +4,12 @@
 # See LICENSE file for licensing details.
 
 """A  juju charm for Grafana Agent on Kubernetes."""
-
 import logging
 import os
 import pathlib
 import shutil
-from typing import Any, Dict
+from collections import namedtuple
+from typing import Any, Callable, Dict
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -34,10 +34,14 @@ from requests.packages.urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/agent/agent.yaml"
+LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
+LOKI_RULES_DEST_PATH = "./loki_alert_rules"
 METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
 METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 SCRAPE_RELATION_NAME = "metrics-endpoint"
+
+RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
 
 class GrafanaAgentReloadError(Exception):
@@ -59,8 +63,16 @@ class GrafanaAgentOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._metrics_rules_src_path = os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH)
-        self._metrics_rules_dest_path = os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH)
+
+        self.loki_rules_paths = RulesMapping(
+            src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
+            dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
+        )
+        self.metrics_rules_paths = RulesMapping(
+            src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
+            dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
+        )
+
         self.service_patch = KubernetesServicePatch(
             self,
             [
@@ -69,10 +81,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
             ],
         )
 
-        if not os.path.isdir(self._metrics_rules_dest_path):
-            shutil.copytree(
-                self._metrics_rules_src_path, self._metrics_rules_dest_path, dirs_exist_ok=True
-            )
+        for rules in [self.loki_rules_paths, self.metrics_rules_paths]:
+            if not os.path.isdir(rules.dest):
+                shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
         # Self-monitoring
         self._scraping = MetricsEndpointProvider(
@@ -83,26 +94,34 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._grafana_dashboards = GrafanaDashboardProvider(
             self, relation_name="grafana-dashboard"
         )
+
         self._remote_write = PrometheusRemoteWriteConsumer(
-            self, alert_rules_path=self._metrics_rules_dest_path
+            self, alert_rules_path=self.metrics_rules_paths.dest
         )
         self._scrape = MetricsEndpointConsumer(self)
 
-        self._loki_consumer = LokiPushApiConsumer(self, relation_name="logging-consumer")
+        self._loki_consumer = LokiPushApiConsumer(
+            self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
+        )
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
-        self.framework.observe(self.on.upgrade_charm, self.update_alerts_rules)
+        self.framework.observe(self.on.upgrade_charm, self._metrics_alerts)
+        self.framework.observe(self.on.upgrade_charm, self._loki_alerts)
 
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
-        self.framework.observe(self._remote_write.on.endpoints_changed, self.update_alerts_rules)
+        self.framework.observe(self._remote_write.on.endpoints_changed, self._metrics_alerts)
 
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
-        self.framework.observe(self._scrape.on.targets_changed, self.update_alerts_rules)
+        self.framework.observe(self._scrape.on.targets_changed, self._metrics_alerts)
+
+        self.framework.observe(
+            self._loki_provider.on.loki_push_api_alert_rules_changed, self._loki_alerts
+        )
 
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
@@ -113,18 +132,42 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._on_loki_push_api_endpoint_departed,
         )
 
-    def update_alerts_rules(self, _):
+    def _metrics_alerts(self, event):
+        self.update_alerts_rules(
+            event,
+            alerts_func=self._scrape.alerts,
+            reload_func=self._remote_write.reload_alerts,
+            mapping=self.metrics_rules_paths,
+        )
+
+    def _loki_alerts(self, event):
+        self.update_alerts_rules(
+            event,
+            alerts_func=self._loki_provider.alerts,
+            reload_func=self._loki_consumer._reinitialize_alert_rules,
+            mapping=self.loki_rules_paths,
+        )
+
+    def update_alerts_rules(
+        self, _, alerts_func: Any, reload_func: Callable, mapping: RulesMapping
+    ):
         """Copy alert rules from relations and save them to disk."""
-        rules = self._scrape.alerts()
-        shutil.rmtree(self._metrics_rules_dest_path)
-        shutil.copytree(self._metrics_rules_src_path, self._metrics_rules_dest_path)
+        rules = {}
+
+        # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
+        # do the right thing
+        if callable(alerts_func):
+            rules = alerts_func()
+        else:
+            rules = alerts_func
+
+        shutil.rmtree(mapping.dest)
+        shutil.copytree(mapping.src, mapping.dest)
         for topology_identifier, rule in rules.items():
-            file_handle = pathlib.Path(
-                self._metrics_rules_dest_path, "juju_{}.rules".format(topology_identifier)
-            )
+            file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
             file_handle.write_text(yaml.dump(rule))
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
-        self._remote_write.reload_alerts()
+        reload_func()
 
     def _on_loki_push_api_endpoint_joined(self, event) -> None:
         """Event handler for the logging relation changed event."""
@@ -182,7 +225,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    def _update_config(self, event=None):
+    def _update_config(self, _) -> None:
         if not self._container.can_connect():
             # Pebble is not ready yet so no need to update config
             self.unit.status = WaitingStatus("waiting for agent container to start")

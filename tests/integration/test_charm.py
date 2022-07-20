@@ -19,35 +19,28 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test):
+async def test_build_and_deploy(ops_test, grafana_agent_charm):
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
     """
     # build and deploy charm from local source folder
-    charm_under_test = await ops_test.build_charm(".")
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
-    await ops_test.model.deploy(charm_under_test, resources=resources, application_name="agent")
+    await ops_test.model.deploy(grafana_agent_charm, resources=resources, application_name="agent")
 
-    # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
-    # address"
-    # issuing dummy update_status just to trigger an event
-    await ops_test.model.set_config({"update-status-hook-interval": "10s"})
-
-    await ops_test.model.wait_for_idle(apps=["agent"], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=["agent"], status="active", timeout=300, idle_period=30
+    )
     assert ops_test.model.applications["agent"].units[0].workload_status == "active"
 
-    # effectively disable the update status from firing
-    await ops_test.model.set_config({"update-status-hook-interval": "60m"})
 
-
-async def test_relating_to_loki(ops_test):
+async def test_relates_to_loki(ops_test):
     await ops_test.model.deploy("loki-k8s", channel="edge", application_name="loki")
     await ops_test.model.add_relation("loki", "agent:logging-consumer")
     await ops_test.model.wait_for_idle(apps=["loki", "agent"], status="active", timeout=1000)
 
 
-async def test_relating_to_grafana(ops_test):
+async def test_has_own_dashboard(ops_test):
     await ops_test.model.deploy("grafana-k8s", channel="edge", application_name="grafana")
     await ops_test.model.add_relation("grafana", "agent:grafana-dashboard")
     await ops_test.model.wait_for_idle(apps=["agent", "grafana"], status="active", timeout=1000)
@@ -55,12 +48,13 @@ async def test_relating_to_grafana(ops_test):
     assert any(dashboard["title"] == "Grafana Agent" for dashboard in dashboards)
 
 
-async def test_relating_to_prometheus(ops_test):
+async def test_has_own_alert_rules(ops_test):
     await ops_test.model.deploy(
         "prometheus-k8s", channel="edge", application_name="prometheus", trust=True
     )
     await ops_test.model.wait_for_idle(apps=["prometheus"], status="active", timeout=1000)
     alert_rules = await get_prometheus_rules(ops_test, "prometheus", 0)
+
     # Check we do not have alert rules in Prometheus
     assert len(alert_rules) == 0
 

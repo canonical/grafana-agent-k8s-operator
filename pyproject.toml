@@ -27,7 +27,7 @@ select = ["E", "W", "F", "C", "N", "R", "D", "H"]
 # Ignore D107 Missing docstring in __init__
 ignore = ["W503", "E501", "D107"]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
-per-file-ignores = ["tests/*:D100,D101,D102,D103"]
+per-file-ignores = ["tests/*:D100,D101,D102,D103,C901", "lib/*:C901"]
 docstring-convention = "google"
 # Check for properly formatted copyright header in each file
 copyright-check = "True"
@@ -38,7 +38,7 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 [tool.mypy]
 pretty = true
 python_version = 3.8
-mypy_path = "$MYPY_CONFIG_FILE_DIR/src:$MYPY_CONFIG_FILE_DIR/lib:$MYPY_CONFIG_FILE_DIR/tests/unit"
+mypy_path = "./src:./lib"
 follow_imports = "normal"
 warn_redundant_casts = true
 warn_unused_ignores = true

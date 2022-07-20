@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import tempfile
 import unittest
 from typing import Any, Dict
 from unittest.mock import patch
@@ -72,8 +73,16 @@ REWRITE_CONFIGS = [
 
 
 @patch.object(Container, "restart", new=lambda x, y: True)
-class TestCharm(unittest.TestCase):
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
+class TestScrapeConfiguration(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch("charm.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
+    @patch("charm.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("charm.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
+    @patch("charm.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
         self.harness = Harness(GrafanaAgentOperatorCharm)
         self.addCleanup(self.harness.cleanup)
