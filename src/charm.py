@@ -259,7 +259,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             The arguments as a string
         """
-        return "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
+        return "-config.file=/etc/agent/agent.yaml"
 
     def _config_file(self) -> Dict[str, Any]:
         """Generates config file str.
@@ -351,7 +351,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
             The dict representing the config
         """
         return {
-            "prometheus": {
+            "metrics": {
+                "wal_directory": "/tmp/agent/data",
                 "configs": [
                     {
                         "name": "agent_scraper",
