@@ -142,7 +142,7 @@ class TestScrapeConfiguration(unittest.TestCase):
                 ],
             },
             "server": {"log_level": "info"},
-            "loki": {},
+            "logs": {},
         }
 
         config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
@@ -233,7 +233,7 @@ class TestScrapeConfiguration(unittest.TestCase):
             self.harness.update_relation_data(rel_id, f"loki/{u}", {"endpoint": endpoint})
 
         expected = {
-            "loki": {
+            "logs": {
                 "configs": [
                     {
                         "name": "promtail",
@@ -262,4 +262,4 @@ class TestScrapeConfiguration(unittest.TestCase):
         )
 
         self.harness.remove_relation(rel_id)
-        self.assertEqual({"loki": {}}, self.harness.charm._loki_config())
+        self.assertEqual({"logs": {}}, self.harness.charm._loki_config())
