@@ -359,7 +359,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
                         "scrape_configs": self._scrape.jobs(),
                         "remote_write": self._remote_write.endpoints,
                     }
-                ]
+                ],
             }
         }
 

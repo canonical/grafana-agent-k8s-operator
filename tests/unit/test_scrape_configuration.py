@@ -128,7 +128,8 @@ class TestScrapeConfiguration(unittest.TestCase):
                     {"url": "http://1.1.1.1:9090/api/v1/write"},
                 ],
             },
-            "prometheus": {
+            "metrics": {
+                "wal_directory": "/tmp/agent/data",
                 "configs": [
                     {
                         "name": "agent_scraper",
@@ -138,7 +139,7 @@ class TestScrapeConfiguration(unittest.TestCase):
                         ],
                         "scrape_configs": [],
                     }
-                ]
+                ],
             },
             "server": {"log_level": "info"},
             "loki": {},
@@ -159,7 +160,7 @@ class TestScrapeConfiguration(unittest.TestCase):
             [{"url": "http://1.1.1.1:9090/api/v1/write"}],
         )
         self.assertEqual(
-            config["prometheus"]["configs"][0]["remote_write"],
+            config["metrics"]["configs"][0]["remote_write"],
             [{"url": "http://1.1.1.1:9090/api/v1/write"}],
         )
 
@@ -169,7 +170,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
 
         self.assertEqual(config["integrations"]["prometheus_remote_write"], [])
-        self.assertEqual(config["prometheus"]["configs"][0]["remote_write"], [])
+        self.assertEqual(config["metrics"]["configs"][0]["remote_write"], [])
 
     @responses.activate
     def test_scrape_without_remote_write_configuration(self):
@@ -210,7 +211,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         )
 
     def test__cli_args(self):
-        expected = "-config.file=/etc/agent/agent.yaml -prometheus.wal-directory=/tmp/agent/data"
+        expected = "-config.file=/etc/agent/agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
     # Leaving this test here as we need to use it again when we figure out how to
