@@ -370,10 +370,10 @@ class GrafanaAgentOperatorCharm(CharmBase):
             a dict with Loki config
         """
         if not self._loki_consumer.loki_endpoints:
-            return {"loki": {}}
+            return {"logs": {}}
 
         return {
-            "loki": {
+            "logs": {
                 "configs": [
                     {
                         "name": "promtail",
