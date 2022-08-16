@@ -43,7 +43,7 @@ async def test_deploy(ops_test, grafana_agent_charm):
 
 async def test_relate_to_external_apps(ops_test):
     await asyncio.gather(
-        ops_test.model.deploy("loki-k8s", channel="edge", application_name=loki_name),
+        ops_test.model.deploy("loki-k8s", channel="edge", application_name=loki_name, trust=True),
         ops_test.model.deploy(
             "prometheus-k8s", channel="edge", application_name=prometheus_name, trust=True
         ),
