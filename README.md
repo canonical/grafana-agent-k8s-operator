@@ -58,4 +58,4 @@ Currently supported relations are:
 
 ## OCI Images
 
-This charm by default uses the `v0.20.1` release of the [grafana/agent](https://hub.docker.com/r/grafana/agent)
+This charm by default uses the `v0.26.1` release of the [grafana/agent](https://hub.docker.com/r/grafana/agent)
