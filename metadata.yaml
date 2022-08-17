@@ -2,6 +2,8 @@
 # See LICENSE file for licensing details.
 
 name: grafana-agent-k8s
+assumes:
+  - k8s-api
 
 description: |
   Grafana Agent for Kubernetes cluster
@@ -11,6 +13,9 @@ summary: |
 maintainers:
     - Jose Massón <jose.masson@canonical.com>
 
+website: https://charmhub.io/grafana-agent-k8s
+source: https://github.com/canonical/grafana-agent-k8s-operator
+issues: https://github.com/canonical/grafana-agent-k8s-operator/issues
 docs: https://discourse.charmhub.io/t/grafana-agent-k8s-docs-index/5605
 
 containers:
