@@ -12,20 +12,44 @@ Grafana Agent Charmed Operator can be integrated with other charms through the f
     interface: loki_push_api
 ```
 
-Grafana Agent Charmed Operator may receive logs from any charm that supports the [`loki_push_api`](https://charmhub.io/loki-k8s/libraries/loki_push_api) relation interface.
+Using this relation, Grafana Agent Charmed Operator can receive logs from any charm that supports the [`loki_push_api`](https://charmhub.io/loki-k8s/libraries/loki_push_api) relation interface (Those logs will later be forwarded to Loki using the `logging-consumer` relation).
 
 
 The information exchanged through the `loki_push_api` interface can be broken down into two parts:
 
-  - Grafana Agent charm provides an [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push) to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that relates with this charm.
+  - Grafana Agent charm provides an [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push) to receive log from charms running [Loki clients](https://grafana.com/docs/loki/latest/clients/).
   - Grafana Agent charm may also receive alert rules which tell when to raise alerts. These rules are read from a directory named `loki_alert_rules`, if present at the top level, within the client charm's source (`src`) directory.
 
 
-For instance let's say that we have a [Zinc Charmed Operator](https://charmhub.io/zinc-k8s) that implements the other side (`requires`) of the relation.
-After deploying this charm, we can relate `Grafana Agent` and `Zinc` through `loki_push_api` relation interface:
+For instance let's say that we need [Zinc Charmed Operator](https://charmhub.io/zinc-k8s) send logs to Grafana Agent.
+To do taht we can use one of the "consumer" object offered by the `loki_push_api` lib and follow these steps.
+
+1. Specify the relation in the charm's metadata.yaml:
+
+```yaml
+requires:
+  logging:
+    interface: loki_push_api
+```
+
+2. Obtain the library from charmhub:
+
+```shell
+charmcraft fetch-lib charms.loki_k8s.v0.loki_push_api
+```
+
+3. Import the library and use it in `src/cham.py`:
+
+```python
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+...
+self._logging = LogProxyConsumer(self, relation_name="logging", log_files=logs_files)
+```
+
+4. After deploying Zinc charm relate it with `Grafana Agent`:
 
 ```bash
-juju relate grafana-agent-k8s:logging-provider zinc-k8s
+juju relate grafana-agent-k8s:logging-provider zinc-k8s:logging
 ```
 
 
