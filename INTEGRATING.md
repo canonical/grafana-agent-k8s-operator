@@ -57,7 +57,7 @@ Using this relation, Grafana Agent Charmed Operator can receive logs from any ch
 
 The information exchanged through the `loki_push_api` interface can be broken down into two parts:
 
-  - Grafana Agent charm provides an [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push) to receive log from charms running [Loki clients](https://grafana.com/docs/loki/latest/clients/).
+  - Grafana Agent charm provides an [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push) to receive logs from charms running [Loki clients](https://grafana.com/docs/loki/latest/clients/).
   - Grafana Agent charm may also receive alert rules which tell when to raise alerts. These rules are read from a directory named `loki_alert_rules`, if present at the top level, within the client charm's source (`src`) directory.
 
 
