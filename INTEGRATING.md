@@ -1,7 +1,35 @@
 # Integrating Grafana agent
 
-Grafana Agent Charmed Operator can be integrated with other charms through the following relations.
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
 
+- [Integrating Grafana agent](#integrating-grafana-agent)
+    - [Provides](#provides)
+        - [Logging provider](#logging-provider)
+            - [This charm](#this-charm)
+            - [Remote charm](#remote-charm)
+        - [Grafana dashboard](#grafana-dashboard)
+            - [This charm](#this-charm-1)
+            - [Remote charm](#remote-charm-1)
+        - [Self metrics endpoint](#self-metrics-endpoint)
+            - [This charm](#this-charm-2)
+            - [Remote charm](#remote-charm-2)
+    - [Requires](#requires)
+        - [Logging consumer](#logging-consumer)
+            - [This charm](#this-charm-3)
+            - [Remote charm](#remote-charm-3)
+        - [Metrics endpoint](#metrics-endpoint)
+            - [This charm](#this-charm-4)
+            - [Remote charm](#remote-charm-4)
+        - [Send remote write](#send-remote-write)
+            - [This charm](#this-charm-5)
+            - [Remote charm](#remote-charm-5)
+    - [Deployment scenarios](#deployment-scenarios)
+
+<!-- markdown-toc end -->
+
+
+Grafana Agent Charmed Operator can be integrated with other charms through the following relations.
 
 ## Provides
 
