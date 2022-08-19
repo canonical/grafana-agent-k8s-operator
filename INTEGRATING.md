@@ -7,8 +7,20 @@ Grafana Agent Charmed Operator can be integrated with other charms through the f
 
 ### Logging provider
 
+#### This charm
+
 ```yaml
+provides:
   logging-provider:
+    interface: loki_push_api
+```
+
+
+#### Remote charm
+
+```yaml
+requires:
+  logging:
     interface: loki_push_api
 ```
 
@@ -57,12 +69,24 @@ Once the relation is established, Zinc charm can start sending logs to Grafana A
 
 ### Grafana dashboard
 
+#### This charm
+
 ```yaml
+provides
   grafana-dashboard:
     interface: grafana_dashboard
 ```
 
-Over the `grafana-dashboard` relation using the [`grafana-dashboard`](https://charmhub.io/grafana-k8s/libraries/grafana_dashboard) interface, this Grafana Agent charm also provides meaningful dashboards about its metrics to be shown in a [Grafana Charm ](https://charmhub.io/grafana-k8s).
+
+#### Remote charm
+
+```yaml
+requires:
+  grafana-dashboard:
+    interface: grafana_dashboard
+```
+
+Over the `grafana-dashboard` relation using the [`grafana-dashboard`](https://charmhub.io/grafana-k8s/libraries/grafana_dashboard) interface, this Grafana Agent charm also provides meaningful dashboards (placed in `src/grafana_dashboards`) about its metrics to be shown in a [Grafana Charm ](https://charmhub.io/grafana-k8s). These dashboards are placed
 
 In order to add these dashboards to Grafana all that is required is to relate the two charms in the following way:
 
@@ -74,12 +98,24 @@ juju relate \
 
 ### Self metrics endpoint
 
+#### This charm
 
 ```yaml
-self-metrics-endpoint:
+provides:
+  self-metrics-endpoint:
     interface: prometheus_scrape
 ```
-Grafana agent has its own metrics endpoint and the charm comes with associated alert rules, which can be used for self-monitoring. For this purpose the charm has the `self-metrics-endpoint` relation using the [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) interface. In order for these metrics to be aggregated by the remote Prometheus charm all that is required is to relate the two charms as in:
+
+#### Remote charm
+
+```yaml
+requires:
+  metrics-endpoint:
+    interface: prometheus_scrape
+```
+
+This Grafana Agent charm may forward information about its metrics endpoint and associated alert rules to a Prometheus charm over the `self-metrics-endpoint` relation using the [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) interface. In order for these metrics to be aggregated by the remote Prometheus charm all that is required is to relate the two charms as in:
+
 
 ```bash
 juju relate \
@@ -91,12 +127,22 @@ juju relate \
 
 ### Logging consumer
 
+#### This charm
 ```yaml
+requires:
   logging-consumer:
     interface: loki_push_api
 ```
 
-[Loki](https://charmhub.io/loki-k8s) receives logs forwarded from Grafana Agent, aggregates and deduplicates them.
+#### Remote charm
+
+```yaml
+provides:
+  logging:
+    interface: loki_push_api
+```
+
+[Loki](https://charmhub.io/loki-k8s) receives logs forwarded by this Grafana Agent charm, aggregates and deduplicates them.
 Grafana Agent Charmed Operator relates to Loki over the `loki_push_api` interface using the `logging-consumer` relation.
 
 
@@ -108,10 +154,22 @@ juju relate grafana-agent-k8s:logging-consumer loki-k8s
 
 ### Metrics endpoint
 
+#### This charm
+
 ```yaml
+requires:
   metrics-endpoint:
     interface: prometheus_scrape
 ```
+
+#### Remote charm
+
+```yaml
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+```
+
 Charms may forward information about their metrics endpoints and associated alert rules to the Grafana Agent charm over the `metrics-endpoint` relation using the [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) interface.
 
 ```shell
@@ -128,13 +186,25 @@ Evaluation of alert rules forwarded through the [`prometheus_scrape`](https://ch
 
 ### Send remote write
 
+#### This charm
+
 ```yaml
+requires:
   send-remote-write:
     interface: prometheus_remote_write
 ```
 
+#### Remote charm
+
+```yaml
+provides:
+  receive-remote-write:
+    interface: prometheus_remote_write
+```
+
+
 Grafana Agent may forward client charms metrics and associated alert rules (that are received using the `metrics-endpoint` relation) to Prometheus using the [`prometheus_remote_write`](https://charmhub.io/prometheus-k8s/libraries/prometheus_remote_write) interface.
-To do that you need to relate Grafana Agent with Prometheus:
+To do that you have to relate Grafana Agent with Prometheus:
 
 ```bash
 juju relate grafana-agent-k8s:send-remote-write prometheus-k8s
