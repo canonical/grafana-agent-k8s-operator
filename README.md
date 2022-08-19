@@ -9,7 +9,7 @@
 logs, and trace data to the opinionated Grafana observability stack.
 
 The Grafana Agent Charmed Operator deploys Grafana Agent in Kubernetes using [Juju](https://juju.is)
-the [Charmed Operator Lifecycle Manager (OLM)](https://juju.is/docs/olm).
+and the [Charmed Operator Lifecycle Manager (OLM)](https://juju.is/docs/olm).
 
 As a single entry point to the [Canonical Observability Stack](https://charmhub.io/cos-lite), the Grafana Agent charm
 brings several conveniences when deployed inside a monitored cluster:

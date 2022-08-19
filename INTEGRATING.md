@@ -58,11 +58,11 @@ Using this relation, Grafana Agent Charmed Operator can receive logs from any ch
 The information exchanged through the `loki_push_api` interface can be broken down into two parts:
 
   - Grafana Agent charm provides an [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push) to receive logs from charms running [Loki clients](https://grafana.com/docs/loki/latest/clients/).
-  - Grafana Agent charm may also receive alert rules which tell when to raise alerts. These rules are read from a directory named `loki_alert_rules`, if present at the top level, within the client charm's source (`src`) directory.
+  - Grafana Agent charm may also receive alert rules which tell it when to raise alerts. These rules are read from a directory named `loki_alert_rules`, if present at the top level, within the client charm's source (`src`) directory.
 
 
-For instance let's say that we need [Zinc Charmed Operator](https://charmhub.io/zinc-k8s) send logs to Grafana Agent.
-To do that we can use one of the "consumer" object offered by the `loki_push_api` lib and follow these steps.
+For instance let's say that we need [Zinc Charmed Operator](https://charmhub.io/zinc-k8s) to send logs to Grafana Agent.
+To do that we can use one of the "consumer" objects offered by the `loki_push_api` lib and follow these steps.
 
 1. Specify the relation in the charm's metadata.yaml:
 
@@ -114,7 +114,7 @@ requires:
     interface: grafana_dashboard
 ```
 
-Over the `grafana-dashboard` relation using the [`grafana-dashboard`](https://charmhub.io/grafana-k8s/libraries/grafana_dashboard) interface, this Grafana Agent charm also provides meaningful dashboards (placed in `src/grafana_dashboards`) about its metrics to be shown in a [Grafana Charm ](https://charmhub.io/grafana-k8s). These dashboards are placed
+Over the `grafana-dashboard` relation using the [`grafana-dashboard`](https://charmhub.io/grafana-k8s/libraries/grafana_dashboard) interface, this Grafana Agent charm also provides meaningful dashboards (placed in `src/grafana_dashboards`) about its metrics to be shown in a [Grafana Charm ](https://charmhub.io/grafana-k8s).
 
 In order to add these dashboards to Grafana all that is required is to relate the two charms in the following way:
 
@@ -204,7 +204,7 @@ Charms may forward information about their metrics endpoints and associated aler
 juju relate grafana-agent-k8s:metrics-endpoint zinc-k8s
 ```
 
-Charms that seek to provide metrics endpoints and alert rules must do so using the provided [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) charm library.  This library by implementing the `metrics-endpoint` relation, not only ensures that scrape jobs and alert rules are forward to Grafana Agent but also that these are updated any time the metrics provider charm is upgraded. For example new alert rules may be added or old ones removed by updating and releasing a new version of the metrics provider charm. While it is safe to update alert rules as desired, care must be taken when updating scrape job specifications as this has the potential to break the continuity of the scraped metrics time series. In particular changing the following keys in the scrape job can break time series continuity
+Charms that seek to provide metrics endpoints and alert rules must do so by using the provided [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) charm library.  This library, by implementing the `metrics-endpoint` relation, not only ensures that scrape jobs and alert rules are forwarded to Grafana Agent but also that these are updated any time the metrics provider charm is upgraded. For example new alert rules may be added or old ones removed by updating and releasing a new version of the metrics provider charm. While it is safe to update alert rules as desired, care must be taken when updating scrape job specifications as this has the potential to break the continuity of the scraped metrics time series. In particular changing the following keys in the scrape job can break time series continuity
 - `job_name`
 - `relabel_configs`
 - `metrics_relabel_configs`
@@ -239,7 +239,7 @@ juju relate grafana-agent-k8s:send-remote-write prometheus-k8s
 ```
 
 
-Once these relations are established, you can check that by running:
+Once these relations are established, you can check it by running:
 
 ```bash
 juju status --relations
