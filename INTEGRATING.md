@@ -14,7 +14,6 @@ Grafana Agent Charmed Operator can be integrated with other charms through the f
 
 Grafana Agent Charmed Operator may receive logs from any charm that supports the [`loki_push_api`](https://charmhub.io/loki-k8s/libraries/loki_push_api) relation interface.
 
-Besides, the `logging-provider` relation can inject and setup `Promtail` into the workload container of the consumer side of the relation.
 
 The information exchanged through the `loki_push_api` interface can be broken down into two parts:
 
