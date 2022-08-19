@@ -62,7 +62,7 @@ The information exchanged through the `loki_push_api` interface can be broken do
 
 
 For instance let's say that we need [Zinc Charmed Operator](https://charmhub.io/zinc-k8s) send logs to Grafana Agent.
-To do taht we can use one of the "consumer" object offered by the `loki_push_api` lib and follow these steps.
+To do that we can use one of the "consumer" object offered by the `loki_push_api` lib and follow these steps.
 
 1. Specify the relation in the charm's metadata.yaml:
 
