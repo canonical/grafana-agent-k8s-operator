@@ -284,7 +284,6 @@ flowchart LR
     end
     subgraph K8s cluster
         prometheus               ---      |remote_write| grafana-agent
-        prometheus               ---      |prometheus_scrape| grafana-agent
         loki                     ---     |loki_push_api| grafana-agent
         grafana                  --- |grafana_dashboard| grafana-agent
         grafana-agent            --- |prometheus_scrape| prometheus-scrape-config
