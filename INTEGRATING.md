@@ -56,7 +56,7 @@ juju relate \
 self-metrics-endpoint:
     interface: prometheus_scrape
 ```
-This Grafana Agent charm may forward information about its metrics endpoint and associated alert rules to a Prometheus charm over the `self-metrics-endpoint` relation using the [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) interface. In order for these metrics to be aggregated by the remote Prometheus charm all that is required is to relate the two charms as in:
+Grafana agent has its own metrics endpoint and the charm comes with associated alert rules, which can be used for self-monitoring. For this purpose the charm has the `self-metrics-endpoint` relation using the [`prometheus_scrape`](https://charmhub.io/prometheus-k8s/libraries/prometheus_scrape) interface. In order for these metrics to be aggregated by the remote Prometheus charm all that is required is to relate the two charms as in:
 
 ```bash
 juju relate \
