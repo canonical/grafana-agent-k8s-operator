@@ -78,7 +78,7 @@ requires:
 charmcraft fetch-lib charms.loki_k8s.v0.loki_push_api
 ```
 
-3. Import the library and use it in `src/cham.py`:
+3. Import the library and use it in your `src/charm.py`:
 
 ```python
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
