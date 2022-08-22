@@ -41,7 +41,9 @@ async def test_relates_to_loki(ops_test):
 
 
 async def test_has_own_dashboard(ops_test):
-    await ops_test.model.deploy("grafana-k8s", channel="edge", application_name="grafana")
+    await ops_test.model.deploy(
+        "grafana-k8s", channel="edge", application_name="grafana", trust=True
+    )
     await ops_test.model.add_relation("grafana", "agent:grafana-dashboard")
     await ops_test.model.wait_for_idle(apps=["agent", "grafana"], status="active", timeout=1000)
     dashboards = await get_grafana_dashboards(ops_test, "grafana", 0)
