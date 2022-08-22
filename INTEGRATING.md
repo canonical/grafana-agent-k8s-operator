@@ -83,7 +83,11 @@ charmcraft fetch-lib charms.loki_k8s.v0.loki_push_api
 ```python
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 ...
-self._logging = LogProxyConsumer(self, relation_name="logging", log_files=logs_files)
+
+class MyOperatorCharm(CharmBase):
+    def __init__(self, *args):
+        ....
+        self._logging = LogProxyConsumer(self, relation_name="logging", log_files=logs_files)
 ```
 
 4. After deploying Zinc charm relate it with `Grafana Agent`:
@@ -243,7 +247,9 @@ Once these relations are established, you can check it by running:
 
 ```bash
 juju status --relations
+```
 
+```bash
 Model  Controller  Cloud/Region        Version  SLA          Timestamp
 docs   charm-dev   microk8s/localhost  2.9.32   unsupported  17:55:18-03:00
 
