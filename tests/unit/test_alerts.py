@@ -19,7 +19,7 @@ from charm import GrafanaAgentOperatorCharm
 PROMETHEUS_ALERT_RULES = {
     "groups": [
         {
-            "name": "lma_f2c1b2a6-e006-11eb-ba80-0242ac130004_provider-tester_alerts",
+            "name": "lma_f2c1b2a6_provider-tester_alerts",
             "rules": [
                 {
                     "alert": "CPUOverUse",
