@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import yaml
+from helpers import FakeProcessVersionCheck
 from ops.model import Container
 from ops.testing import Harness
 
@@ -103,6 +104,7 @@ class TestAlertIngestion(unittest.TestCase):
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self):
         self.harness = Harness(GrafanaAgentOperatorCharm)
         self.addCleanup(self.harness.cleanup)

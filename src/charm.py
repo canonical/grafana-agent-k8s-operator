@@ -7,6 +7,7 @@
 import logging
 import os
 import pathlib
+import re
 import shutil
 from collections import namedtuple
 from typing import Any, Callable, Dict
@@ -200,6 +201,10 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._container.add_layer(self._name, pebble_layer, combine=True)
         self._container.autostart()
 
+        if (version := self._agent_version) is not None:
+            self.unit.set_workload_version(version)
+        else:
+            logger.debug("Could not get agent version")
         self._update_status()
 
     def on_scrape_targets_changed(self, event) -> None:
@@ -415,6 +420,18 @@ class GrafanaAgentOperatorCharm(CharmBase):
         except Exception as e:
             message = f"could not reload configuration: {str(e)}"
             raise GrafanaAgentReloadError(message)
+
+    @property
+    def _agent_version(self) -> str:
+        """Returns the version of the agent.
+
+        Returns:
+            A string equal to the agent version
+        """
+        if not self._container.can_connect():
+            return None
+        version_output, _ = self._container.exec(["/bin/agent", "-version"]).wait_output()
+        return re.search(r"v(\d*\.\d*\.\d*)", version_output).group(1)
 
 
 if __name__ == "__main__":

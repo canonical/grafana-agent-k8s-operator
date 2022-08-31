@@ -11,6 +11,7 @@ import ops.testing
 import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
+from helpers import FakeProcessVersionCheck
 from ops.model import ActiveStatus, BlockedStatus, Container
 from ops.testing import Harness
 
@@ -83,6 +84,7 @@ class TestScrapeConfiguration(unittest.TestCase):
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self):
         self.harness = Harness(GrafanaAgentOperatorCharm)
         self.addCleanup(self.harness.cleanup)
