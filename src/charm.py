@@ -221,7 +221,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Update the status to reflect the status quo."""
         if len(self.model.relations["metrics-endpoint"]):
             if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                self.unit.status = BlockedStatus("no related Prometheus remote-write")
+                self.unit.status = WaitingStatus("no related Prometheus remote-write")
                 return
 
         if not self.unit.get_container("agent").can_connect():

@@ -12,7 +12,7 @@ import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
 from helpers import FakeProcessVersionCheck
-from ops.model import ActiveStatus, BlockedStatus, Container
+from ops.model import ActiveStatus, Container, WaitingStatus
 from ops.testing import Harness
 
 from charm import GrafanaAgentOperatorCharm
@@ -209,7 +209,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         )
 
         self.assertEqual(
-            self.harness.model.unit.status, BlockedStatus("no related Prometheus remote-write")
+            self.harness.model.unit.status, WaitingStatus("no related Prometheus remote-write")
         )
 
     def test__cli_args(self):
