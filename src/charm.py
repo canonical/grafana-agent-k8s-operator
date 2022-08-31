@@ -10,7 +10,7 @@ import pathlib
 import re
 import shutil
 from collections import namedtuple
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -422,7 +422,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
             raise GrafanaAgentReloadError(message)
 
     @property
-    def _agent_version(self) -> str:
+    def _agent_version(self) -> Optional[str]:
         """Returns the version of the agent.
 
         Returns:
@@ -431,7 +431,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if not self._container.can_connect():
             return None
         version_output, _ = self._container.exec(["/bin/agent", "-version"]).wait_output()
-        return re.search(r"v(\d*\.\d*\.\d*)", version_output).group(1)
+        return re.search(r"v(\d*\.\d*\.\d*)", version_output).group(1)  # type: ignore
 
 
 if __name__ == "__main__":
