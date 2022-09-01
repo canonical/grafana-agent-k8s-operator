@@ -204,7 +204,9 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if (version := self._agent_version) is not None:
             self.unit.set_workload_version(version)
         else:
-            logger.debug("Could not get agent version")
+            logger.debug(
+                "Cannot set workload version at this time: could not get Alertmanager version."
+            )
         self._update_status()
 
     def on_scrape_targets_changed(self, event) -> None:
