@@ -433,7 +433,12 @@ class GrafanaAgentOperatorCharm(CharmBase):
         if not self._container.can_connect():
             return None
         version_output, _ = self._container.exec(["/bin/agent", "-version"]).wait_output()
-        return re.search(r"v(\d*\.\d*\.\d*)", version_output).group(1)  # type: ignore
+        # Output looks like this:
+        # agent, version v0.26.1 (branch: HEAD, revision: 2b88be37)
+        result = re.search(r"v(\d*\.\d*\.\d*)", version_output)
+        if result is None:
+            return result
+        return result.group(1)
 
 
 if __name__ == "__main__":
