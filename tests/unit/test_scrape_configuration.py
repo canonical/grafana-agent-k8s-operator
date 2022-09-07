@@ -11,7 +11,8 @@ import ops.testing
 import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
-from ops.model import ActiveStatus, BlockedStatus, Container
+from helpers import FakeProcessVersionCheck
+from ops.model import ActiveStatus, Container, WaitingStatus
 from ops.testing import Harness
 
 from charm import GrafanaAgentOperatorCharm
@@ -83,6 +84,7 @@ class TestScrapeConfiguration(unittest.TestCase):
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self):
         self.harness = Harness(GrafanaAgentOperatorCharm)
         self.addCleanup(self.harness.cleanup)
@@ -207,7 +209,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         )
 
         self.assertEqual(
-            self.harness.model.unit.status, BlockedStatus("no related Prometheus remote-write")
+            self.harness.model.unit.status, WaitingStatus("no related Prometheus remote-write")
         )
 
     def test__cli_args(self):

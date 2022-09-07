@@ -7,9 +7,10 @@
 import logging
 import os
 import pathlib
+import re
 import shutil
 from collections import namedtuple
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -200,6 +201,12 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self._container.add_layer(self._name, pebble_layer, combine=True)
         self._container.autostart()
 
+        if (version := self._agent_version) is not None:
+            self.unit.set_workload_version(version)
+        else:
+            logger.debug(
+                "Cannot set workload version at this time: could not get Alertmanager version."
+            )
         self._update_status()
 
     def on_scrape_targets_changed(self, event) -> None:
@@ -216,7 +223,7 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Update the status to reflect the status quo."""
         if len(self.model.relations["metrics-endpoint"]):
             if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                self.unit.status = BlockedStatus("no related Prometheus remote-write")
+                self.unit.status = WaitingStatus("no related Prometheus remote-write")
                 return
 
         if not self.unit.get_container("agent").can_connect():
@@ -415,6 +422,23 @@ class GrafanaAgentOperatorCharm(CharmBase):
         except Exception as e:
             message = f"could not reload configuration: {str(e)}"
             raise GrafanaAgentReloadError(message)
+
+    @property
+    def _agent_version(self) -> Optional[str]:
+        """Returns the version of the agent.
+
+        Returns:
+            A string equal to the agent version
+        """
+        if not self._container.can_connect():
+            return None
+        version_output, _ = self._container.exec(["/bin/agent", "-version"]).wait_output()
+        # Output looks like this:
+        # agent, version v0.26.1 (branch: HEAD, revision: 2b88be37)
+        result = re.search(r"v(\d*\.\d*\.\d*)", version_output)
+        if result is None:
+            return result
+        return result.group(1)
 
 
 if __name__ == "__main__":
