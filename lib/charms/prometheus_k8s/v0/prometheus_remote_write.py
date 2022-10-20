@@ -18,7 +18,6 @@ import re
 import socket
 import subprocess
 import tempfile
-import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -36,7 +35,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 
 logger = logging.getLogger(__name__)
@@ -505,7 +504,7 @@ class PrometheusRemoteWriteConsumer(Object):
 
     ```
     requires:
-        receive-remote-write:  # Relation name
+        send-remote-write:  # Relation name
             interface: prometheus_remote_write  # Relation interface
     ```
 
@@ -527,7 +526,7 @@ class PrometheusRemoteWriteConsumer(Object):
     metadata settings).
 
     Then, inside the logic of `_handle_endpoints_changed`, the updated endpoint list is
-    retrieved with with:
+    retrieved with:
 
     ```
     self.remote_write_consumer.endpoints
@@ -536,7 +535,7 @@ class PrometheusRemoteWriteConsumer(Object):
     which returns a dictionary structured like the Prometheus configuration object (see
     https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
 
-    Regarding the default relation name, `receive-remote-write`: if you choose to change it,
+    Regarding the default relation name, `send-remote-write`: if you choose to change it,
     you would need to explicitly provide it to the `PrometheusRemoteWriteConsumer` via the
     `relation_name` constructor argument. (The relation interface, on the other hand, is
     fixed and, if you were to change it, your charm would not be able to relate with other
@@ -811,7 +810,7 @@ class PrometheusRemoteWriteProvider(Object):
 
         This method should be used when the charm relying on this library needs
         to update the relation data in response to something occurring outside
-        of the `prometheus_remote_write` relation lifecycle, e.g., in case of a
+        the `prometheus_remote_write` relation lifecycle, e.g., in case of a
         host address change because the charmed operator becomes connected to an
         Ingress after the `prometheus_remote_write` relation is established.
 
@@ -855,9 +854,9 @@ class PrometheusRemoteWriteProvider(Object):
         executed. This method returns all the alert rules provided by each
         related metrics provider charm. These rules may be used to generate a
         separate alert rules file for each relation since the returned list
-        of alert groups are indexed by relation ID. Also for each relation ID
+        of alert groups are indexed by relation ID. Also, for each relation ID
         associated scrape metadata such as Juju model, UUID and application
-        name are provided so the a unique name may be generated for the rules
+        name are provided so the unique name may be generated for the rules
         file. For each relation the structure of data returned is a dictionary
         with four keys
 
@@ -869,7 +868,7 @@ class PrometheusRemoteWriteProvider(Object):
         The value of the `groups` key is such that it may be used to generate
         a Prometheus alert rules file directly using `yaml.dump` but the
         `groups` key itself must be included as this is required by Prometheus,
-        for example as in `yaml.dump({"groups": alerts["groups"]})`.
+        for example as in `yaml.safe_dump({"groups": alerts["groups"]})`.
 
         The `PrometheusRemoteWriteProvider` accepts a list of rules and these
         rules are all placed into one group.
@@ -895,7 +894,7 @@ class PrometheusRemoteWriteProvider(Object):
             tool = CosTool(self._charm)
             for group in alert_rules["groups"]:
 
-                # Copy off rules so we don't modify an object we're iterating over
+                # Copy off rules, so we don't modify an object we're iterating over
                 rules = group["rules"]
                 for idx, alert_rule in enumerate(rules):
                     labels = alert_rule.get("labels")
@@ -993,28 +992,13 @@ class CosTool:
         return rules
 
     def validate_alert_rules(self, rules: dict) -> Tuple[bool, str]:
-        """Will validate correctness alert rules, returning a boolean and any errors."""
+        """Will validate correctness of alert rules, returning a boolean and any errors."""
         if not self.path:
             logger.debug("`cos-tool` unavailable. Not validating alert correctness.")
             return True, ""
 
         with tempfile.TemporaryDirectory() as tmpdir:
             rule_path = Path(tmpdir + "/validate_rule.yaml")
-
-            # Smash "our" rules format into what upstream actually uses, which is more like:
-            #
-            # groups:
-            #   - name: foo
-            #     rules:
-            #       - alert: SomeAlert
-            #         expr: up
-            #       - alert: OtherAlert
-            #         expr: up
-            transformed_rules = {"groups": []}  # type: ignore
-            for rule in rules["groups"]:
-                transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
-                transformed_rules["groups"].append(transformed)
-
             rule_path.write_text(yaml.dump(rules))
 
             args = [str(self.path), "validate", str(rule_path)]
@@ -1024,9 +1008,15 @@ class CosTool:
                 return True, ""
             except subprocess.CalledProcessError as e:
                 logger.debug("Validating the rules failed: %s", e.output)
-                return False, ", ".join([line for line in e.output if "error validating" in line])
+                return False, ", ".join(
+                    [
+                        line
+                        for line in e.output.decode("utf8").splitlines()
+                        if "error validating" in line
+                    ]
+                )
 
-    def inject_label_matchers(self, expression, topology):
+    def inject_label_matchers(self, expression, topology) -> str:
         """Add label matchers to an expression."""
         if not topology:
             return expression
@@ -1042,7 +1032,7 @@ class CosTool:
         # noinspection PyBroadException
         try:
             return self._exec(args)
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             logger.debug('Applying the expression failed: "%s", falling back to the original', e)
             return expression
 
@@ -1060,7 +1050,6 @@ class CosTool:
             logger.debug('Could not locate cos-tool at: "{}"'.format(res))
         return None
 
-    def _exec(self, cmd):
-        result = subprocess.run(cmd, check=False, stdout=subprocess.PIPE)
-        output = result.stdout.decode("utf-8").strip()
-        return output
+    def _exec(self, cmd) -> str:
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return result.stdout.decode("utf-8").strip()
