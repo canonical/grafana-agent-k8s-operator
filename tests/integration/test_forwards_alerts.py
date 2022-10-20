@@ -84,4 +84,4 @@ async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus
     )
 
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
-    assert len(prometheus_alerts) == 4
+    assert len(prometheus_alerts) == 1
