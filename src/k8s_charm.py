@@ -9,8 +9,9 @@ import pathlib
 from typing import Union
 
 import yaml
-from charms.grafana_agent_k8s.v0.grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
+
+from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
 
