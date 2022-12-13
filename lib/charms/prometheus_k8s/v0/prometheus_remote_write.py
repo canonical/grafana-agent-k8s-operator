@@ -23,7 +23,14 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import yaml
 from charms.observability_libs.v0.juju_topology import JujuTopology
-from ops.charm import CharmBase, HookEvent, RelationEvent, RelationMeta, RelationRole
+from ops.charm import (
+    CharmBase,
+    HookEvent,
+    RelationBrokenEvent,
+    RelationEvent,
+    RelationMeta,
+    RelationRole,
+)
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation
 
@@ -35,7 +42,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 9
 
 
 logger = logging.getLogger(__name__)
@@ -321,7 +328,9 @@ class AlertRules:
         alert_groups = []  # type: List[dict]
 
         # Gather all alerts into a list of groups
-        for file_path in self._multi_suffix_glob(dir_path, [".rule", ".rules"], recursive):
+        for file_path in self._multi_suffix_glob(
+            dir_path, [".rule", ".rules", ".yml", ".yaml"], recursive
+        ):
             alert_groups_from_file = self._from_file(dir_path, file_path)
             if alert_groups_from_file:
                 logger.debug("Reading alert rule from %s", file_path)
@@ -629,7 +638,7 @@ class PrometheusRemoteWriteConsumer(Object):
         self.framework.observe(on_relation.relation_joined, self._handle_endpoints_changed)
         self.framework.observe(on_relation.relation_changed, self._handle_endpoints_changed)
         self.framework.observe(on_relation.relation_departed, self._handle_endpoints_changed)
-        self.framework.observe(on_relation.relation_broken, self._handle_endpoints_changed)
+        self.framework.observe(on_relation.relation_broken, self._on_relation_broken)
         self.framework.observe(on_relation.relation_joined, self._push_alerts_on_relation_joined)
         self.framework.observe(
             self._charm.on.leader_elected, self._push_alerts_to_all_relation_databags
@@ -637,6 +646,9 @@ class PrometheusRemoteWriteConsumer(Object):
         self.framework.observe(
             self._charm.on.upgrade_charm, self._push_alerts_to_all_relation_databags
         )
+
+    def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
+        self.on.endpoints_changed.emit(relation_id=event.relation.id)
 
     def _handle_endpoints_changed(self, event: RelationEvent) -> None:
         if self._charm.unit.is_leader():
@@ -805,7 +817,7 @@ class PrometheusRemoteWriteProvider(Object):
     def _on_relation_change(self, event: RelationEvent) -> None:
         self.update_endpoint(event.relation)
 
-    def update_endpoint(self, relation: Relation = None) -> None:
+    def update_endpoint(self, relation: Optional[Relation] = None) -> None:
         """Triggers programmatically the update of the relation data.
 
         This method should be used when the charm relying on this library needs
