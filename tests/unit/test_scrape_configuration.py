@@ -10,12 +10,11 @@ from unittest.mock import patch
 import ops.testing
 import responses
 import yaml
+from charm import GrafanaAgentK8sCharm
 from deepdiff import DeepDiff  # type: ignore
 from helpers import FakeProcessVersionCheck
 from ops.model import ActiveStatus, Container, WaitingStatus
 from ops.testing import Harness
-
-from charm import GrafanaAgentK8sCharm
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 

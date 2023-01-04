@@ -11,11 +11,10 @@ import unittest
 from unittest.mock import patch
 
 import yaml
+from charm import GrafanaAgentK8sCharm
 from helpers import FakeProcessVersionCheck
 from ops.model import Container
 from ops.testing import Harness
-
-from charm import GrafanaAgentK8sCharm
 
 PROMETHEUS_ALERT_RULES = {
     "groups": [
