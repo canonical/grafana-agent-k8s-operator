@@ -15,7 +15,9 @@ from helpers import FakeProcessVersionCheck
 from ops.model import Container
 from ops.testing import Harness
 
-from charm import GrafanaAgentK8sCharm
+from charm import (  # isort: skip <- needed because charm.py does not always exist
+    GrafanaAgentK8sCharm,
+)
 
 PROMETHEUS_ALERT_RULES = {
     "groups": [

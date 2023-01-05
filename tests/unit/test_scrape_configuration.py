@@ -15,7 +15,9 @@ from helpers import FakeProcessVersionCheck
 from ops.model import ActiveStatus, Container, WaitingStatus
 from ops.testing import Harness
 
-from charm import GrafanaAgentK8sCharm
+from charm import (  # isort: skip <- needed because charm.py does not always exist
+    GrafanaAgentK8sCharm,
+)
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 
