@@ -76,8 +76,8 @@ class GrafanaAgentOperatorCharm(CharmBase):
         self.service_patch = KubernetesServicePatch(
             self,
             [
-                ServicePort(self._http_listen_port, f"{self.app.name}-http-listen-port"),
-                ServicePort(self._grpc_listen_port, f"{self.app.name}-grpc-listen-port"),
+                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
+                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
             ],
         )
 
