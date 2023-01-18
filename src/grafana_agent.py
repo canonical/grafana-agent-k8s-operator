@@ -12,7 +12,10 @@ from typing import Any, Callable, Dict, Optional, Union
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
-from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+    ServicePort,
+)
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -68,8 +71,8 @@ class GrafanaAgentCharm(CharmBase):
         self.service_patch = KubernetesServicePatch(
             self,
             [
-                (f"{self.app.name}-http-listen-port", self._http_listen_port),
-                (f"{self.app.name}-grpc-listen-port", self._grpc_listen_port),
+                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
+                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
             ],
         )
 
