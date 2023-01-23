@@ -57,7 +57,7 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["charms.prometheus_k8s.*", "charms.grafana_k8s.*"]
+module = ["charms.prometheus_k8s.*", "charms.grafana_k8s.*", "charms.observability_libs.*", "charms.loki_k8s.v0.loki_push_api.*"]
 follow_imports = "silent"
 
 [tool.pytest.ini_options]

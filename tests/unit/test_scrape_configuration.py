@@ -15,7 +15,9 @@ from helpers import FakeProcessVersionCheck
 from ops.model import ActiveStatus, Container, WaitingStatus
 from ops.testing import Harness
 
-from charm import GrafanaAgentOperatorCharm
+from charm import (  # isort: skip <- needed because charm.py does not always exist
+    GrafanaAgentK8sCharm,
+)
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 
@@ -76,17 +78,17 @@ REWRITE_CONFIGS = [
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @patch("charm.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
-    @patch("charm.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
-    @patch("charm.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
-    @patch("charm.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.KubernetesServicePatch", lambda x, y: None)
+    @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self):
-        self.harness = Harness(GrafanaAgentOperatorCharm)
+        self.harness = Harness(GrafanaAgentK8sCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_model_info(name="lma", uuid="1234567890")
         self.harness.set_leader(True)

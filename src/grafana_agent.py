@@ -1,16 +1,14 @@
-#!/usr/bin/env python3
-
-# Copyright 2021 Canonical Ltd.
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""A  juju charm for Grafana Agent on Kubernetes."""
+"""Common logic for both k8s and machine charms for Grafana Agent."""
 import logging
 import os
 import pathlib
 import re
 import shutil
 from collections import namedtuple
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Union
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
@@ -23,8 +21,6 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from ops.charm import CharmBase, RelationChangedEvent
-from ops.framework import EventBase
-from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
@@ -52,7 +48,7 @@ class GrafanaAgentReloadError(Exception):
         super().__init__(self.message)
 
 
-class GrafanaAgentOperatorCharm(CharmBase):
+class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
@@ -62,7 +58,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._container = self.unit.get_container(self._name)
 
         self.loki_rules_paths = RulesMapping(
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
@@ -97,7 +92,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self, relation_name="logging-provider", port=self._http_listen_port
         )
 
-        self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
         self.framework.observe(self.on.upgrade_charm, self._metrics_alerts)
         self.framework.observe(self.on.upgrade_charm, self._loki_alerts)
 
@@ -121,6 +115,39 @@ class GrafanaAgentOperatorCharm(CharmBase):
             self._loki_consumer.on.loki_push_api_endpoint_departed,
             self._on_loki_push_api_endpoint_departed,
         )
+
+    # Abstract Methods
+
+    def agent_version_output(self) -> str:
+        """Gets the raw output from `agent -version`."""
+        raise NotImplementedError("Please override the agent_version_output method")
+
+    def is_ready(self):
+        """Checks if the charm is ready for configuration."""
+        raise NotImplementedError("Please override the is_ready method")
+
+    def read_file(self, filepath: Union[str, pathlib.Path]):
+        """Read a file's contents.
+
+        Returns:
+            A string with the file's contents
+        """
+        raise NotImplementedError("Please override the read_file method")
+
+    def write_file(self, path: Union[str, pathlib.Path], text: str) -> None:
+        """Write text to a file.
+
+        Args:
+            path: file path to write to
+            text: text to write to the file
+        """
+        raise NotImplementedError("Please override the write_file method")
+
+    def restart(self) -> None:
+        """Restart grafana agent."""
+        raise NotImplementedError("Please override the restart method")
+
+    # End: Abstract Methods
 
     def _metrics_alerts(self, event):
         self.update_alerts_rules(
@@ -167,37 +194,6 @@ class GrafanaAgentOperatorCharm(CharmBase):
         """Event handler for the loki departed."""
         self._update_config(event)
 
-    def on_pebble_ready(self, _: EventBase) -> None:
-        """Event handler for the pebble ready event.
-
-        Args:
-            event: The event object of the pebble ready event
-        """
-        self._container.push(CONFIG_PATH, yaml.dump(self._config_file()), make_dirs=True)
-
-        pebble_layer = {
-            "summary": "agent layer",
-            "description": "pebble config layer for Grafana Agent",
-            "services": {
-                "agent": {
-                    "override": "replace",
-                    "summary": "agent",
-                    "command": f"/bin/agent {self._cli_args()}",
-                    "startup": "enabled",
-                },
-            },
-        }
-        self._container.add_layer(self._name, pebble_layer, combine=True)
-        self._container.autostart()
-
-        if (version := self._agent_version) is not None:
-            self.unit.set_workload_version(version)
-        else:
-            logger.debug(
-                "Cannot set workload version at this time: could not get Alertmanager version."
-            )
-        self._update_status()
-
     def on_scrape_targets_changed(self, event) -> None:
         """Event handler for the scrape targets changed event."""
         self._update_config(event)
@@ -215,23 +211,23 @@ class GrafanaAgentOperatorCharm(CharmBase):
                 self.unit.status = WaitingStatus("no related Prometheus remote-write")
                 return
 
-        if not self.unit.get_container("agent").can_connect():
-            self.unit.status = WaitingStatus("waiting for the agent container to start")
+        if not self.is_ready():
+            self.unit.status = WaitingStatus("waiting for the agent to start")
             return
 
         self.unit.status = ActiveStatus()
 
     def _update_config(self, _) -> None:
-        if not self._container.can_connect():
-            # Pebble is not ready yet so no need to update config
-            self.unit.status = WaitingStatus("waiting for agent container to start")
+        if not self.is_ready():
+            # Grafana-agent is not yet running so no need to update config
+            self.unit.status = WaitingStatus("waiting for agent to start")
             return
 
         config = self._config_file()
         old_config = None
 
         try:
-            old_config = yaml.safe_load(self._container.pull(CONFIG_PATH))
+            old_config = yaml.safe_load(self.read_file(CONFIG_PATH))
         except (FileNotFoundError, PathError):
             # If the file does not yet exist, pebble_ready has not run yet,
             # and we may be processing a deferred event
@@ -239,10 +235,10 @@ class GrafanaAgentOperatorCharm(CharmBase):
 
         try:
             if config != old_config:
-                self._container.push(CONFIG_PATH, yaml.dump(config), make_dirs=True)
+                self.write_file(CONFIG_PATH, yaml.dump(config))
                 # FIXME: change this to self._reload_config when #19 is fixed
                 # Restart the service to pick up the new config
-                self._container.restart(self._name)
+                self.restart()
                 self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
             self.unit.status = BlockedStatus(str(e))
@@ -419,16 +415,12 @@ class GrafanaAgentOperatorCharm(CharmBase):
         Returns:
             A string equal to the agent version
         """
-        if not self._container.can_connect():
+        if not self.is_ready():
             return None
-        version_output, _ = self._container.exec(["/bin/agent", "-version"]).wait_output()
+        version_output = self.agent_version_output()
         # Output looks like this:
         # agent, version v0.26.1 (branch: HEAD, revision: 2b88be37)
         result = re.search(r"v(\d*\.\d*\.\d*)", version_output)
         if result is None:
             return result
         return result.group(1)
-
-
-if __name__ == "__main__":
-    main(GrafanaAgentOperatorCharm)

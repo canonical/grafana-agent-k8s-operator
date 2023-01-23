@@ -45,6 +45,7 @@ Unit tests are implemented using the Operator Framework [test harness](https://o
 Install the [charmcraft tool](https://juju.is/docs/sdk/setting-up-charmcraft) and build the charm in this git repository:
 
 ```bash
+    tox -e render-k8s
     charmcraft pack
 ```
 
