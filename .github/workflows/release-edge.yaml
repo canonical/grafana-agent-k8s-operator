@@ -6,6 +6,9 @@ on:
       - main
 
 jobs:
+  render:
+    name: Render k8s Charm
+    run: tox -e render-k8s
   release:
     uses: canonical/observability/.github/workflows/release-charm.yaml@main
     secrets: inherit
