@@ -9,8 +9,26 @@ jobs:
   render:
     runs-on: ubuntu-20.04
     steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        run: python3 -m pip install tox
       - name: Render k8s Charm
         run: tox -e render-k8s
+      - name: Upload Metadata
+        uses: actions/upload-artifact@v3
+        with:
+          name: metadata
+          path: metadata.yaml
+      - name: Upload charm.py
+        uses: actions/upload-artifact@v3
+        with:
+          name: charm_py
+          path: src/charm.py
   release:
     uses: canonical/observability/.github/workflows/release-charm.yaml@main
     secrets: inherit
+    with:
+      artifacts: "[['metadata', 'metadata.yaml'], ['charm_py', 'src/charm.py']]"
