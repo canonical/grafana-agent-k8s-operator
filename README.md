@@ -36,7 +36,7 @@ juju add-model cos
 The Grafana agent may be deployed using the juju command line:
 
 ```bash
-juju deploy grafana-agent-k8s
+juju deploy grafana-agent-k8s --trust
 ```
 
 If required, you can remove the deployment completely:
