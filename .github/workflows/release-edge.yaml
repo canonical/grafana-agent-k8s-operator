@@ -9,8 +9,22 @@ jobs:
   render:
     runs-on: ubuntu-20.04
     steps:
+      - name: Checkout the Source
+        uses: actions/checkout@v3
+        with:
+          path: main
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        run: python3 -m pip install tox
       - name: Render k8s Charm
-        run: tox -e render-k8s
+        run: tox --workdir $GITHUB_WORKSPACE/main -e render-k8s
   release:
-    uses: canonical/observability/.github/workflows/release-charm.yaml@main
+    uses: dstathis/observability/.github/workflows/release-charm.yaml@main
+    needs: render
     secrets: inherit
+    with:
+      charm-path: $GITHUB_WORKSPACE/main
+      foo: bar
