@@ -28,7 +28,7 @@ jobs:
           name: charm_py
           path: src/charm.py
   release:
-    uses: canonical/observability/.github/workflows/release-charm.yaml@main
+    uses: dstathis/observability/.github/workflows/release-charm.yaml@artifacts
     secrets: inherit
     with:
       artifacts: "[['metadata', 'metadata.yaml'], ['charm_py', 'src/charm.py']]"
