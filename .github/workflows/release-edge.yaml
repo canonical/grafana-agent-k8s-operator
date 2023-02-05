@@ -27,4 +27,3 @@ jobs:
     secrets: inherit
     with:
       charm-path: $GITHUB_WORKSPACE/main
-      foo: bar
