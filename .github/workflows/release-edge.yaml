@@ -32,5 +32,4 @@ jobs:
     needs: render
     secrets: inherit
     with:
-      charm-path: $GITHUB_WORKSPACE/main
       artifact: k8s_artifact
