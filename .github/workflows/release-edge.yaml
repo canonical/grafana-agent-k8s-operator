@@ -25,7 +25,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: k8s_artifact
-          path: ./artifact.tar.gz
+          path: artifact.tar.gz
 
   release:
     uses: canonical/observability/.github/workflows/release-charm.yaml@artifacts
