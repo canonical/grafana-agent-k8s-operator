@@ -28,7 +28,7 @@ jobs:
           path: artifact.tar.gz
 
   release:
-    uses: canonical/observability/.github/workflows/release-charm.yaml@artifacts
+    uses: canonical/observability/.github/workflows/release-charm.yaml@main
     needs: render
     secrets: inherit
     with:
