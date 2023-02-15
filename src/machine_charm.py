@@ -60,12 +60,15 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                     # Since this is only a temporary workaround, it's fine.
                     f.write(
                         urllib.request.urlopen(
-                            "https://github.com/simskij/grafana-agent/releases/download/pre-release-0/grafana-agent_0.29.0_amd64.snap"
+                            "https://github.com/simskij/grafana-agent/releases/download/pre-release-1/grafana-agent_0.29.0_amd64.snap"
                         ).read()
                     )
                 subprocess.run(["sudo", "snap", "install", "--dangerous", "--devmode", snap_file])
             if not self._is_installed():
                 raise GrafanaAgentInstallError("Failed to install grafana-agent.")
+            connect_process = subprocess.run(["sudo", "snap", "connect", "grafana-agent:etc-grafana-agent"])
+            if connect_process.returncode != 0:
+                raise GrafanaAgentInstallError("Failed to connect grafana-agent:etc-grafana-agent")
 
     def on_start(self, _) -> None:
         """Start Grafana Agent."""

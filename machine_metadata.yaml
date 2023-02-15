@@ -26,3 +26,11 @@ requires:
   juju-info:
     interface: juju-info
     scope: container
+  # This one most likely won't exist in the final product but the lib crashes if we don't have it.
+  metrics-endpoint:
+    interface: prometheus_scrape
+
+# This one most likely won't exist in the final product but the lib crashes if we don't have it.
+provides:
+  logging-provider:
+    interface: loki_push_api

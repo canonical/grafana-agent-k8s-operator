@@ -278,6 +278,7 @@ class GrafanaAgentCharm(CharmBase):
         juju_application = self.model.app.name
         juju_unit = self.unit.name
 
+        # Align the "job" name with those of prometheus_scrape
         job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
         instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
@@ -320,7 +321,6 @@ class GrafanaAgentCharm(CharmBase):
                 "agent": {
                     "enabled": True,
                     "relabel_configs": [
-                        # Align the "job" name with those of prometheus_scrape
                         {
                             "target_label": "job",
                             "regex": "(.*)",
