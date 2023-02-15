@@ -9,6 +9,10 @@ import pathlib
 from typing import Union
 
 import yaml
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+    ServicePort,
+)
 from ops.main import main
 
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
@@ -22,6 +26,15 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+
+        self.service_patch = KubernetesServicePatch(
+            self,
+            [
+                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
+                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
+            ],
+        )
+
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
 
     def on_pebble_ready(self, _) -> None:
@@ -88,6 +101,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def restart(self) -> None:
         """Restart grafana agent."""
         self._container.restart("agent")
+
+    def is_machine(self) -> bool:
+        """Check if this is a machine charm."""
+        return False
 
 
 if __name__ == "__main__":

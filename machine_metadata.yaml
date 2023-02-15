@@ -1,1 +1,28 @@
-placeholder
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: grafana-agent
+
+description: |
+  Grafana Agent Subordinate Charm
+summary: |
+  Grafana Agent is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
+maintainers:
+    - Jose Massón <jose.masson@canonical.com>
+
+docs: https://discourse.charmhub.io/t/grafana-agent-k8s-docs-index/5605
+website: https://charmhub.io/grafana-agent
+source: https://github.com/canonical/grafana-agent-k8s-operator
+issues: https://github.com/canonical/grafana-agent-k8s-operator/issues
+
+series: []
+subordinate: true
+
+requires:
+  send-remote-write:
+    interface: prometheus_remote_write
+  logging-consumer:
+    interface: loki_push_api
+  juju-info:
+    interface: juju-info
+    scope: container

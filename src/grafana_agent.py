@@ -12,10 +12,6 @@ from typing import Any, Callable, Dict, Optional, Union
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -29,7 +25,7 @@ from requests.packages.urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = "/etc/agent/agent.yaml"
+CONFIG_PATH = "/etc/grafana-agent.yaml"
 LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
 LOKI_RULES_DEST_PATH = "./loki_alert_rules"
 METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
@@ -66,14 +62,6 @@ class GrafanaAgentCharm(CharmBase):
         self.metrics_rules_paths = RulesMapping(
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
-        )
-
-        self.service_patch = KubernetesServicePatch(
-            self,
-            [
-                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
-                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
-            ],
         )
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths]:
@@ -115,6 +103,7 @@ class GrafanaAgentCharm(CharmBase):
             self._loki_consumer.on.loki_push_api_endpoint_departed,
             self._on_loki_push_api_endpoint_departed,
         )
+        self.framework.observe(self.on.config_changed, self._update_config)
 
     # Abstract Methods
 
@@ -146,6 +135,10 @@ class GrafanaAgentCharm(CharmBase):
     def restart(self) -> None:
         """Restart grafana agent."""
         raise NotImplementedError("Please override the restart method")
+
+    def is_machine(self) -> bool:
+        """Check if this is a machine charm."""
+        raise NotImplementedError("Please override the is_machine method")
 
     # End: Abstract Methods
 
@@ -219,7 +212,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _update_config(self, _) -> None:
         if not self.is_ready():
-            # Grafana-agent is not yet running so no need to update config
+            # Grafana-agent is not yet available so no need to update config
             self.unit.status = WaitingStatus("waiting for agent to start")
             return
 
@@ -288,7 +281,41 @@ class GrafanaAgentCharm(CharmBase):
         job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
         instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
 
-        return {
+        relabel_configs = [
+            # Align the "instance" label with the rest of the Juju-collected metrics
+            {
+                "target_label": "instance",
+                "regex": "(.*)",
+                "replacement": instance_value,
+            },
+            {  # To add a label, we create a relabelling that replaces a built-in
+                "source_labels": ["__address__"],
+                "target_label": "juju_charm",
+                "replacement": self.meta.name,
+            },
+            {  # To add a label, we create a relabelling that replaces a built-in
+                "source_labels": ["__address__"],
+                "target_label": "juju_model",
+                "replacement": juju_model,
+            },
+            {
+                "source_labels": ["__address__"],
+                "target_label": "juju_model_uuid",
+                "replacement": juju_model_uuid,
+            },
+            {
+                "source_labels": ["__address__"],
+                "target_label": "juju_application",
+                "replacement": juju_application,
+            },
+            {
+                "source_labels": ["__address__"],
+                "target_label": "juju_unit",
+                "replacement": juju_unit,
+            },
+        ]
+
+        conf = {
             "integrations": {
                 "agent": {
                     "enabled": True,
@@ -299,42 +326,31 @@ class GrafanaAgentCharm(CharmBase):
                             "regex": "(.*)",
                             "replacement": job_name,
                         },
-                        # Align the "instance" label with the rest of the Juju-collected metrics
-                        {
-                            "target_label": "instance",
-                            "regex": "(.*)",
-                            "replacement": instance_value,
-                        },
-                        {  # To add a label, we create a relabelling that replaces a built-in
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_charm",
-                            "replacement": self.meta.name,
-                        },
-                        {  # To add a label, we create a relabelling that replaces a built-in
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model",
-                            "replacement": juju_model,
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model_uuid",
-                            "replacement": juju_model_uuid,
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_application",
-                            "replacement": juju_application,
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_unit",
-                            "replacement": juju_unit,
-                        },
-                    ],
+                    ]
+                    + relabel_configs,
                 },
                 "prometheus_remote_write": self._remote_write.endpoints,
             }
         }
+
+        if self.is_machine():
+            node_exporter_job_name = (
+                f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_node-exporter"
+            )
+            conf["integrations"]["node_exporter"] = {
+                "enabled": True,
+                "relabel_configs": [
+                    # Align the "job" name with those of prometheus_scrape
+                    {
+                        "target_label": "job",
+                        "regex": "(.*)",
+                        "replacement": node_exporter_job_name,
+                    },
+                ]
+                + relabel_configs,
+            }
+
+        return conf
 
     def _prometheus_config(self) -> dict:
         """Return the prometheus section of the config.
