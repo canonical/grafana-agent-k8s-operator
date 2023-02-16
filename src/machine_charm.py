@@ -66,7 +66,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 subprocess.run(["sudo", "snap", "install", "--dangerous", "--devmode", snap_file])
             if not self._is_installed():
                 raise GrafanaAgentInstallError("Failed to install grafana-agent.")
-            connect_process = subprocess.run(["sudo", "snap", "connect", "grafana-agent:etc-grafana-agent"])
+            connect_process = subprocess.run(
+                ["sudo", "snap", "connect", "grafana-agent:etc-grafana-agent"]
+            )
             if connect_process.returncode != 0:
                 raise GrafanaAgentInstallError("Failed to connect grafana-agent:etc-grafana-agent")
 
