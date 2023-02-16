@@ -244,7 +244,7 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             The arguments as a string
         """
-        return "-config.file=/etc/agent/agent.yaml"
+        return f"-config.file={CONFIG_PATH}"
 
     def _config_file(self) -> Dict[str, Any]:
         """Generates config file str.
