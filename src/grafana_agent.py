@@ -210,7 +210,7 @@ class GrafanaAgentCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    def _update_config(self, _) -> None:
+    def _update_config(self, event) -> None:
         if not self.is_ready():
             # Grafana-agent is not yet available so no need to update config
             self.unit.status = WaitingStatus("waiting for agent to start")
@@ -347,7 +347,7 @@ class GrafanaAgentCharm(CharmBase):
                         "replacement": node_exporter_job_name,
                     },
                 ]
-                + relabel_configs,
+                + self.get_principal_relabels(),
             }
 
         return conf
@@ -377,31 +377,50 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        if not self._loki_consumer.loki_endpoints:
-            return {"logs": {}}
-
-        return {
+        logs_config = {
             "logs": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": self._loki_consumer.loki_endpoints,
-                        "positions": {"filename": f"{self._promtail_positions}"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": self._http_listen_port,
-                                        "grpc_listen_port": self._grpc_listen_port,
-                                    },
-                                },
-                            }
-                        ],
-                    }
-                ]
+                "configs": [],
             }
         }
+
+        if self._loki_consumer.loki_endpoints:
+            logs_config["logs"]["configs"].append(
+                {
+                    "name": "push_api_server",
+                    "clients": self._loki_consumer.loki_endpoints,
+                    "scrape_configs": [
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": self._http_listen_port,
+                                    "grpc_listen_port": self._grpc_listen_port,
+                                },
+                            },
+                        }
+                    ],
+                }
+            )
+
+        if self.is_machine:
+            logs_config["logs"]["configs"].append(
+                {
+                    "name": "log_file_scraper",
+                    "clients": self._loki_consumer.loki_endpoints,
+                    "scrape_configs": [
+                        {
+                            "job_name": "varlog",
+                            "static_configs": {
+                                "labels": {
+                                    "__path__": "/var/log/*",
+                                    "__path_exclude__": "/var/log/positions.yaml",
+                                }.update(self.get_principal_labels())
+                            },
+                        },
+                        {"job_name": "syslog", "journal": {"labels": self.get_principal_labels()}},
+                    ],
+                }
+            )
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.

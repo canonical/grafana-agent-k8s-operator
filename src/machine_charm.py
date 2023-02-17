@@ -9,9 +9,10 @@ import pathlib
 import subprocess
 import tempfile
 import urllib
-from typing import Union
+from typing import Dict, Optional, Union
 
 from ops.main import main
+from ops.model import Relation
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -133,6 +134,55 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Check if the Grafana Agent snap is installed."""
         package_check = subprocess.run("snap list | grep grafana-agent", shell=True)
         return True if package_check.returncode == 0 else False
+
+    def _get_principal_relation(self) -> Optional[Relation]:
+        if self.model.relations.get("juju-info"):
+            return self.model.relations["juju-info"][0]
+        else:
+            return None
+
+    def _get_principal_topology(
+        self,
+    ) -> Dict[str, str]:
+        rel = self._get_principal_relation()
+        if not rel:
+            return {}
+        # Not entirely sure how safe this is but "scope: container" should mean there is only one unit.
+        unit = rel.units.pop()
+        # Note we can't include juju_charm as that information is not available to us.
+        return {
+            "juju_model": self.model.name,
+            "juju_model_uuid": self.model.uuid,
+            "juju_application": unit.app.name,
+            "juju_unit": unit.name,
+        }
+
+    def get_principal_labels(self) -> Dict[str, str]:
+        """Return a dict with labels from the topology of the principal charm."""
+        topology = self._get_principal_topology()
+        return {
+            "instance": f"{topology['juju_model']}_{topology['juju_model_uuid']}_{topology['juju_application']}_{topology['juju_unit']}"
+        }.update(topology)
+
+    def get_principal_relabels(self) -> dict:
+        """Return a relabel config with labels from the topology of the principal charm."""
+        topology = self._get_principal_topology()
+        topology_relabels = [
+            {
+                "source_labels": ["__address__"],
+                "target_label": key,
+                "replacement": value,
+            }
+            for key, value in topology.items()
+        ]
+        instance_name = f"{topology['juju_model']}_{topology['juju_model_uuid']}_{topology['juju_application']}_{topology['juju_unit']}"
+        return [
+            {
+                "target_label": "instance",
+                "regex": "(.*)",
+                "replacement": instance_name,
+            }
+        ] + topology_relabels
 
 
 if __name__ == "__main__":
