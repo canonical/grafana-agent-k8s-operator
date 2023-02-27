@@ -402,7 +402,7 @@ class GrafanaAgentCharm(CharmBase):
                 }
             )
 
-        if self.is_machine:
+        if self.is_machine():
             logs_config["logs"]["configs"].append(
                 {
                     "name": "log_file_scraper",
@@ -414,13 +414,16 @@ class GrafanaAgentCharm(CharmBase):
                                 "labels": {
                                     "__path__": "/var/log/*",
                                     "__path_exclude__": "/var/log/positions.yaml",
-                                }.update(self.get_principal_labels())
+                                    **self.get_principal_labels(),
+                                }
                             },
                         },
                         {"job_name": "syslog", "journal": {"labels": self.get_principal_labels()}},
                     ],
                 }
             )
+            
+        return logs_config
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.

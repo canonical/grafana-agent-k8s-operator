@@ -93,7 +93,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
-        return self._is_installed()
+        return self._is_installed() and self.principal_unit
 
     def agent_version_output(self) -> str:
         """Runs `agent -version` and returns the output.
@@ -140,29 +140,44 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             return self.model.relations["juju-info"][0]
         else:
             return None
-
+        
+    @property
+    def principal_unit(self):
+        relation = self._get_principal_relation()
+        if relation:
+            if relation.units:
+                # Here, we could have poped the set and put the unit back or
+                # memoized the function, but in the interest of backwards compatibility
+                # with older python versions and avoiding adding temporary state to the charm instance,
+                # we choose this somewhat unsightly option.
+                return tuple(relation.units)[0]
+            else:
+                return None
+        else:
+            return None
+        
     def _get_principal_topology(
         self,
     ) -> Dict[str, str]:
-        rel = self._get_principal_relation()
-        if not rel:
+        unit = self.principal_unit
+        if unit:
+            # Note we can't include juju_charm as that information is not available to us.
+            return {
+                "juju_model": self.model.name,
+                "juju_model_uuid": self.model.uuid,
+                "juju_application": unit.app.name,
+                "juju_unit": unit.name,
+            }
+        else:
             return {}
-        # Not entirely sure how safe this is but "scope: container" should mean there is only one unit.
-        unit = rel.units.pop()
-        # Note we can't include juju_charm as that information is not available to us.
-        return {
-            "juju_model": self.model.name,
-            "juju_model_uuid": self.model.uuid,
-            "juju_application": unit.app.name,
-            "juju_unit": unit.name,
-        }
-
+        
     def get_principal_labels(self) -> Dict[str, str]:
         """Return a dict with labels from the topology of the principal charm."""
         topology = self._get_principal_topology()
         return {
-            "instance": f"{topology['juju_model']}_{topology['juju_model_uuid']}_{topology['juju_application']}_{topology['juju_unit']}"
-        }.update(topology)
+            "instance": f"{topology['juju_model']}_{topology['juju_model_uuid']}_{topology['juju_application']}_{topology['juju_unit']}",
+            **topology,
+        }
 
     def get_principal_relabels(self) -> dict:
         """Return a relabel config with labels from the topology of the principal charm."""
