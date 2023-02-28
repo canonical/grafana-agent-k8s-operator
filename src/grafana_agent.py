@@ -111,6 +111,7 @@ class GrafanaAgentCharm(CharmBase):
         """Gets the raw output from `agent -version`."""
         raise NotImplementedError("Please override the agent_version_output method")
 
+    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         raise NotImplementedError("Please override the is_ready method")
@@ -205,14 +206,14 @@ class GrafanaAgentCharm(CharmBase):
                 self.unit.status = WaitingStatus("no related Prometheus remote-write")
                 return
 
-        if not self.is_ready():
+        if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
             return
 
         self.unit.status = ActiveStatus()
 
-    def _update_config(self, event) -> None:
-        if not self.is_ready():
+    def _update_config(self, _) -> None:
+        if not self.is_ready:
             # Grafana-agent is not yet available so no need to update config
             self.unit.status = WaitingStatus("waiting for agent to start")
             return
@@ -226,6 +227,10 @@ class GrafanaAgentCharm(CharmBase):
             # If the file does not yet exist, pebble_ready has not run yet,
             # and we may be processing a deferred event
             pass
+
+        if config == old_config:
+            # Nothing changed, possibly new install. Set us active and move on.
+            return
 
         try:
             if config != old_config:
@@ -348,7 +353,7 @@ class GrafanaAgentCharm(CharmBase):
                         "replacement": node_exporter_job_name,
                     },
                 ]
-                + self._principal_relabels,
+                + self._principal_relabeling_config,
             }
 
         return conf
@@ -450,7 +455,7 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             A string equal to the agent version
         """
-        if not self.is_ready():
+        if not self.is_ready:
             return None
         version_output = self.agent_version_output()
         # Output looks like this:

@@ -15,7 +15,7 @@ website: https://charmhub.io/grafana-agent
 source: https://github.com/canonical/grafana-agent-k8s-operator
 issues: https://github.com/canonical/grafana-agent-k8s-operator/issues
 
-series: []
+series: [jammy, focal]
 subordinate: true
 
 requires:
