@@ -12,7 +12,7 @@ import urllib
 from typing import Dict, Optional, Union
 
 from ops.main import main
-from ops.model import Relation
+from ops.model import Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -126,6 +126,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Restart grafana agent."""
         subprocess.run(["sudo", "snap", "restart", self._service])
 
+    @property
     def is_machine(self) -> bool:
         """Check if this is a machine charm."""
         return True
@@ -135,28 +136,31 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         package_check = subprocess.run("snap list | grep grafana-agent", shell=True)
         return True if package_check.returncode == 0 else False
 
-    def _get_principal_relation(self) -> Optional[Relation]:
+    @property
+    def _principal_relation(self) -> Optional[Relation]:
         if self.model.relations.get("juju-info"):
             return self.model.relations["juju-info"][0]
         else:
             return None
-        
+
     @property
-    def principal_unit(self):
-        relation = self._get_principal_relation()
+    def principal_unit(self) -> Optional[Unit]:
+        """Return the principal unit this charm is subordinated to."""
+        relation = self._principal_relation
         if relation:
             if relation.units:
-                # Here, we could have poped the set and put the unit back or
+                # Here, we could have popped the set and put the unit back or
                 # memoized the function, but in the interest of backwards compatibility
-                # with older python versions and avoiding adding temporary state to the charm instance,
-                # we choose this somewhat unsightly option.
-                return tuple(relation.units)[0]
+                # with older python versions and avoiding adding temporary state to
+                # the charm instance, we choose this somewhat unsightly option.
+                return next(iter(relation.units))
             else:
                 return None
         else:
             return None
-        
-    def _get_principal_topology(
+
+    @property
+    def _principal_topology(
         self,
     ) -> Dict[str, str]:
         unit = self.principal_unit
@@ -170,33 +174,35 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             }
         else:
             return {}
-        
-    def get_principal_labels(self) -> Dict[str, str]:
+
+    @property
+    def _instance_name(self) -> str:
+        """Return the instance name as interpolated topology values."""
+        return "_".join([v for v in self._principal_topology.values()])
+
+    @property
+    def _principal_labels(self) -> Dict[str, str]:
         """Return a dict with labels from the topology of the principal charm."""
-        topology = self._get_principal_topology()
         return {
-            "instance": f"{topology['juju_model']}_{topology['juju_model_uuid']}_{topology['juju_application']}_{topology['juju_unit']}",
-            **topology,
+            # Dict ordering will give the appropriate result here
+            "instance": self._instance_name,
+            **self._principal_topology,
         }
 
-    def get_principal_relabels(self) -> dict:
+    @property
+    def _principal_relabels(self) -> list:
         """Return a relabel config with labels from the topology of the principal charm."""
-        topology = self._get_principal_topology()
         topology_relabels = [
             {
                 "source_labels": ["__address__"],
                 "target_label": key,
                 "replacement": value,
             }
-            for key, value in topology.items()
+            for key, value in self._principal_topology.items()
         ]
-        instance_name = f"{topology['juju_model']}_{topology['juju_model_uuid']}_{topology['juju_application']}_{topology['juju_unit']}"
+
         return [
-            {
-                "target_label": "instance",
-                "regex": "(.*)",
-                "replacement": instance_name,
-            }
+            {"target_label": "instance", "regex": "(.*)", "replacement": self._instance_name}
         ] + topology_relabels
 
 

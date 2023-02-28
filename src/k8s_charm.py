@@ -102,6 +102,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Restart grafana agent."""
         self._container.restart("agent")
 
+    @property
     def is_machine(self) -> bool:
         """Check if this is a machine charm."""
         return False

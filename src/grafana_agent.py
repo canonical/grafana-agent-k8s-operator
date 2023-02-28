@@ -136,6 +136,7 @@ class GrafanaAgentCharm(CharmBase):
         """Restart grafana agent."""
         raise NotImplementedError("Please override the restart method")
 
+    @property
     def is_machine(self) -> bool:
         """Check if this is a machine charm."""
         raise NotImplementedError("Please override the is_machine method")
@@ -333,7 +334,7 @@ class GrafanaAgentCharm(CharmBase):
             }
         }
 
-        if self.is_machine():
+        if self.is_machine:
             node_exporter_job_name = (
                 f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_node-exporter"
             )
@@ -347,7 +348,7 @@ class GrafanaAgentCharm(CharmBase):
                         "replacement": node_exporter_job_name,
                     },
                 ]
-                + self.get_principal_relabels(),
+                + self._principal_relabels,
             }
 
         return conf
@@ -377,14 +378,10 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        logs_config = {
-            "logs": {
-                "configs": [],
-            }
-        }
+        configs = []
 
         if self._loki_consumer.loki_endpoints:
-            logs_config["logs"]["configs"].append(
+            configs.append(
                 {
                     "name": "push_api_server",
                     "clients": self._loki_consumer.loki_endpoints,
@@ -402,8 +399,8 @@ class GrafanaAgentCharm(CharmBase):
                 }
             )
 
-        if self.is_machine():
-            logs_config["logs"]["configs"].append(
+        if self.is_machine:
+            configs.append(
                 {
                     "name": "log_file_scraper",
                     "clients": self._loki_consumer.loki_endpoints,
@@ -414,16 +411,16 @@ class GrafanaAgentCharm(CharmBase):
                                 "labels": {
                                     "__path__": "/var/log/*",
                                     "__path_exclude__": "/var/log/positions.yaml",
-                                    **self.get_principal_labels(),
+                                    **self._principal_labels,
                                 }
                             },
                         },
-                        {"job_name": "syslog", "journal": {"labels": self.get_principal_labels()}},
+                        {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
                     ],
                 }
             )
-            
-        return logs_config
+
+        return {"logs": {"configs": configs}}
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
