@@ -68,6 +68,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             )
         self._update_status()
 
+    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         return self._container.can_connect()
@@ -102,6 +103,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Restart grafana agent."""
         self._container.restart("agent")
 
+    @property
     def is_machine(self) -> bool:
         """Check if this is a machine charm."""
         return False

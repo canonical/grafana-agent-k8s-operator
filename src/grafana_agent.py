@@ -111,6 +111,7 @@ class GrafanaAgentCharm(CharmBase):
         """Gets the raw output from `agent -version`."""
         raise NotImplementedError("Please override the agent_version_output method")
 
+    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         raise NotImplementedError("Please override the is_ready method")
@@ -136,6 +137,7 @@ class GrafanaAgentCharm(CharmBase):
         """Restart grafana agent."""
         raise NotImplementedError("Please override the restart method")
 
+    @property
     def is_machine(self) -> bool:
         """Check if this is a machine charm."""
         raise NotImplementedError("Please override the is_machine method")
@@ -204,14 +206,14 @@ class GrafanaAgentCharm(CharmBase):
                 self.unit.status = WaitingStatus("no related Prometheus remote-write")
                 return
 
-        if not self.is_ready():
+        if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
             return
 
         self.unit.status = ActiveStatus()
 
     def _update_config(self, _) -> None:
-        if not self.is_ready():
+        if not self.is_ready:
             # Grafana-agent is not yet available so no need to update config
             self.unit.status = WaitingStatus("waiting for agent to start")
             return
@@ -225,6 +227,10 @@ class GrafanaAgentCharm(CharmBase):
             # If the file does not yet exist, pebble_ready has not run yet,
             # and we may be processing a deferred event
             pass
+
+        if config == old_config:
+            # Nothing changed, possibly new install. Set us active and move on.
+            return
 
         try:
             if config != old_config:
@@ -244,7 +250,7 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             The arguments as a string
         """
-        return "-config.file=/etc/agent/agent.yaml"
+        return f"-config.file={CONFIG_PATH}"
 
     def _config_file(self) -> Dict[str, Any]:
         """Generates config file str.
@@ -333,7 +339,7 @@ class GrafanaAgentCharm(CharmBase):
             }
         }
 
-        if self.is_machine():
+        if self.is_machine:
             node_exporter_job_name = (
                 f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_node-exporter"
             )
@@ -347,7 +353,7 @@ class GrafanaAgentCharm(CharmBase):
                         "replacement": node_exporter_job_name,
                     },
                 ]
-                + relabel_configs,
+                + self._principal_relabeling_config,
             }
 
         return conf
@@ -377,31 +383,49 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        if not self._loki_consumer.loki_endpoints:
-            return {"logs": {}}
+        configs = []
 
-        return {
-            "logs": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": self._loki_consumer.loki_endpoints,
-                        "positions": {"filename": f"{self._promtail_positions}"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": self._http_listen_port,
-                                        "grpc_listen_port": self._grpc_listen_port,
-                                    },
+        if self._loki_consumer.loki_endpoints:
+            configs.append(
+                {
+                    "name": "push_api_server",
+                    "clients": self._loki_consumer.loki_endpoints,
+                    "scrape_configs": [
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": self._http_listen_port,
+                                    "grpc_listen_port": self._grpc_listen_port,
                                 },
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
+                            },
+                        }
+                    ],
+                }
+            )
+
+        if self.is_machine:
+            configs.append(
+                {
+                    "name": "log_file_scraper",
+                    "clients": self._loki_consumer.loki_endpoints,
+                    "scrape_configs": [
+                        {
+                            "job_name": "varlog",
+                            "static_configs": {
+                                "labels": {
+                                    "__path__": "/var/log/*",
+                                    "__path_exclude__": "/var/log/positions.yaml",
+                                    **self._principal_labels,
+                                }
+                            },
+                        },
+                        {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
+                    ],
+                }
+            )
+
+        return {"logs": {"configs": configs}}
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
@@ -431,7 +455,7 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             A string equal to the agent version
         """
-        if not self.is_ready():
+        if not self.is_ready:
             return None
         version_output = self.agent_version_output()
         # Output looks like this:
