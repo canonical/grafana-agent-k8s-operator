@@ -246,7 +246,7 @@ class TestScrapeConfiguration(unittest.TestCase):
                         {"url": "http://loki0:3100:/loki/api/v1/push"},
                         {"url": "http://loki1:3100:/loki/api/v1/push"},
                     ],
-                    "positions": {"filename": "/tmp/positions.yaml"},
+                    "positions": {"filename": "/run/promtail-positions.yaml"},
                     "scrape_configs": [
                         {
                             "job_name": "loki",

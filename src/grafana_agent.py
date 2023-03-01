@@ -350,7 +350,7 @@ class GrafanaAgentCharm(CharmBase):
                 {
                     "name": "push_api_server",
                     "clients": self._loki_consumer.loki_endpoints,
-                    "positions": {"filename": "/tmp/positions.yaml"},
+                    "positions": {"filename": self._promtail_positions},
                     "scrape_configs": [
                         {
                             "job_name": "loki",

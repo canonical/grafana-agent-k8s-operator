@@ -171,7 +171,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                         "static_configs": {
                             "labels": {
                                 "__path__": "/var/log/*log",
-                                "__path_exclude__": "/var/log/positions.yaml",
                                 **self._principal_labels,
                             }
                         },
