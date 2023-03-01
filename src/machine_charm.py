@@ -10,7 +10,7 @@ import subprocess
 from typing import Any, Dict, List, Optional, Union
 
 from ops.main import main
-from ops.model import Relation, Unit
+from ops.model import MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
