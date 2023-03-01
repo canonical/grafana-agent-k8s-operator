@@ -7,8 +7,6 @@
 import logging
 import pathlib
 import subprocess
-import tempfile
-import urllib
 from typing import Any, Dict, List, Optional, Union
 
 from ops.main import main
@@ -52,45 +50,32 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def on_install(self, _) -> None:
         """Install the Grafana Agent snap."""
         # Check if Grafana Agent is installed
+        self.unit.status = MaintenanceStatus("Installing grafana-agent snap")
         if not self._is_installed:
-            # We need to download the snap from github and install with --dangerous.
-            # This should be changed once grafana-agent is in the snap store.
-            with tempfile.TemporaryDirectory() as tmpdir:
-                snap_file = pathlib.Path(tmpdir) / "grafana-agent.snap"
-                with snap_file.open("wb") as f:
-                    # This will use a lot of memory (equal to the size of the file).
-                    # Since this is only a temporary workaround, it's fine.
-                    f.write(
-                        urllib.request.urlopen(
-                            "https://github.com/simskij/grafana-agent/releases/download/pre-release-1/grafana-agent_0.29.0_amd64.snap"
-                        ).read()
-                    )
-                subprocess.run(["sudo", "snap", "install", "--dangerous", "--devmode", snap_file])
+            subprocess.run(["sudo", "snap", "install", "grafana-agent"])
             if not self._is_installed:
                 raise GrafanaAgentInstallError("Failed to install grafana-agent.")
-            connect_process = subprocess.run(
-                ["sudo", "snap", "connect", "grafana-agent:etc-grafana-agent"]
-            )
-            if connect_process.returncode != 0:
-                raise GrafanaAgentInstallError("Failed to connect grafana-agent:etc-grafana-agent")
 
     def on_start(self, _) -> None:
         """Start Grafana Agent."""
-        # Ensure the config is up to date before we start to avoid racy relation changes
-        # and starting with a "bare" config in ActiveStatus
+        # Ensure the config is up to date before we start to avoid racy relation
+        # changes and starting with a "bare" config in ActiveStatus
         self._update_config(None)
+        self.unit.status = MaintenanceStatus("Starting grafana-agent snap")
         start_process = subprocess.run(["sudo", "snap", "start", "--enable", self._service])
         if start_process.returncode != 0:
             raise GrafanaAgentServiceError("Failed to start grafana-agent")
 
     def on_stop(self, _) -> None:
         """Stop Grafana Agent."""
+        self.unit.status = MaintenanceStatus("Stopping grafana-agent snap")
         stop_process = subprocess.run(["sudo", "snap", "stop", "--disable", self._service])
         if stop_process.returncode != 0:
             raise GrafanaAgentServiceError("Failed to stop grafana-agent")
 
     def on_remove(self, _) -> None:
         """Uninstall the Grafana Agent snap."""
+        self.unit.status = MaintenanceStatus("Uninstalling grafana-agent snap")
         subprocess.run(["sudo", "snap", "remove", "--purge", "grafana-agent"])
         if self._is_installed:
             raise GrafanaAgentInstallError("Failed to uninstall grafana-agent")
