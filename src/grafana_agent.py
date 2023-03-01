@@ -48,7 +48,7 @@ class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
-    _promtail_positions = "/tmp/positions.yaml"
+    _promtail_positions = "/run/promtail-positions.yaml"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
@@ -195,7 +195,11 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
 
     def _update_status(self) -> bool:
-        """Update the status to reflect the status quo."""
+        """Update the status to reflect the status quo.
+
+        Returns:
+            True if the status was set to Active; False otherwise.
+        """
         if len(self.model.relations["metrics-endpoint"]):
             if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                 self.unit.status = WaitingStatus("no related Prometheus remote-write")
@@ -226,6 +230,7 @@ class GrafanaAgentCharm(CharmBase):
 
         if config == old_config:
             # Nothing changed, possibly new install. Set us active and move on.
+            self.unit.status = ActiveStatus()
             return
 
         try:

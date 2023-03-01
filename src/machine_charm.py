@@ -12,7 +12,7 @@ import urllib
 from typing import Any, Dict, List, Optional, Union
 
 from ops.main import main
-from ops.model import ActiveStatus, Relation, Unit
+from ops.model import Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -47,6 +47,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         self.framework.observe(self.on.start, self.on_start)
         self.framework.observe(self.on.stop, self.on_stop)
         self.framework.observe(self.on.remove, self.on_remove)
+        self.framework.observe(self.on["juju_info"].relation_joined, self._update_config)
 
     def on_install(self, _) -> None:
         """Install the Grafana Agent snap."""
@@ -81,7 +82,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         start_process = subprocess.run(["sudo", "snap", "start", "--enable", self._service])
         if start_process.returncode != 0:
             raise GrafanaAgentServiceError("Failed to start grafana-agent")
-        self.unit.status = ActiveStatus()
 
     def on_stop(self, _) -> None:
         """Stop Grafana Agent."""
@@ -98,7 +98,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
-        return self._is_installed and self.principal_unit
+        return self._is_installed
 
     def agent_version_output(self) -> str:
         """Runs `agent -version` and returns the output.
@@ -170,7 +170,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                         "job_name": "varlog",
                         "static_configs": {
                             "labels": {
-                                "__path__": "/var/log/*",
+                                "__path__": "/var/log/*log",
                                 "__path_exclude__": "/var/log/positions.yaml",
                                 **self._principal_labels,
                             }
@@ -226,20 +226,24 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         return {
             # Dict ordering will give the appropriate result here
             "instance": self._instance_name,
-            **self._principal_topology,
+            **self._instance_topology,
         }
 
     @property
     def _principal_relabeling_config(self) -> list:
         """Return a relabel config with labels from the topology of the principal charm."""
-        topology_relabels = [
-            {
-                "source_labels": ["__address__"],
-                "target_label": key,
-                "replacement": value,
-            }
-            for key, value in self._principal_topology.items()
-        ]
+        topology_relabels = (
+            [
+                {
+                    "source_labels": ["__address__"],
+                    "target_label": key,
+                    "replacement": value,
+                }
+                for key, value in self._instance_topology.items()
+            ]
+            if self._principal_labels
+            else []
+        )
 
         return [
             {
@@ -247,7 +251,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 "regex": "(.*)",
                 "replacement": self._instance_name,
             }
-        ] + topology_relabels
+        ] + topology_relabels  # type: ignore
 
 
 if __name__ == "__main__":
