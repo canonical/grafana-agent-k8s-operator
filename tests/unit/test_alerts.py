@@ -98,7 +98,7 @@ LOKI_ALERT_RULES = {
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertIngestion(unittest.TestCase):
-    @patch("grafana_agent.KubernetesServicePatch", lambda x, y: None)
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
