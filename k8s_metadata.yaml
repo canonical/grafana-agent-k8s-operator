@@ -9,7 +9,12 @@ summary: |
   Grafana Agent is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
 maintainers:
     - Jose Massón <jose.masson@canonical.com>
-
+    - Ryan Barry <ryan.barry@canonical.com>
+    - Leon Mintz <leon.mintz@canonical.com>
+    - Pietro Pasotti <pietro.pasotti@canonical.com>
+    - Dylan Stephano-Shachter <dylan.stephano-shachter@canonical.com>
+    - Luca Bello <luca.bello@canonical.com>
+    - Simon Aronsson <simon.aronsson@canonical.com>
 assumes:
   - k8s-api
 
