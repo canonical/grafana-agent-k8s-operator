@@ -10,12 +10,7 @@ import subprocess
 from typing import Dict, Optional, Union
 
 from ops.main import main
-from ops.model import (
-    ActiveStatus,
-    MaintenanceStatus,
-    Relation,
-    Unit,
-)
+from ops.model import ActiveStatus, MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -62,8 +57,8 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def on_start(self, _) -> None:
         """Start Grafana Agent."""
-        # Ensure the config is up to date before we start to avoid racy relation changes and starting
-        # with a "bare" config in ActiveStatus
+        # Ensure the config is up to date before we start to avoid racy relation
+        # changes and starting with a "bare" config in ActiveStatus
         self._update_config(None)
         self.unit.status = MaintenanceStatus("Starting grafana-agent snap")
         start_process = subprocess.run(["sudo", "snap", "start", "--enable", self._service])
