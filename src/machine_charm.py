@@ -150,14 +150,16 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             {
                 "name": "log_file_scraper",
                 "clients": self._loki_consumer.loki_endpoints,
+                "positions": {"filename": self._promtail_positions},
                 "scrape_configs": [
                     {
                         "job_name": "varlog",
                         "static_configs": {
+                            "targets": ["localhost"],
                             "labels": {
                                 "__path__": "/var/log/*log",
                                 **self._principal_labels,
-                            }
+                            },
                         },
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
