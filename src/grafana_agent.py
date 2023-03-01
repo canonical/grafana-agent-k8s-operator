@@ -136,11 +136,6 @@ class GrafanaAgentCharm(CharmBase):
         raise NotImplementedError("Please override the restart method")
 
     @property
-    def is_machine(self) -> bool:
-        """Check if this is a machine charm."""
-        raise NotImplementedError("Please override the is_machine method")
-
-    @property
     def _additional_integrations(self) -> Dict[str, Any]:
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_integrations method")

@@ -132,11 +132,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         subprocess.run(["sudo", "snap", "restart", self._service])
 
     @property
-    def is_machine(self) -> bool:
-        """Check if this is a machine charm."""
-        return True
-
-    @property
     def _is_installed(self) -> bool:
         """Check if the Grafana Agent snap is installed."""
         package_check = subprocess.run("snap list | grep grafana-agent", shell=True)
