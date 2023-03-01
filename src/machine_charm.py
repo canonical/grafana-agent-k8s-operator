@@ -9,17 +9,10 @@ import pathlib
 import subprocess
 import tempfile
 import urllib
-from typing import Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ops.main import main
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    MaintenanceStatus,
-    Relation,
-    Unit,
-    WaitingStatus,
-)
+from ops.model import ActiveStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -82,8 +75,8 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def on_start(self, _) -> None:
         """Start Grafana Agent."""
-        # Ensure the config is up to date before we start to avoid racy relation changes and starting
-        # with a "bare" config in ActiveStatus
+        # Ensure the config is up to date before we start to avoid racy relation changes
+        # and starting with a "bare" config in ActiveStatus
         self._update_config(None)
         start_process = subprocess.run(["sudo", "snap", "start", "--enable", self._service])
         if start_process.returncode != 0:
@@ -150,6 +143,50 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         return True if package_check.returncode == 0 else False
 
     @property
+    def _additional_integrations(self) -> Dict[str, Any]:
+        """Additional integrations for machine charms."""
+        node_exporter_job_name = (
+            f"juju_{self.model.name}_{self.model.uuid}_{self.model.app.name}_node-exporter"
+        )
+        return {
+            "node_exporter": {
+                "enabled": True,
+                "relabel_configs": [
+                    # Align the "job" name with those of prometheus_scrape
+                    {
+                        "target_label": "job",
+                        "regex": "(.*)",
+                        "replacement": node_exporter_job_name,
+                    },
+                ]
+                + self._principal_relabeling_config,
+            }
+        }
+
+    @property
+    def _additional_log_configs(self) -> List[Dict[str, Any]]:
+        """Additional logging configuration for machine charms."""
+        return [
+            {
+                "name": "log_file_scraper",
+                "clients": self._loki_consumer.loki_endpoints,
+                "scrape_configs": [
+                    {
+                        "job_name": "varlog",
+                        "static_configs": {
+                            "labels": {
+                                "__path__": "/var/log/*",
+                                "__path_exclude__": "/var/log/positions.yaml",
+                                **self._principal_labels,
+                            }
+                        },
+                    },
+                    {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
+                ],
+            }
+        ]
+
+    @property
     def _principal_relation(self) -> Optional[Relation]:
         if self.model.relations.get("juju-info"):
             return self.model.relations["juju-info"][0]
@@ -173,7 +210,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             return None
 
     @property
-    def _principal_topology(
+    def _instance_topology(
         self,
     ) -> Dict[str, str]:
         unit = self.principal_unit
@@ -187,11 +224,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             }
         else:
             return {}
-
-    @property
-    def _instance_name(self) -> str:
-        """Return the instance name as interpolated topology values."""
-        return "_".join([v for v in self._principal_topology.values()])
 
     @property
     def _principal_labels(self) -> Dict[str, str]:
@@ -215,7 +247,11 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         ]
 
         return [
-            {"target_label": "instance", "regex": "(.*)", "replacement": self._instance_name}
+            {
+                "target_label": "instance",
+                "regex": "(.*)",
+                "replacement": self._instance_name,
+            }
         ] + topology_relabels
 
 

@@ -6,7 +6,7 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 import logging
 import pathlib
-from typing import Union
+from typing import Any, Dict, List, Union
 
 import yaml
 from charms.observability_libs.v1.kubernetes_service_patch import (
@@ -43,7 +43,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         Args:
             event: The event object of the pebble ready event
         """
-        self._container.push(CONFIG_PATH, yaml.dump(self._config_file()), make_dirs=True)
+        self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
 
         pebble_layer = {
             "summary": "agent layer",
@@ -72,6 +72,16 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         return self._container.can_connect()
+
+    @property
+    def _additional_integrations(self) -> Dict:
+        """No additions for k8s charms."""
+        return {}
+
+    @property
+    def _additional_log_configs(self) -> List[Dict[str, Any]]:
+        """Additional per-type integrations to inject."""
+        return []
 
     def agent_version_output(self) -> str:
         """Runs `agent -version` and returns the output.

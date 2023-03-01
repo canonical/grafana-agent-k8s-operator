@@ -78,7 +78,7 @@ REWRITE_CONFIGS = [
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
-    @patch("grafana_agent.KubernetesServicePatch", lambda x, y: None)
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
@@ -149,15 +149,17 @@ class TestScrapeConfiguration(unittest.TestCase):
             "logs": {},
         }
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
 
-        self.assertEqual(DeepDiff(expected_config, config, ignore_order=True), {})
+        self.assertEqual(
+            DeepDiff(expected_config, self.harness.charm._generate_config(), ignore_order=True), {}
+        )
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
         # Test scale down
         self.harness.remove_relation_unit(rel_id, "prometheus/1")
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
 
         self.assertEqual(
             config["integrations"]["prometheus_remote_write"],
@@ -171,7 +173,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         # Test scale to zero
         self.harness.remove_relation_unit(rel_id, "prometheus/0")
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
 
         self.assertEqual(config["integrations"]["prometheus_remote_write"], [])
         self.assertEqual(config["metrics"]["configs"][0]["remote_write"], [])
@@ -198,7 +200,7 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
         self.assertDictEqual(
             config["integrations"],
             {
@@ -215,7 +217,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         )
 
     def test__cli_args(self):
-        expected = "-config.file=/etc/agent/agent.yaml"
+        expected = "-config.file=/etc/grafana-agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
     # Leaving this test here as we need to use it again when we figure out how to
@@ -237,33 +239,31 @@ class TestScrapeConfiguration(unittest.TestCase):
             self.harness.update_relation_data(rel_id, f"loki/{u}", {"endpoint": endpoint})
 
         expected = {
-            "logs": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": [
-                            {"url": "http://loki0:3100:/loki/api/v1/push"},
-                            {"url": "http://loki1:3100:/loki/api/v1/push"},
-                        ],
-                        "positions": {"filename": "/tmp/positions.yaml"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": 3500,
-                                        "grpc_listen_port": 3600,
-                                    },
+            "configs": [
+                {
+                    "name": "push_api_server",
+                    "clients": [
+                        {"url": "http://loki0:3100:/loki/api/v1/push"},
+                        {"url": "http://loki1:3100:/loki/api/v1/push"},
+                    ],
+                    "positions": {"filename": "/tmp/positions.yaml"},
+                    "scrape_configs": [
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": 3500,
+                                    "grpc_listen_port": 3600,
                                 },
-                            }
-                        ],
-                    }
-                ]
-            }
+                            },
+                        }
+                    ],
+                }
+            ]
         }
         self.assertEqual(
-            DeepDiff(expected, self.harness.charm._loki_config(), ignore_order=True), {}
+            DeepDiff(expected, self.harness.charm._loki_config, ignore_order=True), {}
         )
 
         self.harness.remove_relation(rel_id)
-        self.assertEqual({"logs": {}}, self.harness.charm._loki_config())
+        self.assertEqual({}, self.harness.charm._loki_config)
