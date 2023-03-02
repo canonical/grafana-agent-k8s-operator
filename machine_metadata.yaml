@@ -62,6 +62,6 @@ provides:
     # lib crashes if we don't have it.
     interface: loki_push_api
     scope: container
-  grafana-dashboards:
+  grafana-dashboards-provider:
     interface: grafana_dashboard
     scope: container
