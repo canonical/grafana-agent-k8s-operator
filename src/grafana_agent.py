@@ -31,6 +31,8 @@ LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
 LOKI_RULES_DEST_PATH = "./loki_alert_rules"
 METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
 METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
+DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
+DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
@@ -64,8 +66,13 @@ class GrafanaAgentCharm(CharmBase):
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
+        self.dashboard_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's dashboards?
+            src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
+            dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
+        )
 
-        for rules in [self.loki_rules_paths, self.metrics_rules_paths]:
+        for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
@@ -83,7 +90,7 @@ class GrafanaAgentCharm(CharmBase):
         self._grafana_dashboards_provider = GrafanaDashboardProvider(
             self,
             relation_name="grafana-dashboards",
-            dashboards_path="src/grafana_dashboards",  # placeholder until we figure out the plug
+            dashboards_path=self.dashboard_paths.dest,
         )
         self.framework.observe(
             self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
