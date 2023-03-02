@@ -43,11 +43,12 @@ requires:
     interface: prometheus_scrape
   logging-consumer:
     interface: loki_push_api
+  # TODO for the k8s charm, add grafana-dashboards-consumer
 
 provides:
   logging-provider:
     interface: loki_push_api
-  grafana-dashboards:
+  grafana-dashboards-provider:
     interface: grafana_dashboard
 
 storage:

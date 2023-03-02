@@ -91,7 +91,7 @@ class GrafanaAgentCharm(CharmBase):
         )
         self._grafana_dashboards_provider = GrafanaDashboardProvider(
             self,
-            relation_name="grafana-dashboards",
+            relation_name="grafana-dashboards-provider",
             dashboards_path=self.dashboard_paths.dest,
         )
         self.framework.observe(
