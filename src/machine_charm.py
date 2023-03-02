@@ -154,13 +154,15 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 "scrape_configs": [
                     {
                         "job_name": "varlog",
-                        "static_configs": {
-                            "targets": ["localhost"],
-                            "labels": {
-                                "__path__": "/var/log/*log",
-                                **self._principal_labels,
-                            },
-                        },
+                        "static_configs": [
+                            {
+                                "targets": ["localhost"],
+                                "labels": {
+                                    "__path__": "/var/log/*log",
+                                    **self._principal_labels,
+                                },
+                            }
+                        ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
                 ],
