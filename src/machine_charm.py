@@ -146,10 +146,11 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     @property
     def _additional_log_configs(self) -> List[Dict[str, Any]]:
         """Additional logging configuration for machine charms."""
+        _, loki_endpoints = self._enrich_endpoints()
         return [
             {
                 "name": "log_file_scraper",
-                "clients": self._loki_consumer.loki_endpoints,
+                "clients": loki_endpoints,
                 "positions": {"filename": self._promtail_positions},
                 "scrape_configs": [
                     {
