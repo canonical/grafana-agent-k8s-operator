@@ -47,6 +47,8 @@ requires:
 provides:
   logging-provider:
     interface: loki_push_api
+  grafana-dashboards:
+    interface: grafana_dashboard
 
 storage:
   data:

@@ -11,6 +11,7 @@ from collections import namedtuple
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import yaml
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -78,6 +79,14 @@ class GrafanaAgentCharm(CharmBase):
         )
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
+        )
+        self._grafana_dashboards_provider = GrafanaDashboardProvider(
+            self,
+            relation_name="grafana-dashboards",
+            dashboards_path="src/grafana_dashboards",  # placeholder until we figure out the plug
+        )
+        self.framework.observe(
+            self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
         )
 
         self.framework.observe(self.on.upgrade_charm, self._metrics_alerts)
@@ -244,6 +253,10 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = BlockedStatus(str(e))
         except APIError as e:
             self.unit.status = WaitingStatus(str(e))
+
+    def _dashboards_changed(self, _):
+        # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)
 
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
