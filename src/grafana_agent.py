@@ -59,15 +59,17 @@ class GrafanaAgentCharm(CharmBase):
         super().__init__(*args)
 
         self.loki_rules_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's own rules?
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
         )
         self.metrics_rules_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's own rules?
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
         self.dashboard_paths = RulesMapping(
-            # TODO how to inject topology only for this charm's dashboards?
+            # TODO how to inject topology (is there any?) only for this charm's own dashboards?
             src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
             dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
         )
