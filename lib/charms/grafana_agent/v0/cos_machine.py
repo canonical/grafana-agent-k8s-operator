@@ -216,5 +216,5 @@ class CosMachineConsumer(Object):
         dashboards = []
         for relation in self._relations:
             if dashboard := relation.data.get("dashboards", {}).get("dashboards", []):
-                dashboards.append(dashboard)
+                dashboards.extend(json.loads(dashboard))
         return dashboards
