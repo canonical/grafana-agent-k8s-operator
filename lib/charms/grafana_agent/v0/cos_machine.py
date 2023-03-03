@@ -198,7 +198,7 @@ class CosMachineConsumer(Object):
                         "metrics_path": job["path"],
                         "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
                     }
-                jobs.append(json.loads(jobs))
+                jobs.append(json.loads(job_config))
 
         return jobs
 
