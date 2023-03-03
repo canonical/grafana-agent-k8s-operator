@@ -35,8 +35,8 @@ class GrafanaAgentServiceError(GrafanaAgentError):
     pass
 
 
-class GrafanaAgentK8sCharm(GrafanaAgentCharm):
-    """K8s version of the Grafana Agent charm."""
+class GrafanaAgentMachineCharm(GrafanaAgentCharm):
+    """Machine version of the Grafana Agent charm."""
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -119,8 +119,8 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     @property
     def _is_installed(self) -> bool:
         """Check if the Grafana Agent snap is installed."""
-        package_check = subprocess.run("snap list | grep grafana-agent", shell=True)
-        return True if package_check.returncode == 0 else False
+        package_check = subprocess.run("snap list grafana-agent", shell=True)
+        return package_check.returncode == 0
 
     @property
     def _additional_integrations(self) -> Dict[str, Any]:
@@ -243,4 +243,4 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
 
 if __name__ == "__main__":
-    main(GrafanaAgentK8sCharm)
+    main(GrafanaAgentMachineCharm)
