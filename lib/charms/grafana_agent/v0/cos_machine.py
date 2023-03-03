@@ -56,8 +56,8 @@ class CosMachineProvider(Object):
             logs_rules_dir: Directory where the logs rules are stored.
             logs_slots: Snap slots to connect to for scraping logs
                 in the form ["snap-name:slot", ...].
-            dashboards_dir: Directory where the dashboards are stored.
-            refresh_events: List of events on which to resfresh relation data.
+            dashboard_dirs: Directory where the dashboards are stored.
+            refresh_events: List of events on which to refresh relation data.
         """
         super().__init__(charm, relation_name)
         self._charm = charm
