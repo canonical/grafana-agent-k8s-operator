@@ -44,7 +44,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         super().__init__(*args)
         self._service = "grafana-agent.grafana-agent"
 
-        self._cos = CosMachineConsumer()
+        self._cos = CosMachineConsumer(self)
         self.framework.observe(self._cos.on.data_changed, self.on_scrape_targets_changed)
         self.framework.observe(self._cos.on.data_changed, self._update_metrics_alerts)
         self.framework.observe(self._cos.on.data_changed, self._update_loki_alerts)

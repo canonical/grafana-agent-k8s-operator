@@ -42,6 +42,7 @@ class CosMachineProvider(Object):
         metrics_endpoints: List[dict] = [DEFAULT_METRICS_ENDPOINT],
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
+        recursive_rules_dir: bool = False,
         logs_slots: Optional[List[str]] = None,
         dashboard_dirs: List[str] = ["./src/grafana_dashboards"],
         refresh_events: Optional[List] = None,
@@ -65,6 +66,7 @@ class CosMachineProvider(Object):
         self._metrics_endpoints = metrics_endpoints
         self._metrics_rules = metrics_rules_dir
         self._logs_rules = logs_rules_dir
+        self._recursive = recursive_rules_dir
         self._logs_slots = logs_slots or []
         self._dashboard_dirs = dashboard_dirs
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
@@ -104,6 +106,7 @@ class CosMachineProvider(Object):
 
         return json.dumps(data)
 
+    @property
     def _scrape_jobs(self) -> List[Dict]:
         """Return a prometheus_scrape-like data structure for jobs."""
         job_name_prefix = self._charm.app.name
@@ -112,18 +115,21 @@ class CosMachineProvider(Object):
             for key, endpoint in enumerate(self._metrics_endpoints)
         ]
 
+    @property
     def _metrics_alert_rules(self) -> Dict:
         """Use (for now) the prometheus_scrape AlertRules to initialize this."""
         alert_rules = MetricsAlerts()
-        alert_rules.add_path(self.metrics_rules_dir, recursive=self._recursive)
+        alert_rules.add_path(self._metrics_rules, recursive=self._recursive)
         return alert_rules.as_dict()
 
+    @property
     def _log_alert_rules(self) -> Dict:
         """Use (for now) the loki_push_api AlertRules to initialize this."""
         alert_rules = LogAlerts()
-        alert_rules.add_path(self.log_rules_dir, recursive=self._recursive)
+        alert_rules.add_path(self._logs_rules, recursive=self._recursive)
         return alert_rules.as_dict()
 
+    @property
     def _dashboards(self) -> List[str]:
         dashboards = []
         for d in self._dashboard_dirs:
