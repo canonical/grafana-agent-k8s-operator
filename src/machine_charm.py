@@ -14,6 +14,8 @@ from ops.model import MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
+from charms.grafana_agent.v0.cos_machine import CosMachineConsumer
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +43,12 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._service = "grafana-agent.grafana-agent"
+
+        self._cos = CosMachineConsumer()
+        self.framework.observe(self._cos.on.data_changed, self.on_scrape_targets_changed)
+        self.framework.observe(self._cos.on.data_changed, self._update_metrics_alerts)
+        self.framework.observe(self._cos.on.data_changed, self._update_loki_alerts)
+
         self.framework.observe(self.on.install, self.on_install)
         self.framework.observe(self.on.start, self.on_start)
         self.framework.observe(self.on.stop, self.on_stop)
@@ -79,6 +87,18 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         subprocess.run(["sudo", "snap", "remove", "--purge", "grafana-agent"])
         if self._is_installed:
             raise GrafanaAgentInstallError("Failed to uninstall grafana-agent")
+
+    def metrics_rules(self) -> list:
+        """Return a list of metrics rules."""
+        return self._cos.metrics_alerts
+
+    def metrics_jobs(self) -> list:
+        """Return a list of metrics scrape jobs."""
+        return self._cos.metrics_jobs
+
+    def logs_rules(self) -> list:
+        """Return a list of logging rules."""
+        return self._cos.logs_alerts
 
     @property
     def is_ready(self):

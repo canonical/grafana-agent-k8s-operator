@@ -35,6 +35,17 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             ],
         )
 
+        self._scrape = MetricsEndpointConsumer(self)
+        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+        self.framework.observe(self._scrape.on.targets_changed, self._update_metrics_alerts)
+
+        self._loki_provider = LokiPushApiProvider(
+            self, relation_name="logging-provider", port=self._http_listen_port
+        )
+        self.framework.observe(
+            self._loki_provider.on.loki_push_api_alert_rules_changed, self._update_loki_alerts
+        )
+
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
 
     def on_pebble_ready(self, _) -> None:
@@ -67,6 +78,18 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 "Cannot set workload version at this time: could not get Alertmanager version."
             )
         self._update_status()
+
+    def metrics_rules(self):
+        """Return a list of metrics rules."""
+        return self._scrape.alerts
+
+    def metrics_jobs(self):
+        """Return a list of metrics scrape jobs."""
+        return self._scrape.jobs()
+
+    def logs_rules(self):
+        """Return a list of logging rules."""
+        return self._loki_provider.alerts()
 
     @property
     def is_ready(self):

@@ -71,29 +71,18 @@ class GrafanaAgentCharm(CharmBase):
         self._remote_write = PrometheusRemoteWriteConsumer(
             self, alert_rules_path=self.metrics_rules_paths.dest
         )
-        self._scrape = MetricsEndpointConsumer(self)
 
         self._loki_consumer = LokiPushApiConsumer(
             self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
         )
-        self._loki_provider = LokiPushApiProvider(
-            self, relation_name="logging-provider", port=self._http_listen_port
-        )
 
-        self.framework.observe(self.on.upgrade_charm, self._metrics_alerts)
-        self.framework.observe(self.on.upgrade_charm, self._loki_alerts)
+        self.framework.observe(self.on.upgrade_charm, self._update_metrics_alerts)
+        self.framework.observe(self.on.upgrade_charm, self._update_loki_alerts)
 
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
-        self.framework.observe(self._remote_write.on.endpoints_changed, self._metrics_alerts)
-
-        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
-        self.framework.observe(self._scrape.on.targets_changed, self._metrics_alerts)
-
-        self.framework.observe(
-            self._loki_provider.on.loki_push_api_alert_rules_changed, self._loki_alerts
-        )
+        self.framework.observe(self._remote_write.on.endpoints_changed, self._update_metrics_alerts)
 
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined, self._update_config
@@ -145,20 +134,32 @@ class GrafanaAgentCharm(CharmBase):
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_log_configs method")
 
+    def metrics_rules(self) -> list:
+        """Return a list of metrics rules."""
+        raise NotImplementedError("Please override the metrics_rules method")
+
+    def metrics_jobs(self) -> list:
+        """Return a list of metrics scrape jobs."""
+        raise NotImplementedError("Please override the metrics_jobs method")
+
+    def logs_rules(self) -> list:
+        """Return a list of logging rules."""
+        raise NotImplementedError("Please override the logs_rules method")
+
     # End: Abstract Methods
 
-    def _metrics_alerts(self, event):
+    def _update_metrics_alerts(self, event):
         self.update_alerts_rules(
             event,
-            alerts_func=self._scrape.alerts,
+            alerts_func=self.metrics_rules,
             reload_func=self._remote_write.reload_alerts,
             mapping=self.metrics_rules_paths,
         )
 
-    def _loki_alerts(self, event):
+    def _update_loki_alerts(self, event):
         self.update_alerts_rules(
             event,
-            alerts_func=self._loki_provider.alerts,
+            alerts_func=self.logs_rules,
             reload_func=self._loki_consumer._reinitialize_alert_rules,
             mapping=self.loki_rules_paths,
         )
@@ -267,7 +268,7 @@ class GrafanaAgentCharm(CharmBase):
                 "configs": [
                     {
                         "name": "agent_scraper",
-                        "scrape_configs": self._scrape.jobs(),
+                        "scrape_configs": self.metrics_jobs,
                         "remote_write": self._remote_write.endpoints,
                     }
                 ],

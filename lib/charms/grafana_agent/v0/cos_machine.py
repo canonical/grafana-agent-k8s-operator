@@ -185,9 +185,8 @@ class CosMachineConsumer(Object):
     def _relations(self):
         return self._charm.model.relations[self._relation_name]
 
-    # Not a property because it isn't in prometheus_scrape, and this keeps the
-    # signature compatible from the base class
-    def jobs(self) -> List[Dict]:
+    @property
+    def metrics_jobs(self) -> List[Dict]:
         """Return a prometheus_scrape-like data structure for jobs."""
         jobs = []
         for relation in self._relations:
