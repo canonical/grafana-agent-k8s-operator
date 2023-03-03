@@ -222,7 +222,7 @@ class CosMachineConsumer(Object):
 
     @property
     def dashboards(self) -> List[str]:
-        """Fetch dashboards (as encoded content)."""
+        """Fetch dashboards as encoded content."""
         dashboards = []
         for relation in self._relations:
             if dashboard := relation.data.get("dashboards", {}).get("dashboards", []):
