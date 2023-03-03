@@ -17,7 +17,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAler
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
-LIBID = ""
+LIBID = "1212" #FIXME: Need to get a valid ID from charmhub
 LIBAPI = 0
 LIBPATCH = 1
 
@@ -32,7 +32,7 @@ DEFAULT_METRICS_ENDPOINT = {
 logger = logging.getLogger(__name__)
 
 
-class CosMachineProvider(Object):
+class COSMachineProvider(Object):
     """Provider class for the cos_machine interface."""
 
     def __init__(
@@ -47,7 +47,7 @@ class CosMachineProvider(Object):
         dashboard_dirs: List[str] = ["./src/grafana_dashboards"],
         refresh_events: Optional[List] = None,
     ):
-        """Create a CosMachineProvider instance.
+        """Create a COSMachineProvider instance.
 
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
@@ -145,20 +145,20 @@ class CosMachineProvider(Object):
         return base64.b64encode(lzma.compress(content)).decode("utf-8")
 
 
-class CosMachineDataChanged(EventBase):
-    """Event emitted when a `CosMachineProvider` joins or updates data."""
+class COSMachineDataChanged(EventBase):
+    """Event emitted when a `COSMachineProvider` joins or updates data."""
 
 
-class CosMachineConsumerEvents(ObjectEvents):
-    """Event descriptor for events raised by `CosMachineConsumer`."""
+class COSMachineConsumerEvents(ObjectEvents):
+    """Event descriptor for events raised by `COSMachineConsumer`."""
 
-    data_changed = EventSource(CosMachineDataChanged)
+    data_changed = EventSource(COSMachineDataChanged)
 
 
-class CosMachineConsumer(Object):
+class COSMachineConsumer(Object):
     """Provider class for the cos_machine interface."""
 
-    on = CosMachineConsumerEvents()
+    on = COSMachineConsumerEvents()
 
     def __init__(
         self,
@@ -166,7 +166,7 @@ class CosMachineConsumer(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         refresh_events: Optional[List] = None,
     ):
-        """Create a CosMachineConsumer instance.
+        """Create a COSMachineConsumer instance.
 
         Args:
             charm: The `CharmBase` instance that is instantiating this object.

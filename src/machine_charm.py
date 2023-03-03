@@ -14,7 +14,7 @@ from ops.model import MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
-from charms.grafana_agent.v0.cos_machine import CosMachineConsumer
+from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         super().__init__(*args)
         self._service = "grafana-agent.grafana-agent"
 
-        self._cos = CosMachineConsumer(self)
+        self._cos = COSMachineConsumer(self)
         self.framework.observe(self._cos.on.data_changed, self.on_scrape_targets_changed)
         self.framework.observe(self._cos.on.data_changed, self._update_metrics_alerts)
         self.framework.observe(self._cos.on.data_changed, self._update_loki_alerts)
