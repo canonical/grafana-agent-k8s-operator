@@ -10,9 +10,10 @@ import lzma
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
+from cosl import JujuTopology
+
 # FIXME: unify the alert rules format in cosl to drop these ASAP
 from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
-from charms.observability_libs.v0.juju_topology import JujuTopology
 from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAlerts
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
@@ -20,6 +21,8 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents
 LIBID = ""
 LIBAPI = 0
 LIBPATCH = 1
+
+PYDEPS = ["cosl"]
 
 DEFAULT_RELATION_NAME = "cos-machine"
 DEFAULT_METRICS_ENDPOINT = {
@@ -49,10 +52,10 @@ class CosMachineProvider(Object):
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
             relation_name: The name of the relation to communicate over.
-            metrics_endpoints: List of endpoints in for form [{"path": path, "port": port}, ...].
+            metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
-            logs_slots: Snap slots to connect to for scraping logs.
+            logs_slots: Snap slots to connect to for scraping logs in the form ["snap-name:slot", ...].
             dashboards_dir: Directory where the dashboards are stored.
             refresh_events: List of events on which to resfresh relation data.
         """
