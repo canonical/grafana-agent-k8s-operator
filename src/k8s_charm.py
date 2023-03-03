@@ -6,9 +6,13 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 import logging
 import pathlib
-from typing import Union
+from typing import Any, Dict, List, Union
 
 import yaml
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+    ServicePort,
+)
 from ops.main import main
 
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
@@ -22,6 +26,18 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+
+        self.service_patch = KubernetesServicePatch(
+            self,
+            [
+                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
+                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
+            ],
+        )
+
+        # TODO add a handler for `grafana-dashboards-consumer`.
+        #  A new kind of `GrafanaDashboardAggregator`?
+
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
 
     def on_pebble_ready(self, _) -> None:
@@ -30,7 +46,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         Args:
             event: The event object of the pebble ready event
         """
-        self._container.push(CONFIG_PATH, yaml.dump(self._config_file()), make_dirs=True)
+        self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
 
         pebble_layer = {
             "summary": "agent layer",
@@ -55,9 +71,20 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             )
         self._update_status()
 
+    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         return self._container.can_connect()
+
+    @property
+    def _additional_integrations(self) -> Dict:
+        """No additions for k8s charms."""
+        return {}
+
+    @property
+    def _additional_log_configs(self) -> List[Dict[str, Any]]:
+        """Additional per-type integrations to inject."""
+        return []
 
     def agent_version_output(self) -> str:
         """Runs `agent -version` and returns the output.

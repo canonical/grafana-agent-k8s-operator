@@ -8,14 +8,11 @@ import pathlib
 import re
 import shutil
 from collections import namedtuple
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import yaml
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -29,11 +26,13 @@ from requests.packages.urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = "/etc/agent/agent.yaml"
+CONFIG_PATH = "/etc/grafana-agent.yaml"
 LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
 LOKI_RULES_DEST_PATH = "./loki_alert_rules"
 METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
 METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
+DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
+DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
@@ -52,7 +51,7 @@ class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
-    _promtail_positions = "/tmp/positions.yaml"
+    _promtail_positions = "/run/promtail-positions.yaml"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
@@ -60,23 +59,22 @@ class GrafanaAgentCharm(CharmBase):
         super().__init__(*args)
 
         self.loki_rules_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's own rules?
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
         )
         self.metrics_rules_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's own rules?
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
-
-        self.service_patch = KubernetesServicePatch(
-            self,
-            [
-                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
-                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
-            ],
+        self.dashboard_paths = RulesMapping(
+            # TODO how to inject topology (is there any?) only for this charm's own dashboards?
+            src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
+            dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
         )
 
-        for rules in [self.loki_rules_paths, self.metrics_rules_paths]:
+        for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
@@ -90,6 +88,14 @@ class GrafanaAgentCharm(CharmBase):
         )
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
+        )
+        self._grafana_dashboards_provider = GrafanaDashboardProvider(
+            self,
+            relation_name="grafana-dashboards-provider",
+            dashboards_path=self.dashboard_paths.dest,
+        )
+        self.framework.observe(
+            self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
         )
 
         self.framework.observe(self.on.upgrade_charm, self._metrics_alerts)
@@ -108,13 +114,12 @@ class GrafanaAgentCharm(CharmBase):
         )
 
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_joined,
-            self._on_loki_push_api_endpoint_joined,
+            self._loki_consumer.on.loki_push_api_endpoint_joined, self._update_config
         )
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_departed,
-            self._on_loki_push_api_endpoint_departed,
+            self._loki_consumer.on.loki_push_api_endpoint_departed, self._update_config
         )
+        self.framework.observe(self.on.config_changed, self._update_config)
 
     # Abstract Methods
 
@@ -122,6 +127,7 @@ class GrafanaAgentCharm(CharmBase):
         """Gets the raw output from `agent -version`."""
         raise NotImplementedError("Please override the agent_version_output method")
 
+    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         raise NotImplementedError("Please override the is_ready method")
@@ -146,6 +152,16 @@ class GrafanaAgentCharm(CharmBase):
     def restart(self) -> None:
         """Restart grafana agent."""
         raise NotImplementedError("Please override the restart method")
+
+    @property
+    def _additional_integrations(self) -> Dict[str, Any]:
+        """Additional per-type integrations to inject."""
+        raise NotImplementedError("Please override the _additional_integrations method")
+
+    @property
+    def _additional_log_configs(self) -> List[Dict[str, Any]]:
+        """Additional per-type integrations to inject."""
+        raise NotImplementedError("Please override the _additional_log_configs method")
 
     # End: Abstract Methods
 
@@ -186,14 +202,6 @@ class GrafanaAgentCharm(CharmBase):
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
         reload_func()
 
-    def _on_loki_push_api_endpoint_joined(self, event) -> None:
-        """Event handler for the logging relation changed event."""
-        self._update_config(event)
-
-    def _on_loki_push_api_endpoint_departed(self, event) -> None:
-        """Event handler for the loki departed."""
-        self._update_config(event)
-
     def on_scrape_targets_changed(self, event) -> None:
         """Event handler for the scrape targets changed event."""
         self._update_config(event)
@@ -204,26 +212,31 @@ class GrafanaAgentCharm(CharmBase):
         self._update_config(event)
         self._update_status()
 
-    def _update_status(self) -> None:
-        """Update the status to reflect the status quo."""
+    def _update_status(self) -> bool:
+        """Update the status to reflect the status quo.
+
+        Returns:
+            True if the status was set to Active; False otherwise.
+        """
         if len(self.model.relations["metrics-endpoint"]):
             if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                 self.unit.status = WaitingStatus("no related Prometheus remote-write")
-                return
+                return False
 
-        if not self.is_ready():
+        if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
-            return
+            return False
 
         self.unit.status = ActiveStatus()
+        return True
 
     def _update_config(self, _) -> None:
-        if not self.is_ready():
-            # Grafana-agent is not yet running so no need to update config
+        if not self.is_ready:
+            # Grafana-agent is not yet available so no need to update config
             self.unit.status = WaitingStatus("waiting for agent to start")
             return
 
-        config = self._config_file()
+        config = self._generate_config()
         old_config = None
 
         try:
@@ -232,6 +245,11 @@ class GrafanaAgentCharm(CharmBase):
             # If the file does not yet exist, pebble_ready has not run yet,
             # and we may be processing a deferred event
             pass
+
+        if config == old_config:
+            # Nothing changed, possibly new install. Set us active and move on.
+            self.unit.status = ActiveStatus()
+            return
 
         try:
             if config != old_config:
@@ -245,104 +263,27 @@ class GrafanaAgentCharm(CharmBase):
         except APIError as e:
             self.unit.status = WaitingStatus(str(e))
 
+    def _dashboards_changed(self, _):
+        # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)
+
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
 
         Returns:
             The arguments as a string
         """
-        return "-config.file=/etc/agent/agent.yaml"
+        return f"-config.file={CONFIG_PATH}"
 
-    def _config_file(self) -> Dict[str, Any]:
+    def _generate_config(self) -> Dict[str, Any]:
         """Generates config file str.
 
         Returns:
             A yaml string with grafana agent config
         """
-        config = {}
-        config.update(self._server_config())
-        config.update(self._integrations_config())
-        config.update(self._prometheus_config())
-        config.update(self._loki_config())
-        return config
-
-    def _server_config(self) -> dict:
-        """Return the server section of the config.
-
-        Returns:
-            The dict representing the config
-        """
-        return {"server": {"log_level": "info"}}
-
-    def _integrations_config(self) -> dict:
-        """Return the integrations section of the config.
-
-        Returns:
-            The dict representing the config
-        """
-        juju_model = self.model.name
-        juju_model_uuid = self.model.uuid
-        juju_application = self.model.app.name
-        juju_unit = self.unit.name
-
-        job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
-        instance_value = f"{juju_model}_{juju_model_uuid}_{juju_application}_{juju_unit}"
-
-        return {
-            "integrations": {
-                "agent": {
-                    "enabled": True,
-                    "relabel_configs": [
-                        # Align the "job" name with those of prometheus_scrape
-                        {
-                            "target_label": "job",
-                            "regex": "(.*)",
-                            "replacement": job_name,
-                        },
-                        # Align the "instance" label with the rest of the Juju-collected metrics
-                        {
-                            "target_label": "instance",
-                            "regex": "(.*)",
-                            "replacement": instance_value,
-                        },
-                        {  # To add a label, we create a relabelling that replaces a built-in
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_charm",
-                            "replacement": self.meta.name,
-                        },
-                        {  # To add a label, we create a relabelling that replaces a built-in
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model",
-                            "replacement": juju_model,
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_model_uuid",
-                            "replacement": juju_model_uuid,
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_application",
-                            "replacement": juju_application,
-                        },
-                        {
-                            "source_labels": ["__address__"],
-                            "target_label": "juju_unit",
-                            "replacement": juju_unit,
-                        },
-                    ],
-                },
-                "prometheus_remote_write": self._remote_write.endpoints,
-            }
-        }
-
-    def _prometheus_config(self) -> dict:
-        """Return the prometheus section of the config.
-
-        Returns:
-            The dict representing the config
-        """
-        return {
+        config = {
+            "server": {"log_level": "info"},
+            "integrations": self._integrations_config,
             "metrics": {
                 "wal_directory": "/tmp/agent/data",
                 "configs": [
@@ -352,40 +293,117 @@ class GrafanaAgentCharm(CharmBase):
                         "remote_write": self._remote_write.endpoints,
                     }
                 ],
-            }
+            },
+            "logs": self._loki_config,
         }
+        return config
 
-    def _loki_config(self) -> dict:
+    @property
+    def _integrations_config(self) -> dict:
+        """Return the integrations section of the config.
+
+        Returns:
+            The dict representing the config
+        """
+        juju_model = self.model.name
+        juju_model_uuid = self.model.uuid
+        juju_application = self.model.app.name
+
+        # Align the "job" name with those of prometheus_scrape
+        job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
+
+        conf = {
+            "agent": {
+                "enabled": True,
+                "relabel_configs": [
+                    {
+                        "target_label": "job",
+                        "regex": "(.*)",
+                        "replacement": job_name,
+                    },
+                    {  # Align the "instance" label with the rest of the Juju-collected metrics
+                        "target_label": "instance",
+                        "regex": "(.*)",
+                        "replacement": self._instance_name,
+                    },
+                    {  # To add a label, we create a relabelling that replaces a built-in
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_charm",
+                        "replacement": self.meta.name,
+                    },
+                    {  # To add a label, we create a relabelling that replaces a built-in
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_model",
+                        "replacement": self.model.name,
+                    },
+                    {
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_model_uuid",
+                        "replacement": self.model.uuid,
+                    },
+                    {
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_application",
+                        "replacement": self.model.app.name,
+                    },
+                    {
+                        "source_labels": ["__address__"],
+                        "target_label": "juju_unit",
+                        "replacement": self.model.unit.name,
+                    },
+                ],
+            },
+            "prometheus_remote_write": self._remote_write.endpoints,
+            **self._additional_integrations,
+        }
+        return conf
+
+    @property
+    def _loki_config(self) -> Dict[str, List[Any]]:
         """Modifies the loki section of the config.
 
         Returns:
             a dict with Loki config
         """
-        if not self._loki_consumer.loki_endpoints:
-            return {"logs": {}}
+        configs = []
 
-        return {
-            "logs": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": self._loki_consumer.loki_endpoints,
-                        "positions": {"filename": f"{self._promtail_positions}"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": self._http_listen_port,
-                                        "grpc_listen_port": self._grpc_listen_port,
-                                    },
+        if self._loki_consumer.loki_endpoints:
+            configs.append(
+                {
+                    "name": "push_api_server",
+                    "clients": self._loki_consumer.loki_endpoints,
+                    "positions": {"filename": self._promtail_positions},
+                    "scrape_configs": [
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": self._http_listen_port,
+                                    "grpc_listen_port": self._grpc_listen_port,
                                 },
-                            }
-                        ],
-                    }
-                ]
-            }
+                            },
+                        }
+                    ],
+                }
+            )
+
+        configs.extend(self._additional_log_configs)  # type: ignore
+        return {"configs": configs} if configs else {}
+
+    @property
+    def _instance_topology(self) -> Dict[str, str]:
+        """Return a default topology which may be overridden by children."""
+        return {
+            "juju_model": self.model.name,
+            "juju_model_uuid": self.model.uuid,
+            "juju_application": self.model.app.name,
+            "juju_unit": self.model.unit.name,
         }
+
+    @property
+    def _instance_name(self) -> str:
+        """Return the instance name as interpolated topology values."""
+        return "_".join([v for v in self._instance_topology.values()])
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
@@ -415,12 +433,11 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             A string equal to the agent version
         """
-        if not self.is_ready():
+        if not self.is_ready:
             return None
-        version_output = self.agent_version_output()
         # Output looks like this:
         # agent, version v0.26.1 (branch: HEAD, revision: 2b88be37)
-        result = re.search(r"v(\d*\.\d*\.\d*)", version_output)
+        result = re.search(r"v(\d*\.\d*\.\d*)", self.agent_version_output())
         if result is None:
             return result
         return result.group(1)
