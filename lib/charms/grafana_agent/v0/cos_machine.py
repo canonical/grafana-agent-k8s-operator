@@ -120,7 +120,7 @@ class CosMachineProvider(Object):
         alert_rules.add_path(self.log_rules_dir, recursive=self._recursive)
         return alert_rules.as_dict()
 
-    def _update_dashboards(self) -> List[str]:
+    def _dashboards(self) -> List[str]:
         dashboards = []
         for d in self._dashboard_dirs:
             for path in Path(d).glob("*"):
