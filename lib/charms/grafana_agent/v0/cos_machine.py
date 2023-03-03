@@ -25,8 +25,8 @@ PYDEPS = ["cosl"]
 
 DEFAULT_RELATION_NAME = "cos-machine"
 DEFAULT_METRICS_ENDPOINT = {
-    "metrics_path": "/metrics",
-    "static_configs": [{"targets": ["*:80"]}],
+    "path": "/metrics",
+    "port": 80,
 }
 
 logger = logging.getLogger(__name__)
@@ -190,6 +190,12 @@ class CosMachineConsumer(Object):
         jobs = []
         for relation in self._relations:
             if jobs := relation.data.get("metrics", {}).get("scrape_jobs", []):
+                for job in jobs:
+                    job_config = {
+                        "job_name": job["job_name"],
+                        "metrics_path": job["path"],
+                        "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
+                    }
                 jobs.append(json.loads(jobs))
 
         return jobs
