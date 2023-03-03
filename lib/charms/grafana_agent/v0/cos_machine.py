@@ -187,6 +187,10 @@ class CosMachineConsumer(Object):
     def _on_relation_data_changed(self, _):
         self.on.data_changed.emit()
 
+    def trigger_refresh(self, _):
+        #FIXME: Figure out what we should do here
+        pass
+
     @property
     def _relations(self):
         return self._charm.model.relations[self._relation_name]
