@@ -134,17 +134,6 @@ class CosMachineProvider(Object):
 
         return base64.b64encode(lzma.compress(content)).decode("utf-8")
 
-    def _generate_alt_uid(self, key: str) -> str:
-        """Generate alternative uid for dashboards.
-
-        Args:
-            key: A string used (along with charm.meta.name) to build the hash uid.
-
-        Returns: A hash string.
-        """
-        raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
-        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
-
 
 class CosMachineDataChanged(EventBase):
     """Event emitted when a `CosMachineProvider` joins or updates data."""
