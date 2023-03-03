@@ -54,7 +54,8 @@ class CosMachineProvider(Object):
             metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
-            logs_slots: Snap slots to connect to for scraping logs in the form ["snap-name:slot", ...].
+            logs_slots: Snap slots to connect to for scraping logs
+                in the form ["snap-name:slot", ...].
             dashboards_dir: Directory where the dashboards are stored.
             refresh_events: List of events on which to resfresh relation data.
         """
@@ -75,6 +76,7 @@ class CosMachineProvider(Object):
             self.framework.observe(event, self.update_relation_data)
 
     def update_relation_data(self, event):
+        """Trigger the class to update relation data."""
         if isinstance(event, RelationEvent):
             relations = [event.relation]
         else:
@@ -171,12 +173,12 @@ class CosMachineConsumer(Object):
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
 
         events = self._charm.on[relation_name]
-        self.framework.observe(events.relation_joined, self.trigger_refresh)
-        self.framework.observe(events.relation_changed, self.trigger_refresh)
+        self.framework.observe(events.relation_joined, self._on_relation_data_changed)
+        self.framework.observe(events.relation_changed, self._on_relation_data_changed)
         for event in self._refresh_events:
             self.framework.observe(event, self.trigger_refresh)
 
-    def update_relation_data(self, _):
+    def _on_relation_data_changed(self, _):
         self.on.data_changed.emit()
 
     @property
