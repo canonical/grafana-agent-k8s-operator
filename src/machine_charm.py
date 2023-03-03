@@ -80,6 +80,18 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         if self._is_installed:
             raise GrafanaAgentInstallError("Failed to uninstall grafana-agent")
 
+    def metrics_rules(self) -> list:
+        """Return a list of metrics rules."""
+        return []
+
+    def metrics_jobs(self) -> list:
+        """Return a list of metrics scrape jobs."""
+        return []
+
+    def logs_rules(self) -> list:
+        """Return a list of logging rules."""
+        return []
+
     @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
