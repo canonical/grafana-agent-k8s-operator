@@ -2,15 +2,14 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Library for the cos_machine relation interface."""
+
 import base64
-import hashlib
 import json
 import logging
 import lzma
 from pathlib import Path
 from typing import Dict, List, Optional, Union
-
-from cosl import JujuTopology
 
 # FIXME: unify the alert rules format in cosl to drop these ASAP
 from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
@@ -40,10 +39,10 @@ class CosMachineProvider(Object):
         self,
         charm,
         relation_name: str = DEFAULT_RELATION_NAME,
-        logs_slots: Optional[List[str]] = None,
         metrics_endpoints: List[dict] = [DEFAULT_METRICS_ENDPOINT],
-        logs_rules_dir: str = "./src/loki_alert_rules",
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
+        logs_rules_dir: str = "./src/loki_alert_rules",
+        logs_slots: Optional[List[str]] = None,
         dashboard_dirs: List[str] = ["./src/grafana_dashboards"],
         refresh_events: Optional[List] = None,
     ):
