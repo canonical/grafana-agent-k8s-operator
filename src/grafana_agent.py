@@ -249,8 +249,8 @@ class GrafanaAgentCharm(CharmBase):
         """Add TLS information to Prometheus and Loki endpoints."""
         prometheus_endpoints = self._remote_write.endpoints
         loki_endpoints = self._loki_consumer.loki_endpoints
-        for e in prometheus_endpoints + loki_endpoints:
-            e["tls_config"] = {
+        for endpoint in prometheus_endpoints + loki_endpoints:
+            endpoint["tls_config"] = {
                 "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
             }
         return prometheus_endpoints, loki_endpoints
