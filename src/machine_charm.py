@@ -37,8 +37,8 @@ class GrafanaAgentServiceError(GrafanaAgentError):
     pass
 
 
-class GrafanaAgentK8sCharm(GrafanaAgentCharm):
-    """K8s version of the Grafana Agent charm."""
+class GrafanaAgentMachineCharm(GrafanaAgentCharm):
+    """Machine version of the Grafana Agent charm."""
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -139,8 +139,8 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     @property
     def _is_installed(self) -> bool:
         """Check if the Grafana Agent snap is installed."""
-        package_check = subprocess.run("snap list | grep grafana-agent", shell=True)
-        return True if package_check.returncode == 0 else False
+        package_check = subprocess.run("snap list grafana-agent", shell=True)
+        return package_check.returncode == 0
 
     @property
     def _additional_integrations(self) -> Dict[str, Any]:
@@ -166,21 +166,24 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     @property
     def _additional_log_configs(self) -> List[Dict[str, Any]]:
         """Additional logging configuration for machine charms."""
+        _, loki_endpoints = self._enrich_endpoints()
         return [
             {
                 "name": "log_file_scraper",
-                "clients": self._loki_consumer.loki_endpoints,
+                "clients": loki_endpoints,
                 "positions": {"filename": self._promtail_positions},
                 "scrape_configs": [
                     {
                         "job_name": "varlog",
-                        "static_configs": {
-                            "targets": ["localhost"],
-                            "labels": {
-                                "__path__": "/var/log/*log",
-                                **self._principal_labels,
-                            },
-                        },
+                        "static_configs": [
+                            {
+                                "targets": ["localhost"],
+                                "labels": {
+                                    "__path__": "/var/log/*log",
+                                    **self._principal_labels,
+                                },
+                            }
+                        ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
                 ],
@@ -261,4 +264,4 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
 
 if __name__ == "__main__":
-    main(GrafanaAgentK8sCharm)
+    main(GrafanaAgentMachineCharm)

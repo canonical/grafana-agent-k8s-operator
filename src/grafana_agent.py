@@ -8,9 +8,10 @@ import pathlib
 import re
 import shutil
 from collections import namedtuple
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -30,6 +31,8 @@ LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
 LOKI_RULES_DEST_PATH = "./loki_alert_rules"
 METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
 METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
+DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
+DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
@@ -56,15 +59,22 @@ class GrafanaAgentCharm(CharmBase):
         super().__init__(*args)
 
         self.loki_rules_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's own rules?
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
         )
         self.metrics_rules_paths = RulesMapping(
+            # TODO how to inject topology only for this charm's own rules?
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
+        self.dashboard_paths = RulesMapping(
+            # TODO how to inject topology (is there any?) only for this charm's own dashboards?
+            src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
+            dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
+        )
 
-        for rules in [self.loki_rules_paths, self.metrics_rules_paths]:
+        for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
@@ -75,6 +85,19 @@ class GrafanaAgentCharm(CharmBase):
         self._loki_consumer = LokiPushApiConsumer(
             self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
         )
+
+        self._loki_provider = LokiPushApiProvider(
+            self, relation_name="logging-provider", port=self._http_listen_port
+        )
+        self._grafana_dashboards_provider = GrafanaDashboardProvider(
+            self,
+            relation_name="grafana-dashboards-provider",
+            dashboards_path=self.dashboard_paths.dest,
+        )
+        self.framework.observe(
+            self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
+        )
+
 
         self.framework.observe(self.on.upgrade_charm, self._update_metrics_alerts)
         self.framework.observe(self.on.upgrade_charm, self._update_loki_alerts)
@@ -246,6 +269,20 @@ class GrafanaAgentCharm(CharmBase):
         except APIError as e:
             self.unit.status = WaitingStatus(str(e))
 
+    def _dashboards_changed(self, _):
+        # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)
+
+    def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Add TLS information to Prometheus and Loki endpoints."""
+        prometheus_endpoints = self._remote_write.endpoints
+        loki_endpoints = self._loki_consumer.loki_endpoints
+        for endpoint in prometheus_endpoints + loki_endpoints:
+            endpoint["tls_config"] = {
+                "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
+            }
+        return prometheus_endpoints, loki_endpoints
+
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
 
@@ -260,6 +297,8 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             A yaml string with grafana agent config
         """
+        prometheus_endpoints, _ = self._enrich_endpoints()
+
         config = {
             "server": {"log_level": "info"},
             "integrations": self._integrations_config,
@@ -290,6 +329,9 @@ class GrafanaAgentCharm(CharmBase):
 
         # Align the "job" name with those of prometheus_scrape
         job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
+
+        prometheus_endpoints, _ = self.
+        ()
 
         conf = {
             "agent": {
@@ -332,7 +374,7 @@ class GrafanaAgentCharm(CharmBase):
                     },
                 ],
             },
-            "prometheus_remote_write": self._remote_write.endpoints,
+            "prometheus_remote_write": prometheus_endpoints,
             **self._additional_integrations,
         }
         return conf
@@ -344,13 +386,15 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
+        _, loki_endpoints = self._enrich_endpoints()
+
         configs = []
 
         if self._loki_consumer.loki_endpoints:
             configs.append(
                 {
                     "name": "push_api_server",
-                    "clients": self._loki_consumer.loki_endpoints,
+                    "clients": loki_endpoints,
                     "positions": {"filename": self._promtail_positions},
                     "scrape_configs": [
                         {

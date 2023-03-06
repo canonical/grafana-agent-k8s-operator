@@ -43,10 +43,14 @@ requires:
     interface: prometheus_scrape
   logging-consumer:
     interface: loki_push_api
+  grafana-dashboards-consumer:
+    interface: grafana_dashboard
 
 provides:
   logging-provider:
     interface: loki_push_api
+  grafana-dashboards-provider:
+    interface: grafana_dashboard
 
 storage:
   data:

@@ -34,7 +34,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
             ],
         )
-
         self._scrape = MetricsEndpointConsumer(self)
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
         self.framework.observe(self._scrape.on.targets_changed, self._update_metrics_alerts)
