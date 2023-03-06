@@ -8,7 +8,7 @@ import pathlib
 import re
 import shutil
 from collections import namedtuple
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -267,6 +267,16 @@ class GrafanaAgentCharm(CharmBase):
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
         self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)
 
+    def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Add TLS information to Prometheus and Loki endpoints."""
+        prometheus_endpoints = self._remote_write.endpoints
+        loki_endpoints = self._loki_consumer.loki_endpoints
+        for endpoint in prometheus_endpoints + loki_endpoints:
+            endpoint["tls_config"] = {
+                "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
+            }
+        return prometheus_endpoints, loki_endpoints
+
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
 
@@ -281,6 +291,8 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             A yaml string with grafana agent config
         """
+        prometheus_endpoints, _ = self._enrich_endpoints()
+
         config = {
             "server": {"log_level": "info"},
             "integrations": self._integrations_config,
@@ -290,7 +302,7 @@ class GrafanaAgentCharm(CharmBase):
                     {
                         "name": "agent_scraper",
                         "scrape_configs": self._scrape.jobs(),
-                        "remote_write": self._remote_write.endpoints,
+                        "remote_write": prometheus_endpoints,
                     }
                 ],
             },
@@ -311,6 +323,8 @@ class GrafanaAgentCharm(CharmBase):
 
         # Align the "job" name with those of prometheus_scrape
         job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
+
+        prometheus_endpoints, _ = self._enrich_endpoints()
 
         conf = {
             "agent": {
@@ -353,7 +367,7 @@ class GrafanaAgentCharm(CharmBase):
                     },
                 ],
             },
-            "prometheus_remote_write": self._remote_write.endpoints,
+            "prometheus_remote_write": prometheus_endpoints,
             **self._additional_integrations,
         }
         return conf
@@ -365,13 +379,15 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
+        _, loki_endpoints = self._enrich_endpoints()
+
         configs = []
 
         if self._loki_consumer.loki_endpoints:
             configs.append(
                 {
                     "name": "push_api_server",
-                    "clients": self._loki_consumer.loki_endpoints,
+                    "clients": loki_endpoints,
                     "positions": {"filename": self._promtail_positions},
                     "scrape_configs": [
                         {

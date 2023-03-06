@@ -1,0 +1,12 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  tls_insecure_skip_verify:
+    description: |
+      Flag to skip the verification for insecure TLS.
+      If "true", self-signed certs can be seamlessly used; this setting
+      will be applied to all of the Agent configurations (Prometheus,
+      Loki).
+    type: boolean
+    default: false

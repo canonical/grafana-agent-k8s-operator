@@ -111,14 +111,28 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             "prometheus/0",
-            {"remote_write": json.dumps({"url": "http://1.1.1.1:9090/api/v1/write"})},
+            {
+                "remote_write": json.dumps(
+                    {
+                        "url": "http://1.1.1.1:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    }
+                )
+            },
         )
 
         self.harness.add_relation_unit(rel_id, "prometheus/1")
         self.harness.update_relation_data(
             rel_id,
             "prometheus/1",
-            {"remote_write": json.dumps({"url": "http://1.1.1.2:9090/api/v1/write"})},
+            {
+                "remote_write": json.dumps(
+                    {
+                        "url": "http://1.1.1.2:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    }
+                )
+            },
         )
 
         expected_config: Dict[str, Any] = {
@@ -128,8 +142,14 @@ class TestScrapeConfiguration(unittest.TestCase):
                     "relabel_configs": REWRITE_CONFIGS,
                 },
                 "prometheus_remote_write": [
-                    {"url": "http://1.1.1.2:9090/api/v1/write"},
-                    {"url": "http://1.1.1.1:9090/api/v1/write"},
+                    {
+                        "url": "http://1.1.1.2:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    },
+                    {
+                        "url": "http://1.1.1.1:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    },
                 ],
             },
             "metrics": {
@@ -138,8 +158,14 @@ class TestScrapeConfiguration(unittest.TestCase):
                     {
                         "name": "agent_scraper",
                         "remote_write": [
-                            {"url": "http://1.1.1.2:9090/api/v1/write"},
-                            {"url": "http://1.1.1.1:9090/api/v1/write"},
+                            {
+                                "url": "http://1.1.1.2:9090/api/v1/write",
+                                "tls_config": {"insecure_skip_verify": False},
+                            },
+                            {
+                                "url": "http://1.1.1.1:9090/api/v1/write",
+                                "tls_config": {"insecure_skip_verify": False},
+                            },
                         ],
                         "scrape_configs": [],
                     }
@@ -163,11 +189,21 @@ class TestScrapeConfiguration(unittest.TestCase):
 
         self.assertEqual(
             config["integrations"]["prometheus_remote_write"],
-            [{"url": "http://1.1.1.1:9090/api/v1/write"}],
+            [
+                {
+                    "url": "http://1.1.1.1:9090/api/v1/write",
+                    "tls_config": {"insecure_skip_verify": False},
+                }
+            ],
         )
         self.assertEqual(
             config["metrics"]["configs"][0]["remote_write"],
-            [{"url": "http://1.1.1.1:9090/api/v1/write"}],
+            [
+                {
+                    "url": "http://1.1.1.1:9090/api/v1/write",
+                    "tls_config": {"insecure_skip_verify": False},
+                }
+            ],
         )
 
         # Test scale to zero
@@ -243,8 +279,14 @@ class TestScrapeConfiguration(unittest.TestCase):
                 {
                     "name": "push_api_server",
                     "clients": [
-                        {"url": "http://loki0:3100:/loki/api/v1/push"},
-                        {"url": "http://loki1:3100:/loki/api/v1/push"},
+                        {
+                            "url": "http://loki0:3100:/loki/api/v1/push",
+                            "tls_config": {"insecure_skip_verify": False},
+                        },
+                        {
+                            "url": "http://loki1:3100:/loki/api/v1/push",
+                            "tls_config": {"insecure_skip_verify": False},
+                        },
                     ],
                     "positions": {"filename": "/run/promtail-positions.yaml"},
                     "scrape_configs": [
