@@ -307,7 +307,7 @@ class GrafanaAgentCharm(CharmBase):
                 "configs": [
                     {
                         "name": "agent_scraper",
-                        "scrape_configs": self.metrics_jobs,
+                        "scrape_configs": self.metrics_jobs(),
                         "remote_write": self._remote_write.endpoints,
                     }
                 ],
@@ -330,8 +330,7 @@ class GrafanaAgentCharm(CharmBase):
         # Align the "job" name with those of prometheus_scrape
         job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
 
-        prometheus_endpoints, _ = self.
-        ()
+        prometheus_endpoints, _ = self._enrich_endpoints()
 
         conf = {
             "agent": {
