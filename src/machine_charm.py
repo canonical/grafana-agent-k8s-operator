@@ -80,17 +80,17 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         if self._is_installed:
             raise GrafanaAgentInstallError("Failed to uninstall grafana-agent")
 
-    def metrics_rules(self) -> list:
+    def metrics_rules(self) -> dict:
         """Return a list of metrics rules."""
-        return []
+        return {}
 
     def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""
         return []
 
-    def logs_rules(self) -> list:
+    def logs_rules(self) -> dict:
         """Return a list of logging rules."""
-        return []
+        return {}
 
     @property
     def is_ready(self):
