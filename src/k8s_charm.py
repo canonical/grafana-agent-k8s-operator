@@ -9,10 +9,12 @@ import pathlib
 from typing import Any, Dict, List, Union
 
 import yaml
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from ops.main import main
 
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
@@ -39,6 +41,17 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         #  A new kind of `GrafanaDashboardAggregator`?
 
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
+
+        self._scrape = MetricsEndpointConsumer(self)
+        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+        self.framework.observe(self._scrape.on.targets_changed, self._update_metrics_alerts)
+
+        self._loki_provider = LokiPushApiProvider(
+            self, relation_name="logging-provider", port=self._http_listen_port
+        )
+        self.framework.observe(
+            self._loki_provider.on.loki_push_api_alert_rules_changed, self._update_loki_alerts
+        )
 
     def on_pebble_ready(self, _) -> None:
         """Event handler for the pebble ready event.
@@ -70,6 +83,18 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 "Cannot set workload version at this time: could not get Alertmanager version."
             )
         self._update_status()
+
+    def metrics_rules(self):
+        """Return a list of metrics rules."""
+        return self._scrape.alerts
+
+    def metrics_jobs(self):
+        """Return a list of metrics scrape jobs."""
+        return self._scrape.jobs()
+
+    def logs_rules(self):
+        """Return a list of logging rules."""
+        return self._loki_provider.alerts
 
     @property
     def is_ready(self):
