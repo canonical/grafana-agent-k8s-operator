@@ -87,7 +87,7 @@ class COSMachineProvider(Object):
             relations = self._charm.model.relations[self._relation_name]
 
         for relation in relations:
-            relation.data = self._generate_updated_data()
+            relation.data[self._charm.app].update({"config": self._generate_updated_data()})
 
     def _generate_updated_data(self) -> str:
         """Collate the data for each nested databag and return it."""
@@ -202,14 +202,15 @@ class COSMachineConsumer(Object):
         """Return a prometheus_scrape-like data structure for jobs."""
         jobs = []
         for relation in self._relations:
-            if jobs := relation.data.get("metrics", {}).get("scrape_jobs", []):
+            config = json.loads(relation.data[relation.app].get("config", {}))
+            if jobs := config.get("metrics", {}).get("scrape_jobs", []):
                 for job in jobs:
                     job_config = {
                         "job_name": job["job_name"],
                         "metrics_path": job["path"],
                         "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
                     }
-                jobs.append(json.loads(job_config))
+                jobs.append(job_config)
 
         return jobs
 
@@ -218,8 +219,9 @@ class COSMachineConsumer(Object):
         """Fetch metrics alerts."""
         alert_rules = {}
         for relation in self._relations:
-            if rules := relation.data.get("metrics", {}).get("alert_rules", []):
-                alert_rules.update(json.loads(rules))
+            config = relation.data.get("config", {})
+            if rules := config.get("metrics", {}).get("alert_rules", []):
+                alert_rules.update(rules)
         return alert_rules
 
     @property
@@ -227,8 +229,9 @@ class COSMachineConsumer(Object):
         """Fetch log alerts."""
         alert_rules = {}
         for relation in self._relations:
-            if rules := relation.data.get("logs", {}).get("alert_rules", []):
-                alert_rules.update(json.loads(rules))
+            config = relation.data.get("config", {})
+            if rules := config.get("logs", {}).get("alert_rules", []):
+                alert_rules.update(rules)
         return alert_rules
 
     @property
@@ -236,6 +239,7 @@ class COSMachineConsumer(Object):
         """Fetch dashboards as encoded content."""
         dashboards = []
         for relation in self._relations:
-            if dashboard := relation.data.get("dashboards", {}).get("dashboards", []):
-                dashboards.extend(json.loads(dashboard))
+            config = relation.data.get("config", {})
+            if dashboard := config.get("dashboards", {}).get("dashboards", []):
+                dashboards.extend(dashboard)
         return dashboards
