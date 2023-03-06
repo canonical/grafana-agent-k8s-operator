@@ -223,10 +223,11 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             True if the status was set to Active; False otherwise.
         """
-        if len(self.model.relations["metrics-endpoint"]):
-            if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                self.unit.status = WaitingStatus("no related Prometheus remote-write")
-                return False
+        if relations := self.model.relations.get("metrics-endpoint"):
+            if len(relations):
+                if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
+                    self.unit.status = WaitingStatus("no related Prometheus remote-write")
+                    return False
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
@@ -424,6 +425,7 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _instance_name(self) -> str:
         """Return the instance name as interpolated topology values."""
+        logger.info(self._instance_topology)
         return "_".join([v for v in self._instance_topology.values()])
 
     def _reload_config(self, attempts: int = 10) -> None:
