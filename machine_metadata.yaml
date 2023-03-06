@@ -29,16 +29,18 @@ series:
 
 requires:
   juju-info:
-    # `juju-info` provides basic compatibility with all charms.
-    # if all you want is /var/log logs and node_exporter metrics,
-    # this relation will be enough.
+    description: |
+      `juju-info` provides basic compatibility with all charms.
+      If all you want is /var/log logs and node_exporter metrics,
+      this relation will be enough.
     interface: juju-info
     scope: container
 
   cos-machine:
-    # `cos-machine` is a dedicated relation for the grafana agent machine
-    # charm. it will allow you to set up custom scrape jobs, fetch files
-    # from arbitrary locations, send alert rules, dashboards, etc.
+    description: |
+      `cos-machine` is a dedicated relation for the grafana agent machine
+      charm. it will allow you to set up custom scrape jobs, fetch files
+      from arbitrary locations, send alert rules, dashboards, etc.
     interface: cos_machine
     scope: container
 

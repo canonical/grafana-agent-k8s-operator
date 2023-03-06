@@ -37,6 +37,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             ],
         )
 
+        # TODO add a handler for `grafana-dashboards-consumer`.
+        #  A new kind of `GrafanaDashboardAggregator`?
+
         self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
 
         self._scrape = MetricsEndpointConsumer(self)
