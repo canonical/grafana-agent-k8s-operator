@@ -11,6 +11,7 @@ from collections import namedtuple
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -84,6 +85,15 @@ class GrafanaAgentCharm(CharmBase):
 
         self._loki_consumer = LokiPushApiConsumer(
             self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
+        )
+
+        self._grafana_dashboards_provider = GrafanaDashboardProvider(
+            self,
+            relation_name="grafana-dashboards-provider",
+            dashboards_path=self.dashboard_paths.dest,
+        )
+        self.framework.observe(
+            self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
         )
 
         self.framework.observe(self.on.upgrade_charm, self._update_metrics_alerts)
