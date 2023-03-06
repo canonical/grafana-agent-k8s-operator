@@ -156,7 +156,7 @@ class GrafanaAgentCharm(CharmBase):
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_log_configs method")
 
-    def metrics_rules(self) -> list:
+    def metrics_rules(self) -> dict:
         """Return a list of metrics rules."""
         raise NotImplementedError("Please override the metrics_rules method")
 
@@ -164,7 +164,7 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of metrics scrape jobs."""
         raise NotImplementedError("Please override the metrics_jobs method")
 
-    def logs_rules(self) -> list:
+    def logs_rules(self) -> dict:
         """Return a list of logging rules."""
         raise NotImplementedError("Please override the logs_rules method")
 
@@ -425,7 +425,6 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _instance_name(self) -> str:
         """Return the instance name as interpolated topology values."""
-        logger.info(self._instance_topology)
         return "_".join([v for v in self._instance_topology.values()])
 
     def _reload_config(self, attempts: int = 10) -> None:
