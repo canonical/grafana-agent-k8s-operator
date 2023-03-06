@@ -27,7 +27,6 @@ series:
   - jammy
   - focal
 
-
 requires:
   juju-info:
     description: |
@@ -47,21 +46,11 @@ requires:
 
   send-remote-write:
     interface: prometheus_remote_write
+
   logging-consumer:
     interface: loki_push_api
 
-  metrics-endpoint:
-    # This one most likely won't exist in the final product but the
-    # lib crashes if we don't have it.
-    interface: prometheus_scrape
-    scope: container
-
 provides:
-  logging-provider:
-    # This one most likely won't exist in the final product but the
-    # lib crashes if we don't have it.
-    interface: loki_push_api
-    scope: container
   grafana-dashboards-provider:
     interface: grafana_dashboard
     scope: container

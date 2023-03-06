@@ -12,11 +12,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, LokiPushApiProvider
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from ops.charm import CharmBase, RelationChangedEvent
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, PathError
@@ -56,6 +55,8 @@ class GrafanaAgentCharm(CharmBase):
     _grpc_listen_port = 3600
 
     def __init__(self, *args):
+        if type(self) == GrafanaAgentCharm:
+            raise TypeError("<GrafanaAgentCharm> should not be directly instantiated")
         super().__init__(*args)
 
         self.loki_rules_paths = RulesMapping(
@@ -86,9 +87,6 @@ class GrafanaAgentCharm(CharmBase):
             self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
         )
 
-        self._loki_provider = LokiPushApiProvider(
-            self, relation_name="logging-provider", port=self._http_listen_port
-        )
         self._grafana_dashboards_provider = GrafanaDashboardProvider(
             self,
             relation_name="grafana-dashboards-provider",
@@ -98,14 +96,15 @@ class GrafanaAgentCharm(CharmBase):
             self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
         )
 
-
         self.framework.observe(self.on.upgrade_charm, self._update_metrics_alerts)
         self.framework.observe(self.on.upgrade_charm, self._update_loki_alerts)
 
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
-        self.framework.observe(self._remote_write.on.endpoints_changed, self._update_metrics_alerts)
+        self.framework.observe(
+            self._remote_write.on.endpoints_changed, self._update_metrics_alerts
+        )
 
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined, self._update_config
@@ -308,7 +307,7 @@ class GrafanaAgentCharm(CharmBase):
                     {
                         "name": "agent_scraper",
                         "scrape_configs": self.metrics_jobs(),
-                        "remote_write": self._remote_write.endpoints,
+                        "remote_write": prometheus_endpoints,
                     }
                 ],
             },
