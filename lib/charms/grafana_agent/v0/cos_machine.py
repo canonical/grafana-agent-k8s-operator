@@ -201,7 +201,7 @@ class COSMachineConsumer(Object):
 
     @property
     def metrics_jobs(self) -> List[Dict]:
-        """Return a prometheus_scrape-like data structure for jobs."""
+        """Parse the relation data contents and extract the metrics jobs."""
         scrape_jobs = []
         for relation in self._relations:
             config = json.loads(relation.data[relation.app].get("config", {}))
