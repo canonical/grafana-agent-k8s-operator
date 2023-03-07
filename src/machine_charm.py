@@ -9,12 +9,11 @@ import pathlib
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
+from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
 from ops.main import main
 from ops.model import MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
-
-from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         if self._is_installed:
             raise GrafanaAgentInstallError("Failed to uninstall grafana-agent")
 
-    def metrics_rules(self) -> list:
+    def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
         return self._cos.metrics_alerts
 
@@ -96,9 +95,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         """Return a list of metrics scrape jobs."""
         return self._cos.metrics_jobs
 
-    def logs_rules(self) -> list:
+    def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
         return self._cos.logs_alerts
+
+    def dashboards(self) -> list:
+        """Return a list of dashboards."""
+        raise self._cos.dashboards
 
     @property
     def is_ready(self):

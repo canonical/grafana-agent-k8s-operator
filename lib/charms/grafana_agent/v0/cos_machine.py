@@ -9,7 +9,7 @@ import json
 import logging
 import lzma
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 # FIXME: unify the alert rules format in cosl to drop these ASAP
 from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
@@ -17,13 +17,13 @@ from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAler
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
-LIBID = "1212" #FIXME: Need to get a valid ID from charmhub
+LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
 LIBAPI = 0
 LIBPATCH = 1
 
 # FIXME: Packing the charm with 2.2.0+139.gd011d92 will produce this error:
 # https://chat.charmhub.io/charmhub/pl/bjyt3dahd7y9dcube6nicaxfmc
-#PYDEPS = ["cosl"]
+# PYDEPS = ["cosl"]
 
 DEFAULT_RELATION_NAME = "cos-machine"
 DEFAULT_METRICS_ENDPOINT = {
@@ -44,7 +44,7 @@ class COSMachineProvider(Object):
         metrics_endpoints: List[dict] = [DEFAULT_METRICS_ENDPOINT],
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
-        recursive_rules_dir: bool = False,
+        recurse_rules_dirs: bool = False,
         logs_slots: Optional[List[str]] = None,
         dashboard_dirs: List[str] = ["./src/grafana_dashboards"],
         refresh_events: Optional[List] = None,
@@ -57,6 +57,7 @@ class COSMachineProvider(Object):
             metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
+            recurse_rules_dirs: Whether or not to recurse into rule paths.
             logs_slots: Snap slots to connect to for scraping logs
                 in the form ["snap-name:slot", ...].
             dashboard_dirs: Directory where the dashboards are stored.
@@ -68,7 +69,7 @@ class COSMachineProvider(Object):
         self._metrics_endpoints = metrics_endpoints
         self._metrics_rules = metrics_rules_dir
         self._logs_rules = logs_rules_dir
-        self._recursive = recursive_rules_dir
+        self._recursive = recurse_rules_dirs
         self._logs_slots = logs_slots or []
         self._dashboard_dirs = dashboard_dirs
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
@@ -190,8 +191,9 @@ class COSMachineConsumer(Object):
         self.on.data_changed.emit()
 
     def trigger_refresh(self, _):
-        #FIXME: Figure out what we should do here
-        pass
+        """Trigger a refresh of relation data."""
+        # FIXME: Figure out what we should do here
+        self.on.data_changed.emit()
 
     @property
     def _relations(self):
@@ -210,12 +212,12 @@ class COSMachineConsumer(Object):
                         "metrics_path": job["path"],
                         "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
                     }
-                jobs.append(job_config)
+                    jobs.append(job_config)
 
         return jobs
 
     @property
-    def metrics_alerts(self) -> Dict:
+    def metrics_alerts(self) -> Dict[str, Any]:
         """Fetch metrics alerts."""
         alert_rules = {}
         for relation in self._relations:
@@ -225,7 +227,7 @@ class COSMachineConsumer(Object):
         return alert_rules
 
     @property
-    def logs_alerts(self) -> Dict:
+    def logs_alerts(self) -> Dict[str, Any]:
         """Fetch log alerts."""
         alert_rules = {}
         for relation in self._relations:
@@ -235,11 +237,21 @@ class COSMachineConsumer(Object):
         return alert_rules
 
     @property
-    def dashboards(self) -> List[str]:
+    def dashboards(self) -> List[Dict[str, str]]:
         """Fetch dashboards as encoded content."""
-        dashboards = []
+        dashboards = []  # type: List[Dict[str, str]]
         for relation in self._relations:
             config = relation.data.get("config", {})
             if dashboard := config.get("dashboards", {}).get("dashboards", []):
-                dashboards.extend(dashboard)
+                dashboards.append(
+                    {
+                        "relation_id": str(relation.id),
+                        # We don't have the remote charm name, but give us an identifier
+                        "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
+                        "content": self._decode_dashboard_content(dashboard),
+                    }
+                )
         return dashboards
+
+    def _decode_dashboard_content(self, encoded_content: str) -> str:
+        return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()

@@ -103,6 +103,8 @@ class TestAlertIngestion(unittest.TestCase):
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.DASHBOARDS_SRC_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.DASHBOARDS_DEST_PATH", tempfile.mkdtemp())
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )

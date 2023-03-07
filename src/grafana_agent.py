@@ -61,16 +61,17 @@ class GrafanaAgentCharm(CharmBase):
 
         self.loki_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
+            # FIXED: this is already handled by re-using the *Rules classes
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
         )
         self.metrics_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
+            # FIXED: this is already handled by re-using the *Rules classes
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
         self.dashboard_paths = RulesMapping(
-            # TODO how to inject topology (is there any?) only for this charm's own dashboards?
             src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
             dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
         )
@@ -156,7 +157,7 @@ class GrafanaAgentCharm(CharmBase):
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_log_configs method")
 
-    def metrics_rules(self) -> list:
+    def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
         raise NotImplementedError("Please override the metrics_rules method")
 
@@ -164,9 +165,13 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of metrics scrape jobs."""
         raise NotImplementedError("Please override the metrics_jobs method")
 
-    def logs_rules(self) -> list:
+    def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
         raise NotImplementedError("Please override the logs_rules method")
+
+    def dashboards(self) -> list:
+        """Return a list of dashboards."""
+        raise NotImplementedError("Please override the dashboards method")
 
     # End: Abstract Methods
 
@@ -186,6 +191,21 @@ class GrafanaAgentCharm(CharmBase):
             mapping=self.loki_rules_paths,
         )
 
+    def _update_grafana_dashboards(self, event):
+        self.update_dashboards(
+            event,
+            dashboards_func=self.dashboards,
+            reload_func=self._grafana_dashboards_provider._update_all_dashboards_from_dir,
+            mapping=self.dashboard_paths,
+        )
+
+    def _recurse_call_chain(self, maybe_func: Any) -> Dict[str, Any]:
+        """Recurse through wrappers until we find a real object, not a Callable."""
+        if callable(maybe_func):
+            return self._recurse_call_chain(maybe_func())
+        else:
+            return maybe_func
+
     def update_alerts_rules(
         self, _, alerts_func: Any, reload_func: Callable, mapping: RulesMapping
     ):
@@ -193,11 +213,9 @@ class GrafanaAgentCharm(CharmBase):
         rules = {}
 
         # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
-        # do the right thing
-        if callable(alerts_func):
-            rules = alerts_func()
-        else:
-            rules = alerts_func
+        # do the right thing. With an additional layer of indirection, recurse
+        # to the bottom until we find a real List|Dict|not-Callable
+        rules = self._recurse_call_chain(alerts_func)
 
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
@@ -205,6 +223,27 @@ class GrafanaAgentCharm(CharmBase):
             file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
             file_handle.write_text(yaml.dump(rule))
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
+        reload_func()
+
+    def update_dashboards(
+        self, _, dashboards_func: Any, reload_func: Callable, mapping: RulesMapping
+    ) -> None:
+        """Copy dashboards from relations, save them to disk, and update."""
+        try:
+            dashboards = dashboards_func
+        except NotImplementedError:
+            logger.debug("Dashboard forwarding is not yet enabled for k8s grafana-agent")
+            return
+
+        shutil.rmtree(mapping.dest)
+        shutil.copytree(mapping.src, mapping.dest)
+        for dash in dashboards:
+            identifier = (
+                f'{dash.get("charm", "charm-name")}-{dash.get("relation_id", "rel_id")}',
+            )
+            file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(identifier))
+            file_handle.write_text(yaml.dump(dash["content"]))
+            logger.debug("updated dashboard file {}".format(file_handle.absolute()))
         reload_func()
 
     def on_scrape_targets_changed(self, event) -> None:
