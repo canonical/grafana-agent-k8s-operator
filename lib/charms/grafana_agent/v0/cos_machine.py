@@ -79,12 +79,12 @@ class COSMachineProvider(Object):
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
 
         events = self._charm.on[relation_name]
-        self.framework.observe(events.relation_joined, self.update_relation_data)
-        self.framework.observe(events.relation_changed, self.update_relation_data)
+        self.framework.observe(events.relation_joined, self._on_refresh)
+        self.framework.observe(events.relation_changed, self._on_refresh)
         for event in self._refresh_events:
-            self.framework.observe(event, self.update_relation_data)
+            self.framework.observe(event, self._on_refresh)
 
-    def update_relation_data(self, event):
+    def _on_refresh(self, event):
         """Trigger the class to update relation data."""
         if isinstance(event, RelationEvent):
             relations = [event.relation]
@@ -92,9 +92,10 @@ class COSMachineProvider(Object):
             relations = self._charm.model.relations[self._relation_name]
 
         for relation in relations:
-            relation.data[self._charm.app].update({"config": self._generate_updated_data()})
+            if relation.data:
+                relation.data[self._charm.app].update({"config": self._get_config()})
 
-    def _generate_updated_data(self) -> str:
+    def _get_config(self) -> str:
         """Collate the data for each nested databag and return it."""
         data = {
             "metrics": {
@@ -154,16 +155,16 @@ class COSMachineProvider(Object):
 
 
 class COSMachineDataChanged(EventBase):
-    """Event emitted by `COSMachinRequirer` when the provider side has made changes to its relation data."""
+    """Event emitted by `COSMachineRequirer` when the provider side has made changes to its relation data."""
 
 
 class COSMachineRequirerEvents(ObjectEvents):
-    """`COSMachinRequirer` events."""
+    """`COSMachineRequirer` events."""
 
     data_changed = EventSource(COSMachineDataChanged)
 
 
-class COSMachinRequirer(Object):
+class COSMachineRequirer(Object):
     """Integration endpoint wrapper for the Requirer side of the cos_machine interface."""
 
     on = COSMachineRequirerEvents()
@@ -174,7 +175,7 @@ class COSMachinRequirer(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         refresh_events: Optional[List[str]] = None,
     ):
-        """Create a COSMachinRequirer instance.
+        """Create a COSMachineRequirer instance.
 
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
@@ -209,6 +210,10 @@ class COSMachinRequirer(Object):
         """Parse the relation data contents and extract the metrics jobs."""
         scrape_jobs = []
         for relation in self._relations:
+            if not relation.data or not relation.app:
+                logger.debug('this relation is bork')
+                continue
+
             config = json.loads(relation.data[relation.app].get("config", {}))
             if jobs := config.get("metrics", {}).get("scrape_jobs", []):
                 for job in jobs:
