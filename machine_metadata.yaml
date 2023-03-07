@@ -50,6 +50,9 @@ requires:
   logging-consumer:
     interface: loki_push_api
 
+  grafana-dashboard:
+    interface: grafana_dashboard
+
 provides:
   grafana-dashboards-provider:
     interface: grafana_dashboard

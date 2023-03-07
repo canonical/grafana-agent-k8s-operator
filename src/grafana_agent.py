@@ -33,7 +33,6 @@ METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
 DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
-SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -65,16 +64,17 @@ class GrafanaAgentCharm(CharmBase):
 
         self.loki_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
+            # FIXED: this is already handled by re-using the *Rules classes
             src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
         )
         self.metrics_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
+            # FIXED: this is already handled by re-using the *Rules classes
             src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
             dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
         )
         self.dashboard_paths = RulesMapping(
-            # TODO how to inject topology (is there any?) only for this charm's own dashboards?
             src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
             dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
         )
@@ -97,29 +97,40 @@ class GrafanaAgentCharm(CharmBase):
             dashboards_path=self.dashboard_paths.dest,
         )
         self.framework.observe(
-            self._grafana_dashboards_provider.on.dashboard_status_changed, self._dashboards_changed
+            self._grafana_dashboards_provider.on.dashboard_status_changed,
+            self.on_dashboard_status_changed,
         )
 
-        self.framework.observe(self.on.upgrade_charm, self._update_metrics_alerts)
-        self.framework.observe(self.on.upgrade_charm, self._update_loki_alerts)
+        self.framework.observe(self.on.upgrade_charm, self.on_upgrade_charm)
 
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
         )
-        self.framework.observe(
-            self._remote_write.on.endpoints_changed, self._update_metrics_alerts
-        )
 
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_joined, self._update_config
+            self._loki_consumer.on.loki_push_api_endpoint_joined,
+            self.on_loki_push_api_endpoint_joined,
         )
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_departed, self._update_config
+            self._loki_consumer.on.loki_push_api_endpoint_departed,
+            self.on_loki_push_api_endpoint_departed,
         )
-        self.framework.observe(self.on.config_changed, self._update_config)
+        self.framework.observe(self.on.config_changed, self.on_config_changed)
+
+    def on_upgrade_charm(self, _event=None):
+        self._update_metrics_alerts()
+        self._update_loki_alerts()
+
+    def on_loki_push_api_endpoint_joined(self, _event=None):
+        self._update_config()
+
+    def on_loki_push_api_endpoint_departed(self, _event=None):
+        self._update_config()
+
+    def on_config_changed(self, _event=None):
+        self._update_config()
 
     # Abstract Methods
-
     def agent_version_output(self) -> str:
         """Gets the raw output from `agent -version`."""
         raise NotImplementedError("Please override the agent_version_output method")
@@ -160,7 +171,7 @@ class GrafanaAgentCharm(CharmBase):
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_log_configs method")
 
-    def metrics_rules(self) -> dict:
+    def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
         raise NotImplementedError("Please override the metrics_rules method")
 
@@ -168,40 +179,50 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of metrics scrape jobs."""
         raise NotImplementedError("Please override the metrics_jobs method")
 
-    def logs_rules(self) -> dict:
+    def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
         raise NotImplementedError("Please override the logs_rules method")
 
+    def dashboards(self) -> list:
+        """Return a list of dashboards."""
+        raise NotImplementedError("Please override the dashboards method")
+
     # End: Abstract Methods
 
-    def _update_metrics_alerts(self, event):
+    def _update_metrics_alerts(self):
         self.update_alerts_rules(
-            event,
-            alerts_func=self.metrics_rules(),
+            alerts_func=self.metrics_rules,
             reload_func=self._remote_write.reload_alerts,
             mapping=self.metrics_rules_paths,
         )
 
-    def _update_loki_alerts(self, event):
+    def _update_loki_alerts(self):
         self.update_alerts_rules(
-            event,
             alerts_func=self.logs_rules,
             reload_func=self._loki_consumer._reinitialize_alert_rules,
             mapping=self.loki_rules_paths,
         )
 
-    def update_alerts_rules(
-        self, _, alerts_func: Any, reload_func: Callable, mapping: RulesMapping
-    ):
-        """Copy alert rules from relations and save them to disk."""
-        rules = {}
+    def _update_grafana_dashboards(self):
+        self.update_dashboards(
+            dashboards_func=self.dashboards,
+            reload_func=self._grafana_dashboards_provider._update_all_dashboards_from_dir,
+            mapping=self.dashboard_paths,
+        )
 
-        # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
-        # do the right thing
-        if callable(alerts_func):
-            rules = alerts_func()
+    def _recurse_call_chain(self, maybe_func: Any) -> Dict[str, Any]:
+        """Recurse through wrappers until we find a real object, not a Callable."""
+        if callable(maybe_func):
+            return self._recurse_call_chain(maybe_func())
         else:
-            rules = alerts_func
+            return maybe_func
+
+    def update_alerts_rules(self, alerts_func: Any, reload_func: Callable, mapping: RulesMapping):
+        """Copy alert rules from relations and save them to disk."""
+        # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
+        # do the right thing. With an additional layer of indirection, recurse
+        # to the bottom until we find a real List|Dict|not-Callable
+        rules = self._recurse_call_chain(alerts_func)
 
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
@@ -211,15 +232,38 @@ class GrafanaAgentCharm(CharmBase):
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
         reload_func()
 
-    def on_scrape_targets_changed(self, event) -> None:
-        """Event handler for the scrape targets changed event."""
-        self._update_config(event)
-        self._update_status()
+    def update_dashboards(
+        self, dashboards_func: Any, reload_func: Callable, mapping: RulesMapping
+    ) -> None:
+        """Copy dashboards from relations, save them to disk, and update."""
+        try:
+            dashboards = dashboards_func
+        except NotImplementedError:
+            logger.debug("Dashboard forwarding is not yet enabled for k8s grafana-agent")
+            return
 
-    def on_remote_write_changed(self, event: RelationChangedEvent) -> None:
-        """Event handler for the remote write changed event."""
-        self._update_config(event)
+        shutil.rmtree(mapping.dest)
+        shutil.copytree(mapping.src, mapping.dest)
+        for dash in dashboards:
+            identifier = (
+                f'{dash.get("charm", "charm-name")}-{dash.get("relation_id", "rel_id")}',
+            )
+            file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(identifier))
+            file_handle.write_text(yaml.dump(dash["content"]))
+            logger.debug("updated dashboard file {}".format(file_handle.absolute()))
+        reload_func()
+
+    def on_scrape_targets_changed(self, _event) -> None:
+        """Event handler for the scrape targets changed event."""
+        self._update_config()
         self._update_status()
+        self._update_metrics_alerts()
+
+    def on_remote_write_changed(self, _event) -> None:
+        """Event handler for the remote write changed event."""
+        self._update_config()
+        self._update_status()
+        self._update_metrics_alerts()
 
     def _update_status(self) -> bool:
         """Update the status to reflect the status quo.
@@ -240,7 +284,7 @@ class GrafanaAgentCharm(CharmBase):
         self.unit.status = ActiveStatus()
         return True
 
-    def _update_config(self, _) -> None:
+    def _update_config(self) -> None:
         if not self.is_ready:
             # Grafana-agent is not yet available so no need to update config
             self.unit.status = WaitingStatus("waiting for agent to start")
@@ -273,12 +317,15 @@ class GrafanaAgentCharm(CharmBase):
         except APIError as e:
             self.unit.status = WaitingStatus(str(e))
 
-    def _dashboards_changed(self, _):
+    def on_dashboard_status_changed(self, _event=None):
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
-        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(
+            inject_dropdowns=False
+        )  # noqa
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
+
         prometheus_endpoints = self._remote_write.endpoints
         loki_endpoints = self._loki_consumer.loki_endpoints
         for endpoint in prometheus_endpoints + loki_endpoints:

@@ -21,6 +21,8 @@ from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
 
+SCRAPE_RELATION_NAME = "metrics-endpoint"
+
 
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
@@ -36,24 +38,23 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
             ],
         )
-
-        # TODO add a handler for `grafana-dashboards-consumer`.
-        #  A new kind of `GrafanaDashboardAggregator`?
-
-        self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
-
         self._scrape = MetricsEndpointConsumer(self)
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
-        self.framework.observe(self._scrape.on.targets_changed, self._update_metrics_alerts)
 
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
         self.framework.observe(
-            self._loki_provider.on.loki_push_api_alert_rules_changed, self._update_loki_alerts
+            self._loki_provider.on.loki_push_api_alert_rules_changed,
+            self.on_loki_push_api_alert_rules_changed,
         )
 
-    def on_pebble_ready(self, _) -> None:
+        self.framework.observe(self.on.agent_pebble_ready, self.on_agent_pebble_ready)
+
+    def on_loki_push_api_alert_rules_changed(self, _event):
+        self._update_loki_alerts()
+
+    def on_agent_pebble_ready(self, _event) -> None:
         """Event handler for the pebble ready event.
 
         Args:
@@ -84,15 +85,15 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             )
         self._update_status()
 
-    def metrics_rules(self):
+    def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
         return self._scrape.alerts
 
-    def metrics_jobs(self):
+    def metrics_jobs(self) -> Dict[str, Any]:
         """Return a list of metrics scrape jobs."""
         return self._scrape.jobs()
 
-    def logs_rules(self):
+    def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
         return self._loki_provider.alerts
 
