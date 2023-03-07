@@ -79,13 +79,12 @@ class COSMachineProvider(Object):
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
 
         events = self._charm.on[relation_name]
-        self.framework.observe(events.relation_joined, self.update_relation_data)
-        self.framework.observe(events.relation_changed, self.update_relation_data)
+        self.framework.observe(events.relation_joined, self._on_refresh)
+        self.framework.observe(events.relation_changed, self._on_refresh)
         for event in self._refresh_events:
-            self.framework.observe(event, self.update_relation_data)
+            self.framework.observe(event, self._on_refresh)
 
-    def update_relation_data(self, event):
-        """Trigger the class to update relation data."""
+    def _on_refresh(self, event):
         if isinstance(event, RelationEvent):
             relations = [event.relation]
         else:
