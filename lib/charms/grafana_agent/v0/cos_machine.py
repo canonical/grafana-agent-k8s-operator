@@ -16,6 +16,7 @@ from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
 from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAlerts
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.testing import CharmType
 
 LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
 LIBAPI = 0
@@ -39,7 +40,7 @@ class COSMachineProvider(Object):
 
     def __init__(
         self,
-        charm:CharmType,
+        charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
         metrics_endpoints: List[dict] = [DEFAULT_METRICS_ENDPOINT],
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
@@ -165,7 +166,7 @@ class COSMachinRequirer(Object):
 
     def __init__(
         self,
-        charm,
+        charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
         refresh_events: Optional[List[str]] = None,
     ):
