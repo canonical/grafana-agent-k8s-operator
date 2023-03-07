@@ -118,16 +118,20 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def _on_upgrade_charm(self, _event=None):
+        """Refresh alerts if the charm is updated."""
         self._update_metrics_alerts()
         self._update_loki_alerts()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
+        """Rebuild the config with correct Loki sinks."""
         self._update_config()
 
     def _on_loki_push_api_endpoint_departed(self, _event=None):
+        """Rebuild the config with correct Loki sinks."""
         self._update_config()
 
     def _on_config_changed(self, _event=None):
+        """Rebuild the config."""
         self._update_config()
 
     # Abstract Methods
@@ -319,6 +323,7 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = WaitingStatus(str(e))
 
     def _on_dashboard_status_changed(self, _event=None):
+        """Re-initialize dashboards to forward."""
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False

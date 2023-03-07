@@ -159,7 +159,7 @@ class COSMachineProvider(Object):
 
 
 class COSMachineDataChanged(EventBase):
-    """Emitted by `COSMachineRequirer` when the provider makes changes to its relation data."""
+    """Event emitted by `COSMachineRequirer` when relation data changes."""
 
 
 class COSMachineRequirerEvents(ObjectEvents):
@@ -258,15 +258,18 @@ class COSMachineRequirer(Object):
         """Fetch dashboards as encoded content."""
         dashboards = []  # type: List[Dict[str, str]]
         for relation in self._relations:
-            if dashboard := self._fetch_data_from_relation(relation, "dashboards", "dashboards"):
-                dashboards.append(
-                    {
-                        "relation_id": str(relation.id),
-                        # We don't have the remote charm name, but give us an identifier
-                        "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
-                        "content": self._decode_dashboard_content(dashboard),
-                    }
-                )
+            if dashboard_data := self._fetch_data_from_relation(
+                relation, "dashboards", "dashboards"
+            ):
+                for dashboard in dashboard_data:
+                    dashboards.append(
+                        {
+                            "relation_id": str(relation.id),
+                            # We don't have the remote charm name, but give us an identifier
+                            "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
+                            "content": self._decode_dashboard_content(dashboard),
+                        }
+                    )
         return dashboards
 
     @staticmethod

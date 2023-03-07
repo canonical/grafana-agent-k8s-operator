@@ -53,9 +53,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
 
     def _on_juju_info_joined(self, _event):
+        """Update the config when Juju info is joined."""
         self._update_config()
 
     def _on_data_changed(self, _event):
+        """Trigger renewals of all data if there is a change."""
         self._update_config()
         self._update_status()
         self._update_metrics_alerts()
