@@ -195,26 +195,18 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _principal_relation(self) -> Optional[Relation]:
-        if self.model.relations.get("juju-info"):
-            return self.model.relations["juju-info"][0]
-        else:
-            return None
+        return self.model.get_relation("juju-info")
 
     @property
     def principal_unit(self) -> Optional[Unit]:
         """Return the principal unit this charm is subordinated to."""
         relation = self._principal_relation
-        if relation:
-            if relation.units:
-                # Here, we could have popped the set and put the unit back or
-                # memoized the function, but in the interest of backwards compatibility
-                # with older python versions and avoiding adding temporary state to
-                # the charm instance, we choose this somewhat unsightly option.
-                return next(iter(relation.units))
-            else:
-                return None
-        else:
-            return None
+        if relation and relation.units:
+            # Here, we could have popped the set and put the unit back or
+            # memoized the function, but in the interest of backwards compatibility
+            # with older python versions and avoiding adding temporary state to
+            # the charm instance, we choose this somewhat unsightly option.
+            return next(iter(relation.units))
 
     @property
     def _instance_topology(
