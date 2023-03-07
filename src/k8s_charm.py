@@ -40,18 +40,21 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         )
         self._scrape = MetricsEndpointConsumer(self)
         self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
-        self.framework.observe(self._scrape.on.targets_changed, self._update_metrics_alerts)
 
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
         self.framework.observe(
-            self._loki_provider.on.loki_push_api_alert_rules_changed, self._update_loki_alerts
+            self._loki_provider.on.loki_push_api_alert_rules_changed,
+            self.on_loki_push_api_alert_rules_changed,
         )
 
-        self.framework.observe(self.on.agent_pebble_ready, self.on_pebble_ready)
+        self.framework.observe(self.on.agent_pebble_ready, self.on_agent_pebble_ready)
 
-    def on_pebble_ready(self, _) -> None:
+    def on_loki_push_api_alert_rules_changed(self, _event):
+        self._update_loki_alerts()
+
+    def on_agent_pebble_ready(self, _event) -> None:
         """Event handler for the pebble ready event.
 
         Args:
