@@ -167,7 +167,7 @@ class COSMachinRequirer(Object):
         self,
         charm,
         relation_name: str = DEFAULT_RELATION_NAME,
-        refresh_events: Optional[List] = None,
+        refresh_events: Optional[List[str]] = None,
     ):
         """Create a COSMachinRequirer instance.
 
