@@ -97,8 +97,7 @@ class COSMachineProvider(Object):
                 relation.data[self._charm.app].update({"config": self._generate_databag_content()})
 
     def _generate_databag_content(self) -> str:
-        """Collate the data for each nested databag and return it.
-        """
+        """Collate the data for each nested databag and return it."""
         # The databag is divided in three chunks, one for metrics, one for logs, and one for dashboards.
 
         data = {

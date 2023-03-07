@@ -108,6 +108,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         """Return a list of logging rules."""
         return self._cos.logs_alerts
 
+    @property
     def dashboards(self) -> list:
         """Return a list of dashboards."""
         return self._cos.dashboards
