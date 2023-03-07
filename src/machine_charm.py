@@ -101,7 +101,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     def dashboards(self) -> list:
         """Return a list of dashboards."""
-        raise self._cos.dashboards
+        return self._cos.dashboards
 
     @property
     def is_ready(self):

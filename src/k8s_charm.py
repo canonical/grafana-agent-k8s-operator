@@ -30,7 +30,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self.scrape_relation_name = SCRAPE_RELATION_NAME
 
         self.service_patch = KubernetesServicePatch(
             self,
