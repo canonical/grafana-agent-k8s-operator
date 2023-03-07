@@ -160,7 +160,7 @@ class GrafanaAgentCharm(CharmBase):
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_log_configs method")
 
-    def metrics_rules(self) -> list:
+    def metrics_rules(self) -> dict:
         """Return a list of metrics rules."""
         raise NotImplementedError("Please override the metrics_rules method")
 
@@ -168,7 +168,7 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of metrics scrape jobs."""
         raise NotImplementedError("Please override the metrics_jobs method")
 
-    def logs_rules(self) -> list:
+    def logs_rules(self) -> dict:
         """Return a list of logging rules."""
         raise NotImplementedError("Please override the logs_rules method")
 
@@ -227,10 +227,11 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             True if the status was set to Active; False otherwise.
         """
-        if len(self.model.relations["metrics-endpoint"]):
-            if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                self.unit.status = WaitingStatus("no related Prometheus remote-write")
-                return False
+        if relations := self.model.relations.get("metrics-endpoint"):
+            if len(relations):
+                if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
+                    self.unit.status = WaitingStatus("no related Prometheus remote-write")
+                    return False
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
