@@ -153,16 +153,16 @@ class COSMachineProvider(Object):
 
 
 class COSMachineDataChanged(EventBase):
-    """Event emitted by `COSMachinRequirer` when the provider side has made changes to its relation data."""
+    """Event emitted by `COSMachineRequirer` when the provider side has made changes to its relation data."""
 
 
 class COSMachineRequirerEvents(ObjectEvents):
-    """`COSMachinRequirer` events."""
+    """`COSMachineRequirer` events."""
 
     data_changed = EventSource(COSMachineDataChanged)
 
 
-class COSMachinRequirer(Object):
+class COSMachineRequirer(Object):
     """Integration endpoint wrapper for the Requirer side of the cos_machine interface."""
 
     on = COSMachineRequirerEvents()
@@ -173,7 +173,7 @@ class COSMachinRequirer(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         refresh_events: Optional[List[str]] = None,
     ):
-        """Create a COSMachinRequirer instance.
+        """Create a COSMachineRequirer instance.
 
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
