@@ -33,7 +33,6 @@ METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
 DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
 REMOTE_WRITE_RELATION_NAME = "send-remote-write"
-SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -53,6 +52,7 @@ class GrafanaAgentCharm(CharmBase):
     _promtail_positions = "/run/promtail-positions.yaml"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
+    scrape_relation_name = None
 
     def __init__(self, *args):
         if type(self) == GrafanaAgentCharm:
@@ -262,7 +262,7 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             True if the status was set to Active; False otherwise.
         """
-        if len(self.model.relations["metrics-endpoint"]):
+        if self.scrape_relation_name and len(self.model.relations[self.scrape_relation_name]):
             if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                 self.unit.status = WaitingStatus("no related Prometheus remote-write")
                 return False
