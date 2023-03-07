@@ -43,12 +43,12 @@ class COSMachineProvider(Object):
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: List[dict] = None,
+        metrics_endpoints: Optional[List[dict]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
         logs_slots: Optional[List[str]] = None,
-        dashboard_dirs: List[str] = None,
+        dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
         """Create a COSMachineProvider instance.

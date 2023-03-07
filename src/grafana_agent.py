@@ -183,6 +183,7 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of logging rules."""
         raise NotImplementedError("Please override the logs_rules method")
 
+    @property
     def dashboards(self) -> list:
         """Return a list of dashboards."""
         raise NotImplementedError("Please override the dashboards method")

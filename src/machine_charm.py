@@ -217,6 +217,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             # with older python versions and avoiding adding temporary state to
             # the charm instance, we choose this somewhat unsightly option.
             return next(iter(relation.units))
+        return None
 
     @property
     def _instance_topology(
