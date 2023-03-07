@@ -9,7 +9,7 @@ import pathlib
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
-from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
+from charms.grafana_agent.v0.cos_machine import COSMachineRequirer
 from ops.main import main
 from ops.model import MaintenanceStatus, Relation, Unit
 
@@ -43,7 +43,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         super().__init__(*args)
         self._service = "grafana-agent.grafana-agent"
 
-        self._cos = COSMachineConsumer(self)
+        self._cos = COSMachineRequirer(self)
         self.framework.observe(self._cos.on.data_changed, self.on_scrape_targets_changed)
         self.framework.observe(self._cos.on.data_changed, self._update_metrics_alerts)
         self.framework.observe(self._cos.on.data_changed, self._update_loki_alerts)
