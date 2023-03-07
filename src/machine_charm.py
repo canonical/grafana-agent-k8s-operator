@@ -10,7 +10,7 @@ import subprocess
 from typing import Any, Dict, List, Optional, Union
 
 from ops.main import main
-from ops.model import MaintenanceStatus, Relation, Unit
+from ops.model import MaintenanceStatus, Relation, Unit, ActiveStatus
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -65,6 +65,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         start_process = subprocess.run(["sudo", "snap", "start", "--enable", self._service])
         if start_process.returncode != 0:
             raise GrafanaAgentServiceError("Failed to start grafana-agent")
+        self.unit.status = ActiveStatus("")
 
     def on_stop(self, _) -> None:
         """Stop Grafana Agent."""

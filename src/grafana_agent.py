@@ -54,9 +54,13 @@ class GrafanaAgentCharm(CharmBase):
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
+    def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
+        """Forbid the usage of GrafanaAgentCharm directly."""
+        if cls is GrafanaAgentCharm:
+            raise TypeError("This is a base class and cannot be instantiated directly.")
+        return super().__new__(cls)
+
     def __init__(self, *args):
-        if type(self) == GrafanaAgentCharm:
-            raise TypeError("<GrafanaAgentCharm> should not be directly instantiated")
         super().__init__(*args)
 
         self.loki_rules_paths = RulesMapping(
