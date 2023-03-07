@@ -4,10 +4,6 @@
 import unittest
 from unittest.mock import patch
 
-import ops
-import yaml
-from ops import pebble
-from ops.model import ActiveStatus, BlockedStatus, Container
 from ops.testing import Harness
 
 from charm import GrafanaAgentK8sCharm as GrafanaAgentCharm

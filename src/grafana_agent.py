@@ -16,7 +16,7 @@ from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from ops.charm import CharmBase, RelationChangedEvent
+from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
@@ -326,7 +326,6 @@ class GrafanaAgentCharm(CharmBase):
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
-
         prometheus_endpoints = self._remote_write.endpoints
         loki_endpoints = self._loki_consumer.loki_endpoints
         for endpoint in prometheus_endpoints + loki_endpoints:
