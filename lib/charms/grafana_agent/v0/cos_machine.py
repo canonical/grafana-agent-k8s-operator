@@ -159,7 +159,7 @@ class COSMachineConsumerEvents(ObjectEvents):
 
 
 class COSMachineConsumer(Object):
-    """Provider class for the cos_machine interface."""
+    """Integration endpoint wrapper for the Requirer side of the cos_machine interface."""
 
     on = COSMachineConsumerEvents()
 
