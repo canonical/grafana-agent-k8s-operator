@@ -43,12 +43,12 @@ class COSMachineProvider(Object):
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: List[dict] = None,
+        metrics_endpoints: Optional[List[dict]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
         logs_slots: Optional[List[str]] = None,
-        dashboard_dirs: List[str] = None,
+        dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
         """Create a COSMachineProvider instance.
@@ -98,8 +98,7 @@ class COSMachineProvider(Object):
 
     def _generate_databag_content(self) -> str:
         """Collate the data for each nested databag and return it."""
-        # The databag is divided in three chunks: one for metrics,
-        # one for logs, and one for dashboards.
+        # The databag is divided in three chunks: metrics, logs, and dashboards.
 
         data = {
             # primary key
@@ -212,7 +211,7 @@ class COSMachineRequirer(Object):
 
     @staticmethod
     def _fetch_data_from_relation(relation: Relation, primary_key: str, secondary_key: str):
-        """Extract a path of keys from the relation databag."""
+        """Extract data by path from a relation's app data."""
         # ensure that whatever context we're running this in, we take the necessary precautions:
         if not relation.data or not relation.app:
             return None

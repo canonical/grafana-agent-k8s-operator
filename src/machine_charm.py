@@ -44,19 +44,19 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._service = "grafana-agent.grafana-agent"
 
         self._cos = COSMachineRequirer(self)
-        self.framework.observe(self._cos.on.data_changed, self.on_data_changed)
+        self.framework.observe(self._cos.on.data_changed, self._on_data_changed)
 
         self.framework.observe(self.on.install, self.on_install)
-        self.framework.observe(self.on.start, self.on_start)
-        self.framework.observe(self.on.stop, self.on_stop)
-        self.framework.observe(self.on.remove, self.on_remove)
-        self.framework.observe(self.on["juju_info"].relation_joined, self.on_juju_info_joined)
+        self.framework.observe(self.on.start, self._on_start)
+        self.framework.observe(self.on.stop, self._on_stop)
+        self.framework.observe(self.on.remove, self._on_remove)
+        self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
 
-    def on_juju_info_joined(self, _event):
+    def _on_juju_info_joined(self, _event):
         """Update the config when Juju info is joined."""
         self._update_config()
 
-    def on_data_changed(self, _event):
+    def _on_data_changed(self, _event):
         """Trigger renewals of all data if there is a change."""
         self._update_config()
         self._update_status()
@@ -73,9 +73,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             if not self._is_installed:
                 raise GrafanaAgentInstallError("Failed to install grafana-agent.")
 
-    def on_start(self, _event) -> None:
-        """Start Grafana Agent."""
-        # Ensure the config is up to date before we start to avoid racy relation
+    def _on_start(self, _event) -> None:
+        # Ensure the config is up-to-date before we start to avoid racy relation
         # changes and starting with a "bare" config in ActiveStatus
         self._update_config()
         self.unit.status = MaintenanceStatus("Starting grafana-agent snap")
@@ -84,14 +83,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             raise GrafanaAgentServiceError("Failed to start grafana-agent")
         self.unit.status = ActiveStatus("")
 
-    def on_stop(self, _event) -> None:
-        """Stop Grafana Agent."""
+    def _on_stop(self, _event) -> None:
         self.unit.status = MaintenanceStatus("Stopping grafana-agent snap")
         stop_process = subprocess.run(["sudo", "snap", "stop", "--disable", self._service])
         if stop_process.returncode != 0:
             raise GrafanaAgentServiceError("Failed to stop grafana-agent")
 
-    def on_remove(self, _event) -> None:
+    def _on_remove(self, _event) -> None:
         """Uninstall the Grafana Agent snap."""
         self.unit.status = MaintenanceStatus("Uninstalling grafana-agent snap")
         subprocess.run(["sudo", "snap", "remove", "--purge", "grafana-agent"])
@@ -110,6 +108,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         """Return a list of logging rules."""
         return self._cos.logs_alerts
 
+    @property
     def dashboards(self) -> list:
         """Return a list of dashboards."""
         return self._cos.dashboards

@@ -46,21 +46,16 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         )
         self.framework.observe(
             self._loki_provider.on.loki_push_api_alert_rules_changed,
-            self.on_loki_push_api_alert_rules_changed,
+            self._on_loki_push_api_alert_rules_changed,
         )
 
-        self.framework.observe(self.on.agent_pebble_ready, self.on_agent_pebble_ready)
+        self.framework.observe(self.on.agent_pebble_ready, self._on_agent_pebble_ready)
 
-    def on_loki_push_api_alert_rules_changed(self, _event):
+    def _on_loki_push_api_alert_rules_changed(self, _event):
         """Refresh Loki alert rules."""
         self._update_loki_alerts()
 
-    def on_agent_pebble_ready(self, _event) -> None:
-        """Event handler for the pebble ready event.
-
-        Args:
-            event: The event object of the pebble ready event
-        """
+    def _on_agent_pebble_ready(self, _event) -> None:
         self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
 
         pebble_layer = {
@@ -88,9 +83,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
-        return self._scrape.alerts
+        return self._scrape.alerts()
 
-    def metrics_jobs(self) -> Dict[str, Any]:
+    def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""
         return self._scrape.jobs()
 
