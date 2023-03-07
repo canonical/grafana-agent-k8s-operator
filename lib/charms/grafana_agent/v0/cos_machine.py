@@ -16,6 +16,7 @@ from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
 from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAlerts
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.model import Relation
 from ops.testing import CharmType
 
 LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
@@ -93,9 +94,9 @@ class COSMachineProvider(Object):
 
         for relation in relations:
             if relation.data:
-                relation.data[self._charm.app].update({"config": self._get_config()})
+                relation.data[self._charm.app].update({"config": self._generate_databag_content()})
 
-    def _get_config(self) -> str:
+    def _generate_databag_content(self) -> str:
         """Collate the data for each nested databag and return it."""
         data = {
             "metrics": {
@@ -205,17 +206,32 @@ class COSMachineRequirer(Object):
     def _relations(self):
         return self._charm.model.relations[self._relation_name]
 
+    @staticmethod
+    def _fetch_data_from_relation(relation: Relation, primary_key: str, secondary_key: str):
+        """Extract from the application databag of this relation a piece of data identified by this path."""
+
+        # ensure that whatever context we're running this in, we take the necessary precautions:
+        if not relation.data or not relation.app:
+            return None
+
+        config = json.loads(relation.data[relation.app].get("config", {}))
+        return config.get(primary_key, {}).get(secondary_key, None)
+
+    @property
+    def metrics_alerts(self) -> Dict[str, Any]:
+        """Fetch metrics alerts."""
+        alert_rules = {}
+        for relation in self._relations:
+            if data := self._fetch_data_from_relation(relation, "metrics", "alert_rules"):
+                alert_rules.update(data)
+        return alert_rules
+
     @property
     def metrics_jobs(self) -> List[Dict]:
         """Parse the relation data contents and extract the metrics jobs."""
         scrape_jobs = []
         for relation in self._relations:
-            if not relation.data or not relation.app:
-                logger.debug('this relation is bork')
-                continue
-
-            config = json.loads(relation.data[relation.app].get("config", {}))
-            if jobs := config.get("metrics", {}).get("scrape_jobs", []):
+            if jobs := self._fetch_data_from_relation(relation, "metrics", "scrape_jobs"):
                 for job in jobs:
                     job_config = {
                         "job_name": job["job_name"],
@@ -227,22 +243,11 @@ class COSMachineRequirer(Object):
         return scrape_jobs
 
     @property
-    def metrics_alerts(self) -> Dict[str, Any]:
-        """Fetch metrics alerts."""
-        alert_rules = {}
-        for relation in self._relations:
-            config = relation.data.get("config", {})
-            if rules := config.get("metrics", {}).get("alert_rules", []):
-                alert_rules.update(rules)
-        return alert_rules
-
-    @property
     def logs_alerts(self) -> Dict[str, Any]:
         """Fetch log alerts."""
         alert_rules = {}
         for relation in self._relations:
-            config = relation.data.get("config", {})
-            if rules := config.get("logs", {}).get("alert_rules", []):
+            if rules := self._fetch_data_from_relation(relation, "logs", "alert_rules"):
                 alert_rules.update(rules)
         return alert_rules
 
@@ -251,8 +256,7 @@ class COSMachineRequirer(Object):
         """Fetch dashboards as encoded content."""
         dashboards = []  # type: List[Dict[str, str]]
         for relation in self._relations:
-            config = relation.data.get("config", {})
-            if dashboard := config.get("dashboards", {}).get("dashboards", []):
+            if dashboard := self._fetch_data_from_relation(relation, "dashboards", "dashboards"):
                 dashboards.append(
                     {
                         "relation_id": str(relation.id),
