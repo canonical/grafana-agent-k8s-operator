@@ -319,10 +319,13 @@ class GrafanaAgentCharm(CharmBase):
 
     def on_dashboard_status_changed(self, _event=None):
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
-        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(
+            inject_dropdowns=False
+        )  # noqa
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
+
         prometheus_endpoints = self._remote_write.endpoints
         loki_endpoints = self._loki_consumer.loki_endpoints
         for endpoint in prometheus_endpoints + loki_endpoints:

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_machine import COSMachineRequirer
 from ops.main import main
-from ops.model import MaintenanceStatus, Relation, Unit, ActiveStatus
+from ops.model import ActiveStatus, MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 

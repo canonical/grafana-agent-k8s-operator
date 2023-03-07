@@ -10,7 +10,7 @@ import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
-from scenario import State, Container, ExecOutput
+from scenario import Container, ExecOutput, State
 
 import grafana_agent
 import k8s_charm
@@ -73,7 +73,7 @@ def test_install(charm_type, charm_meta, substrate):
         "install",
         charm_type=charm_type,
         meta=charm_meta,
-        copy_to_charm_root={"/src/": CHARM_ROOT / "src"}
+        copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
     )
 
     if substrate == "lxd":
@@ -88,7 +88,7 @@ def test_start(charm_type, charm_meta, substrate):
         "start",
         charm_type=charm_type,
         meta=charm_meta,
-        copy_to_charm_root={"/src/": CHARM_ROOT / "src"}
+        copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
     )
 
     if substrate == "lxd":
@@ -102,24 +102,22 @@ def test_start(charm_type, charm_meta, substrate):
 
 
 def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate):
-    if substrate == 'lxd':
+    if substrate == "lxd":
         pytest.skip("k8s-only test")
 
     agent = Container(
         name="agent",
         can_connect=True,
-        exec_mock={('/bin/agent', '-version'): ExecOutput(stdout='42.42')})
+        exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
+    )
 
-    out = State(
-        containers=[agent]
-    ).trigger(
+    out = State(containers=[agent]).trigger(
         agent.pebble_ready_event,
         charm_type=charm_type,
         meta=charm_meta,
-        copy_to_charm_root={"/src/": CHARM_ROOT / "src"}
+        copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
     )
 
     assert out.status.unit == ("active", "")
     agent_out = out.get_container("agent")
-    assert agent_out.services['agent'].current == pebble.ServiceStatus.ACTIVE
-
+    assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE
