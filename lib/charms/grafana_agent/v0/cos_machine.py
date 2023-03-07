@@ -202,7 +202,7 @@ class COSMachineConsumer(Object):
     @property
     def metrics_jobs(self) -> List[Dict]:
         """Return a prometheus_scrape-like data structure for jobs."""
-        jobs = []
+        scrape_jobs = []
         for relation in self._relations:
             config = json.loads(relation.data[relation.app].get("config", {}))
             if jobs := config.get("metrics", {}).get("scrape_jobs", []):
@@ -212,9 +212,9 @@ class COSMachineConsumer(Object):
                         "metrics_path": job["path"],
                         "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
                     }
-                    jobs.append(job_config)
+                    scrape_jobs.append(job_config)
 
-        return jobs
+        return scrape_jobs
 
     @property
     def metrics_alerts(self) -> Dict[str, Any]:
