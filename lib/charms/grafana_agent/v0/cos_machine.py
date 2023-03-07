@@ -43,12 +43,12 @@ class COSMachineProvider(Object):
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: List[dict] = None,
+        metrics_endpoints: Optional[List[dict]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
         logs_slots: Optional[List[str]] = None,
-        dashboard_dirs: List[str] = None,
+        dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
         """Create a COSMachineProvider instance.
@@ -97,9 +97,8 @@ class COSMachineProvider(Object):
                 relation.data[self._charm.app].update({"config": self._generate_databag_content()})
 
     def _generate_databag_content(self) -> str:
-        """Collate the data for each nested databag and return it.
-        """
-        # The databag is divided in three chunks, one for metrics, one for logs, and one for dashboards.
+        """Collate the data for each nested databag and return it."""
+        # The databag is divided in three chunks: metrics, logs, and dashboards.
 
         data = {
             # primary key
@@ -160,7 +159,7 @@ class COSMachineProvider(Object):
 
 
 class COSMachineDataChanged(EventBase):
-    """Event emitted by `COSMachineRequirer` when the provider side has made changes to its relation data."""
+    """Emitted by `COSMachineRequirer` when the provider makes changes to its relation data."""
 
 
 class COSMachineRequirerEvents(ObjectEvents):
@@ -212,8 +211,7 @@ class COSMachineRequirer(Object):
 
     @staticmethod
     def _fetch_data_from_relation(relation: Relation, primary_key: str, secondary_key: str):
-        """Extract from the application databag of this relation a piece of data identified by this path."""
-
+        """Extract data by path from a relation's app data."""
         # ensure that whatever context we're running this in, we take the necessary precautions:
         if not relation.data or not relation.app:
             return None
