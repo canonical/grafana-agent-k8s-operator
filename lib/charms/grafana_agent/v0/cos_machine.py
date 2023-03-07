@@ -153,7 +153,7 @@ class COSMachineDataChanged(EventBase):
 
 
 class COSMachineConsumerEvents(ObjectEvents):
-    """Event descriptor for events raised by `COSMachineConsumer`."""
+    """`COSMachineConsumer` events."""
 
     data_changed = EventSource(COSMachineDataChanged)
 
