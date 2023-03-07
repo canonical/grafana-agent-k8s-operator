@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 class COSMachineProvider(Object):
-    """Provider class for the cos_machine interface."""
+    """Integration endpoint wrapper for the provider side of the cos_machine interface."""
 
     def __init__(
         self,
