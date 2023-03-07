@@ -16,6 +16,7 @@ from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
 from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAlerts
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.testing import CharmType
 
 LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
 LIBAPI = 0
@@ -39,14 +40,14 @@ class COSMachineProvider(Object):
 
     def __init__(
         self,
-        charm:CharmType,
+        charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: List[dict] = [DEFAULT_METRICS_ENDPOINT],
+        metrics_endpoints: List[dict] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
         logs_slots: Optional[List[str]] = None,
-        dashboard_dirs: List[str] = ["./src/grafana_dashboards"],
+        dashboard_dirs: List[str] = None,
         refresh_events: Optional[List] = None,
     ):
         """Create a COSMachineProvider instance.
@@ -64,6 +65,9 @@ class COSMachineProvider(Object):
             refresh_events: List of events on which to refresh relation data.
         """
         super().__init__(charm, relation_name)
+        metrics_endpoints = metrics_endpoints or [DEFAULT_METRICS_ENDPOINT]
+        dashboard_dirs = dashboard_dirs or ["./src/grafana_dashboards"]
+
         self._charm = charm
         self._relation_name = relation_name
         self._metrics_endpoints = metrics_endpoints
@@ -141,7 +145,8 @@ class COSMachineProvider(Object):
 
         return dashboards
 
-    def _encode_dashboard_content(self, content: Union[str, bytes]) -> str:
+    @staticmethod
+    def _encode_dashboard_content(content: Union[str, bytes]) -> str:
         if isinstance(content, str):
             content = bytes(content, "utf-8")
 
@@ -253,5 +258,6 @@ class COSMachinRequirer(Object):
                 )
         return dashboards
 
-    def _decode_dashboard_content(self, encoded_content: str) -> str:
+    @staticmethod
+    def _decode_dashboard_content(encoded_content: str) -> str:
         return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
