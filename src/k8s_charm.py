@@ -52,6 +52,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         self.framework.observe(self.on.agent_pebble_ready, self.on_agent_pebble_ready)
 
     def on_loki_push_api_alert_rules_changed(self, _event):
+        """Refresh Loki alert rules."""
         self._update_loki_alerts()
 
     def on_agent_pebble_ready(self, _event) -> None:

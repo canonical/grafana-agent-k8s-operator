@@ -5,13 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import ops
-import yaml
-from ops import pebble
-from ops.model import ActiveStatus, BlockedStatus, Container
 from ops.testing import Harness
 
-import grafana_agent
 from charm import GrafanaAgentMachineCharm as GrafanaAgentCharm
 
 

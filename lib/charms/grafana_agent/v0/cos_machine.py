@@ -97,9 +97,9 @@ class COSMachineProvider(Object):
                 relation.data[self._charm.app].update({"config": self._generate_databag_content()})
 
     def _generate_databag_content(self) -> str:
-        """Collate the data for each nested databag and return it.
-        """
-        # The databag is divided in three chunks, one for metrics, one for logs, and one for dashboards.
+        """Collate the data for each nested databag and return it."""
+        # The databag is divided in three chunks: one for metrics,
+        # one for logs, and one for dashboards.
 
         data = {
             # primary key
@@ -160,7 +160,7 @@ class COSMachineProvider(Object):
 
 
 class COSMachineDataChanged(EventBase):
-    """Event emitted by `COSMachineRequirer` when the provider side has made changes to its relation data."""
+    """Event emitted by `COSMachineRequirer` when relation data changes."""
 
 
 class COSMachineRequirerEvents(ObjectEvents):
@@ -212,8 +212,7 @@ class COSMachineRequirer(Object):
 
     @staticmethod
     def _fetch_data_from_relation(relation: Relation, primary_key: str, secondary_key: str):
-        """Extract from the application databag of this relation a piece of data identified by this path."""
-
+        """Extract a path of keys from the relation databag."""
         # ensure that whatever context we're running this in, we take the necessary precautions:
         if not relation.data or not relation.app:
             return None
@@ -260,15 +259,18 @@ class COSMachineRequirer(Object):
         """Fetch dashboards as encoded content."""
         dashboards = []  # type: List[Dict[str, str]]
         for relation in self._relations:
-            if dashboard := self._fetch_data_from_relation(relation, "dashboards", "dashboards"):
-                dashboards.append(
-                    {
-                        "relation_id": str(relation.id),
-                        # We don't have the remote charm name, but give us an identifier
-                        "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
-                        "content": self._decode_dashboard_content(dashboard),
-                    }
-                )
+            if dashboard_data := self._fetch_data_from_relation(
+                relation, "dashboards", "dashboards"
+            ):
+                for dashboard in dashboard_data:
+                    dashboards.append(
+                        {
+                            "relation_id": str(relation.id),
+                            # We don't have the remote charm name, but give us an identifier
+                            "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
+                            "content": self._decode_dashboard_content(dashboard),
+                        }
+                    )
         return dashboards
 
     @staticmethod

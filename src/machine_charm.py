@@ -53,9 +53,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self.framework.observe(self.on["juju_info"].relation_joined, self.on_juju_info_joined)
 
     def on_juju_info_joined(self, _event):
+        """Update the config when Juju info is joined."""
         self._update_config()
 
     def on_data_changed(self, _event):
+        """Trigger renewals of all data if there is a change."""
         self._update_config()
         self._update_status()
         self._update_metrics_alerts()
@@ -216,6 +218,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             # with older python versions and avoiding adding temporary state to
             # the charm instance, we choose this somewhat unsightly option.
             return next(iter(relation.units))
+        return None
 
     @property
     def _instance_topology(

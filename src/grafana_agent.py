@@ -16,7 +16,7 @@ from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from ops.charm import CharmBase, RelationChangedEvent
+from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
@@ -118,16 +118,20 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.on_config_changed)
 
     def on_upgrade_charm(self, _event=None):
+        """Refresh alerts if the charm is updated."""
         self._update_metrics_alerts()
         self._update_loki_alerts()
 
     def on_loki_push_api_endpoint_joined(self, _event=None):
+        """Rebuild the config with correct Loki sinks."""
         self._update_config()
 
     def on_loki_push_api_endpoint_departed(self, _event=None):
+        """Rebuild the config with correct Loki sinks."""
         self._update_config()
 
     def on_config_changed(self, _event=None):
+        """Rebuild the config."""
         self._update_config()
 
     # Abstract Methods
@@ -318,6 +322,7 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = WaitingStatus(str(e))
 
     def on_dashboard_status_changed(self, _event=None):
+        """Re-initialize dashboards to forward."""
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False
@@ -325,7 +330,6 @@ class GrafanaAgentCharm(CharmBase):
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
-
         prometheus_endpoints = self._remote_write.endpoints
         loki_endpoints = self._loki_consumer.loki_endpoints
         for endpoint in prometheus_endpoints + loki_endpoints:
