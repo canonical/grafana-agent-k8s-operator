@@ -98,10 +98,10 @@ class GrafanaAgentCharm(CharmBase):
         )
         self.framework.observe(
             self._grafana_dashboards_provider.on.dashboard_status_changed,
-            self.on_dashboard_status_changed,
+            self._on_dashboard_status_changed,
         )
 
-        self.framework.observe(self.on.upgrade_charm, self.on_upgrade_charm)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         self.framework.observe(
             self._remote_write.on.endpoints_changed, self.on_remote_write_changed
@@ -109,25 +109,25 @@ class GrafanaAgentCharm(CharmBase):
 
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
-            self.on_loki_push_api_endpoint_joined,
+            self._on_loki_push_api_endpoint_joined,
         )
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_departed,
-            self.on_loki_push_api_endpoint_departed,
+            self._on_loki_push_api_endpoint_departed,
         )
-        self.framework.observe(self.on.config_changed, self.on_config_changed)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
 
-    def on_upgrade_charm(self, _event=None):
+    def _on_upgrade_charm(self, _event=None):
         self._update_metrics_alerts()
         self._update_loki_alerts()
 
-    def on_loki_push_api_endpoint_joined(self, _event=None):
+    def _on_loki_push_api_endpoint_joined(self, _event=None):
         self._update_config()
 
-    def on_loki_push_api_endpoint_departed(self, _event=None):
+    def _on_loki_push_api_endpoint_departed(self, _event=None):
         self._update_config()
 
-    def on_config_changed(self, _event=None):
+    def _on_config_changed(self, _event=None):
         self._update_config()
 
     # Abstract Methods
@@ -318,7 +318,7 @@ class GrafanaAgentCharm(CharmBase):
         except APIError as e:
             self.unit.status = WaitingStatus(str(e))
 
-    def on_dashboard_status_changed(self, _event=None):
+    def _on_dashboard_status_changed(self, _event=None):
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False

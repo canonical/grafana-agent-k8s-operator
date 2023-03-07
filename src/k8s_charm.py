@@ -46,20 +46,15 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         )
         self.framework.observe(
             self._loki_provider.on.loki_push_api_alert_rules_changed,
-            self.on_loki_push_api_alert_rules_changed,
+            self._on_loki_push_api_alert_rules_changed,
         )
 
-        self.framework.observe(self.on.agent_pebble_ready, self.on_agent_pebble_ready)
+        self.framework.observe(self.on.agent_pebble_ready, self._on_agent_pebble_ready)
 
-    def on_loki_push_api_alert_rules_changed(self, _event):
+    def _on_loki_push_api_alert_rules_changed(self, _event):
         self._update_loki_alerts()
 
-    def on_agent_pebble_ready(self, _event) -> None:
-        """Event handler for the pebble ready event.
-
-        Args:
-            event: The event object of the pebble ready event
-        """
+    def _on_agent_pebble_ready(self, _event) -> None:
         self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
 
         pebble_layer = {
