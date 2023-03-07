@@ -39,7 +39,7 @@ class COSMachineProvider(Object):
 
     def __init__(
         self,
-        charm,
+        charm:CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
         metrics_endpoints: List[dict] = [DEFAULT_METRICS_ENDPOINT],
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
