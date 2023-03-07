@@ -149,7 +149,7 @@ class COSMachineProvider(Object):
 
 
 class COSMachineDataChanged(EventBase):
-    """Event emitted when a `COSMachineProvider` joins or updates data."""
+    """Event emitted by `COSMachineConsumer` when the provider side has made changes to its relation data."""
 
 
 class COSMachineConsumerEvents(ObjectEvents):
