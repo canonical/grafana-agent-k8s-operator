@@ -245,6 +245,15 @@ class COSMachineRequirer(Object):
         return scrape_jobs
 
     @property
+    def snap_log_plugs(self) -> List[str]:
+        """Fetch logging plugs exposed by related snaps."""
+        plugs = set()
+        for relation in self._relations:
+            if targets := self._fetch_data_from_relation(relation, "logs", "targets"):
+                plugs.update(targets)
+        return list(plugs)
+
+    @property
     def logs_alerts(self) -> Dict[str, Any]:
         """Fetch log alerts."""
         alert_rules = {}
