@@ -15,8 +15,7 @@ from scenario import Container, ExecOutput, State
 import grafana_agent
 import k8s_charm
 import machine_charm
-
-CHARM_ROOT = Path(__file__).parent.parent.parent.parent
+from tests.scenario.helpers import get_charm_meta, CHARM_ROOT
 
 
 @pytest.fixture(params=["k8s", "lxd"])
@@ -57,22 +56,11 @@ def patch_all(substrate, dummy_cfg_path):
             yield
 
 
-@pytest.fixture
-def charm_meta(substrate, charm_type) -> dict:
-    fname = {"lxd": "machine_metadata", "k8s": "k8s_metadata"}[substrate]
-
-    charm_source_path = Path(inspect.getfile(charm_type))
-    charm_root = charm_source_path.parent.parent
-
-    raw_meta = (charm_root / fname).with_suffix(".yaml").read_text()
-    return yaml.safe_load(raw_meta)
-
-
-def test_install(charm_type, charm_meta, substrate):
+def test_install(charm_type, substrate):
     out = State().trigger(
         "install",
         charm_type=charm_type,
-        meta=charm_meta,
+        meta=get_charm_meta(charm_type),
         copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
     )
 
@@ -83,11 +71,11 @@ def test_install(charm_type, charm_meta, substrate):
         assert out.status.unit == ("unknown", "")
 
 
-def test_start(charm_type, charm_meta, substrate):
+def test_start(charm_type, substrate):
     out = State().trigger(
         "start",
         charm_type=charm_type,
-        meta=charm_meta,
+        meta=get_charm_meta(charm_type),
         copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
     )
 
@@ -101,7 +89,7 @@ def test_start(charm_type, charm_meta, substrate):
         assert out.status.unit == ("unknown", "")
 
 
-def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate):
+def test_k8s_charm_start_with_container(charm_type, substrate):
     if substrate == "lxd":
         pytest.skip("k8s-only test")
 
@@ -114,7 +102,7 @@ def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate):
     out = State(containers=[agent]).trigger(
         agent.pebble_ready_event,
         charm_type=charm_type,
-        meta=charm_meta,
+        meta=get_charm_meta(charm_type),
         copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
     )
 
