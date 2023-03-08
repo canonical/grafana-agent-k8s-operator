@@ -1,13 +1,15 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
 import inspect
 from pathlib import Path
 
 import yaml
 
-import machine_charm
 import k8s_charm
-
+import machine_charm
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
+
 
 def get_charm_meta(charm_type) -> dict:
     if charm_type is machine_charm.GrafanaAgentMachineCharm:

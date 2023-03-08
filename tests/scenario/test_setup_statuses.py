@@ -1,13 +1,10 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 import dataclasses
-import inspect
-from pathlib import Path
 from typing import Type
 from unittest.mock import patch
 
 import pytest
-import yaml
 from ops import pebble
 from ops.testing import CharmType
 from scenario import Container, ExecOutput, State
@@ -15,7 +12,7 @@ from scenario import Container, ExecOutput, State
 import grafana_agent
 import k8s_charm
 import machine_charm
-from tests.scenario.helpers import get_charm_meta, CHARM_ROOT
+from tests.scenario.helpers import CHARM_ROOT, get_charm_meta
 
 
 @pytest.fixture(params=["k8s", "lxd"])

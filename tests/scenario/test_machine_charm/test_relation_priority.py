@@ -1,18 +1,16 @@
-import base64
-import dataclasses
-import inspect
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
-import yaml
-from scenario import State, trigger as _trigger, Relation
+from charms.grafana_agent.v0.cos_machine import COSMachineProvider
+from scenario import Relation, State
+from scenario import trigger as _trigger
 
 import grafana_agent
 import machine_charm
-from charms.grafana_agent.v0.cos_machine import COSMachineProvider
-from tests.scenario.helpers import get_charm_meta, CHARM_ROOT
+from tests.scenario.helpers import CHARM_ROOT, get_charm_meta
 from tests.scenario.test_machine_charm.helpers import set_run_out
 
 
@@ -23,7 +21,7 @@ def trigger(evt: str, state: State, **kwargs):
         charm_type=machine_charm.GrafanaAgentMachineCharm,
         meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
         copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
-        **kwargs
+        **kwargs,
     )
 
 
@@ -51,8 +49,7 @@ def test_no_relations(mock_run):
         assert not charm.principal_unit
 
     set_run_out(mock_run, 0)
-    out = trigger("start", State(),
-                  post_event=post_event)
+    trigger("start", State(), post_event=post_event)
 
 
 @patch("machine_charm.subprocess.run")
@@ -68,12 +65,7 @@ def test_juju_info_relation(mock_run):
         assert charm.principal_unit
 
     set_run_out(mock_run, 0)
-    out = trigger(
-        "start",
-        State(
-            relations=[Relation('juju-info')]
-        ),
-        post_event=post_event)
+    trigger("start", State(relations=[Relation("juju-info")]), post_event=post_event)
 
 
 @patch("machine_charm.subprocess.run")
@@ -85,38 +77,38 @@ def test_cos_machine_relation(mock_run):
         assert not charm._cos.metrics_alerts
         assert not charm._cos.metrics_jobs
 
-        assert charm._principal_relation.name == 'cos-machine'
-        assert charm.principal_unit.name == 'remote-cos-machine/0'
+        assert charm._principal_relation.name == "cos-machine"
+        assert charm.principal_unit.name == "remote-cos-machine/0"
 
     set_run_out(mock_run, 0)
     data = {
-        'config': json.dumps({
-            "metrics": {
-                "scrape_jobs": [],
-                "alert_rules": {},
-            },
-            "logs": {
-                "targets": ["foo:bar", "baz:qux"],
-                "alert_rules": {},
-            },
-            "dashboards": {
-                "dashboards": [
-                    COSMachineProvider._encode_dashboard_content("very long dashboard")
-                ],
-            },
-        }
+        "config": json.dumps(
+            {
+                "metrics": {
+                    "scrape_jobs": [],
+                    "alert_rules": {},
+                },
+                "logs": {
+                    "targets": ["foo:bar", "baz:qux"],
+                    "alert_rules": {},
+                },
+                "dashboards": {
+                    "dashboards": [
+                        COSMachineProvider._encode_dashboard_content("very long dashboard")
+                    ],
+                },
+            }
         )
     }
-    out = trigger(
+    trigger(
         "start",
         State(
             relations=[
-                Relation('cos-machine',
-                         remote_app_name='remote-cos-machine',
-                         remote_app_data=data)
+                Relation("cos-machine", remote_app_name="remote-cos-machine", remote_app_data=data)
             ]
         ),
-        post_event=post_event)
+        post_event=post_event,
+    )
 
 
 @patch("machine_charm.subprocess.run")
@@ -129,37 +121,38 @@ def test_both_relations(mock_run):
         assert not charm._cos.metrics_jobs
 
         # we have both, but principal is grabbed from cos-machine
-        assert charm._principal_relation.name == 'cos-machine'
-        assert charm.principal_unit.name == 'remote-cos-machine/0'
+        assert charm._principal_relation.name == "cos-machine"
+        assert charm.principal_unit.name == "remote-cos-machine/0"
 
     set_run_out(mock_run, 0)
     data = {
-        'config': json.dumps({
-            "metrics": {
-                "scrape_jobs": [],
-                "alert_rules": {},
-            },
-            "logs": {
-                "targets": ["foo:bar", "baz:qux"],
-                "alert_rules": {},
-            },
-            "dashboards": {
-                "dashboards": [
-                    COSMachineProvider._encode_dashboard_content("very long dashboard")
-                ],
-            },
-        }
+        "config": json.dumps(
+            {
+                "metrics": {
+                    "scrape_jobs": [],
+                    "alert_rules": {},
+                },
+                "logs": {
+                    "targets": ["foo:bar", "baz:qux"],
+                    "alert_rules": {},
+                },
+                "dashboards": {
+                    "dashboards": [
+                        COSMachineProvider._encode_dashboard_content("very long dashboard")
+                    ],
+                },
+            }
         )
     }
-    out = trigger(
+    trigger(
         "start",
         State(
             relations=[
-                Relation('cos-machine',
-                         remote_app_name='remote-cos-machine',
-                         remote_app_data=data),
-                Relation('juju-info',
-                         remote_app_name='remote-juju-info')
+                Relation(
+                    "cos-machine", remote_app_name="remote-cos-machine", remote_app_data=data
+                ),
+                Relation("juju-info", remote_app_name="remote-juju-info"),
             ]
         ),
-        post_event=post_event)
+        post_event=post_event,
+    )
