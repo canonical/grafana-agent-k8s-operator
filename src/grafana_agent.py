@@ -270,24 +270,17 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self) -> bool:
-        """Update the status to reflect the status quo.
-
-        Returns:
-            True if the status was set to Active; False otherwise.
-        """
+    def _update_status(self):
+        """Determine the charm status based on relation health and grafana-agent service readiness."""
         if relations := self.model.relations.get("metrics-endpoint"):
             if len(relations):
                 if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                     self.unit.status = WaitingStatus("no related Prometheus remote-write")
-                    return False
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
-            return False
 
         self.unit.status = ActiveStatus()
-        return True
 
     def _update_config(self) -> None:
         if not self.is_ready:
