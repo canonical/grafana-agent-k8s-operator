@@ -49,7 +49,6 @@ class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
-    _promtail_positions = "/run/promtail-positions.yaml"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
@@ -446,7 +445,7 @@ class GrafanaAgentCharm(CharmBase):
                 {
                     "name": "push_api_server",
                     "clients": loki_endpoints,
-                    "positions": {"filename": self._promtail_positions},
+                    "positions": {"filename": "/run/push_api_server_positions.yaml"},
                     "scrape_configs": [
                         {
                             "job_name": "loki",
