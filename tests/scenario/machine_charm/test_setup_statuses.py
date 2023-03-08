@@ -32,7 +32,7 @@ def charm_type(substrate) -> Type[CharmType]:
 
 
 @pytest.fixture
-def dummy_cfg_path(tmp_path):
+def placeholder_cfg_path(tmp_path):
     return tmp_path / "foo.yaml"
 
 
@@ -46,9 +46,9 @@ def _subp_run_mock(*a, **kw):
 
 
 @pytest.fixture(autouse=True)
-def patch_all(substrate, dummy_cfg_path):
+def patch_all(substrate, placeholder_cfg_path):
     if substrate == "lxd":
-        grafana_agent.CONFIG_PATH = dummy_cfg_path
+        grafana_agent.CONFIG_PATH = placeholder_cfg_path
         with patch("subprocess.run", _subp_run_mock):
             yield
 
