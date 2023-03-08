@@ -38,6 +38,7 @@ class GrafanaAgentServiceError(GrafanaAgentError):
 
 class GrafanaAgentMachineCharm(GrafanaAgentCharm):
     """Machine version of the Grafana Agent charm."""
+
     service_name = "grafana-agent.grafana-agent"
 
     def __init__(self, *args):
