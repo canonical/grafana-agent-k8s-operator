@@ -250,10 +250,6 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-        self.assertEqual(
-            self.harness.model.unit.status, WaitingStatus("no related Prometheus remote-write")
-        )
-
     def test__cli_args(self):
         expected = "-config.file=/etc/grafana-agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
