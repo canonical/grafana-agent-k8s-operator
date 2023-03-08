@@ -45,6 +45,7 @@ def test_no_relations(mock_run):
         assert not charm._cos.logs_alerts
         assert not charm._cos.metrics_alerts
         assert not charm._cos.metrics_jobs
+        assert not charm._cos.snap_log_plugs
 
         assert not charm._principal_relation
         assert not charm.principal_unit
@@ -61,6 +62,7 @@ def test_juju_info_relation(mock_run):
         assert not charm._cos.logs_alerts
         assert not charm._cos.metrics_alerts
         assert not charm._cos.metrics_jobs
+        assert not charm._cos.snap_log_plugs
 
         assert charm._principal_relation
         assert charm.principal_unit
@@ -78,12 +80,13 @@ def test_juju_info_relation(mock_run):
 def test_cos_machine_relation(mock_run):
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert charm._cos.dashboards
+        assert charm._cos.snap_log_plugs
         assert not charm._cos.logs_alerts
         assert not charm._cos.metrics_alerts
         assert not charm._cos.metrics_jobs
 
-        assert charm._principal_relation
-        assert charm.principal_unit
+        assert charm._principal_relation.name == 'cos-machine'
+        assert charm.principal_unit.name == 'remote-cos-machine/0'
 
     set_run_out(mock_run, 0)
     data = {
@@ -102,14 +105,61 @@ def test_cos_machine_relation(mock_run):
                 ],
             },
         }
-)
+        )
     }
     out = trigger(
         "start",
         State(
             relations=[
                 Relation('cos-machine',
+                         remote_app_name='remote-cos-machine',
                          remote_app_data=data)
+            ]
+        ),
+        post_event=post_event)
+
+
+@patch("machine_charm.subprocess.run")
+def test_both_relations(mock_run):
+    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+        assert charm._cos.dashboards
+        assert charm._cos.snap_log_plugs
+        assert not charm._cos.logs_alerts
+        assert not charm._cos.metrics_alerts
+        assert not charm._cos.metrics_jobs
+
+        # we have both, but principal is grabbed from cos-machine
+        assert charm._principal_relation.name == 'cos-machine'
+        assert charm.principal_unit.name == 'remote-cos-machine/0'
+
+    set_run_out(mock_run, 0)
+    data = {
+        'config': json.dumps({
+            "metrics": {
+                "scrape_jobs": [],
+                "alert_rules": {},
+            },
+            "logs": {
+                "targets": ["foo:bar", "baz:qux"],
+                "alert_rules": {},
+            },
+            "dashboards": {
+                "dashboards": [
+                    COSMachineProvider._encode_dashboard_content("very long dashboard")
+                ],
+            },
+        }
+        )
+    }
+    out = trigger(
+        "start",
+        State(
+            relations=[
+                Relation('cos-machine',
+                         remote_app_name='remote-cos-machine',
+                         remote_app_data=data),
+                Relation('juju-info',
+                         remote_app_name='remote-juju-info')
             ]
         ),
         post_event=post_event)
