@@ -111,7 +111,9 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         """Return a list of metrics scrape jobs."""
         jobs = self._cos.metrics_jobs
         for job in jobs:
-            job["labels"] = self._principal_labels
+            static_configs = job.get("static_configs", [])
+            for static_config in static_configs:
+                static_config["labels"] = self._principal_labels
         return jobs
 
     def logs_rules(self) -> Dict[str, Any]:
