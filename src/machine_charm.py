@@ -6,6 +6,7 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 import logging
 import pathlib
+import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
@@ -62,6 +63,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._update_status()
         self._update_metrics_alerts()
         self._update_loki_alerts()
+        self._update_snap_logs()
         self._update_grafana_dashboards()  # TODO rbarry check this
 
     def on_install(self, _event) -> None:
@@ -267,6 +269,16 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "replacement": self._instance_name,
             }
         ] + topology_relabels  # type: ignore
+
+    def _update_snap_logs(self):
+        for plug in self._cos.snap_log_plugs:
+            cmd = f"sudo snap connect {plug} grafana-agent:logs"
+            try:
+                subprocess.check_output(shlex.split(cmd))
+            except subprocess.CalledProcessError:
+                logger.error(f"error connecting plug {plug} to grafana-agent:logs",
+                             exc_info=True)
+        # TODO: figure out if we need to do anything to add the new log dirs/files to the tail
 
 
 if __name__ == "__main__":
