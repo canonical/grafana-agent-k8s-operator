@@ -26,13 +26,13 @@ def trigger(evt: str, state: State, **kwargs):
 
 
 @pytest.fixture
-def dummy_cfg_path(tmp_path):
+def mock_cfg_path(tmp_path):
     return tmp_path / "foo.yaml"
 
 
 @pytest.fixture(autouse=True)
-def patch_all(dummy_cfg_path):
-    grafana_agent.CONFIG_PATH = dummy_cfg_path
+def patch_all(mock_cfg_path):
+    grafana_agent.CONFIG_PATH = mock_cfg_path
     yield
 
 
