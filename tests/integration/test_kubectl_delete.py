@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from helpers import uk8s_group
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ async def test_kubectl_delete_pod(ops_test):
 
     cmd = [
         "sg",
-        "microk8s",
+        uk8s_group(),
         "-c",
         " ".join(["microk8s.kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
     ]

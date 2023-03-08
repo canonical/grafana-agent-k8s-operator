@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import grp
 import json
 import logging
 import urllib.error
@@ -133,6 +134,16 @@ async def unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
     """
     status = await ops_test.model.get_status()
     return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+
+
+def uk8s_group() -> str:
+    try:
+        # Classically confined microk8s
+        uk8s_group = grp.getgrnam("microk8s").gr_name
+    except KeyError:
+        # Strictly confined microk8s
+        uk8s_group = "snap_microk8s"
+    return uk8s_group
 
 
 async def prometheus_rules(ops_test: OpsTest, app_name: str, unit_num: int) -> list:
