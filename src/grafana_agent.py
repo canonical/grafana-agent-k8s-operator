@@ -271,7 +271,10 @@ class GrafanaAgentCharm(CharmBase):
         self._update_metrics_alerts()
 
     def _update_status(self):
-        """Determine the charm status based on relation health and grafana-agent service readiness."""
+        """Determine the charm status based on relation health and grafana-agent service readiness.
+
+        Sets unit status to either Waiting or Active.
+        """
         if relations := self.model.relations.get("metrics-endpoint"):
             if len(relations):
                 if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
