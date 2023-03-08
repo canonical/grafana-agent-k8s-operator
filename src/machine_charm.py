@@ -109,7 +109,12 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""
-        return self._cos.metrics_jobs
+        jobs = self._cos.metrics_jobs
+        for job in jobs:
+            static_configs = job.get("static_configs", [])
+            for static_config in static_configs:
+                static_config["labels"] = self._principal_labels
+        return jobs
 
     def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
@@ -260,7 +265,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _principal_relabeling_config(self) -> list:
-        """Return a relabel config with labels from the topology of the principal charm."""
+        """Return a relabelling config with labels from the topology of the principal charm."""
         topology_relabels = (
             [
                 {

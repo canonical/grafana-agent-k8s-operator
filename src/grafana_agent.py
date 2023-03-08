@@ -121,6 +121,7 @@ class GrafanaAgentCharm(CharmBase):
         """Refresh alerts if the charm is updated."""
         self._update_metrics_alerts()
         self._update_loki_alerts()
+        self._update_config()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
