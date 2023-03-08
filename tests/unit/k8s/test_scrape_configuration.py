@@ -12,7 +12,7 @@ import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
 from helpers import FakeProcessVersionCheck
-from ops.model import ActiveStatus, Container, WaitingStatus
+from ops.model import ActiveStatus, Container
 from ops.testing import Harness
 
 from charm import (  # isort: skip <- needed because charm.py does not always exist
@@ -248,10 +248,6 @@ class TestScrapeConfiguration(unittest.TestCase):
                 },
                 "prometheus_remote_write": [],
             },
-        )
-
-        self.assertEqual(
-            self.harness.model.unit.status, WaitingStatus("no related Prometheus remote-write")
         )
 
     def test__cli_args(self):

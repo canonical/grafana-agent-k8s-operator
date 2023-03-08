@@ -216,7 +216,7 @@ class COSMachineRequirer(Object):
         if not relation.data or not relation.app:
             return None
 
-        config = json.loads(relation.data[relation.app].get("config", {}))
+        config = json.loads(relation.data[relation.app].get("config", "{}"))
         return config.get(primary_key, {}).get(secondary_key, None)
 
     @property
