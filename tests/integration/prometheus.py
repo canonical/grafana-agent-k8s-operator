@@ -145,7 +145,7 @@ class Prometheus:
                 #           "severity": "High"
                 #         },
                 #         "annotations": {
-                #           "description": " of job non_existing_job is firing the placeholder alarm.",
+                #           "description": " .... ",
                 #           "summary": "Instance  placeholder alarm (always firing)"
                 #         },
                 #         "state": "firing",

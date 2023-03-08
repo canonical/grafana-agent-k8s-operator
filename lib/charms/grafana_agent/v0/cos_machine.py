@@ -11,9 +11,8 @@ import lzma
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-# FIXME: unify the alert rules format in cosl to drop these ASAP
-from charms.loki_k8s.v0.loki_push_api import AlertRules as LogAlerts
-from charms.prometheus_k8s.v0.prometheus_scrape import AlertRules as MetricsAlerts
+from cosl import JujuTopology
+from cosl.rules import AlertRules
 from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation
@@ -130,14 +129,16 @@ class COSMachineProvider(Object):
     @property
     def _metrics_alert_rules(self) -> Dict:
         """Use (for now) the prometheus_scrape AlertRules to initialize this."""
-        alert_rules = MetricsAlerts()
+        alert_rules = AlertRules(
+            query_type="promql", topology=JujuTopology.from_charm(self._charm)
+        )
         alert_rules.add_path(self._metrics_rules, recursive=self._recursive)
         return alert_rules.as_dict()
 
     @property
     def _log_alert_rules(self) -> Dict:
         """Use (for now) the loki_push_api AlertRules to initialize this."""
-        alert_rules = LogAlerts()
+        alert_rules = AlertRules(query_type="logql", topology=JujuTopology.from_charm(self._charm))
         alert_rules.add_path(self._logs_rules, recursive=self._recursive)
         return alert_rules.as_dict()
 
