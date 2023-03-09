@@ -225,8 +225,17 @@ class COSMachineRequirer(Object):
         """Fetch metrics alerts."""
         alert_rules = {}
         for relation in self._relations:
+            # This is only used for naming the file, so be as specific as we
+            # can be, but it's ok if the unit name isn't exactly correct, so
+            # long as we don't dedupe away the alerts, which will be
+            identifier = JujuTopology(
+                model=self._charm.model.name,
+                model_uuid=self._charm.model.uuid,
+                application=relation.app.name if relation.app else "unknown",
+                unit=self._charm.unit.name,
+            ).identifier
             if data := self._fetch_data_from_relation(relation, "metrics", "alert_rules"):
-                alert_rules.update(data)
+                alert_rules.update({identifier: data})
         return alert_rules
 
     @property
@@ -259,8 +268,17 @@ class COSMachineRequirer(Object):
         """Fetch log alerts."""
         alert_rules = {}
         for relation in self._relations:
+            # This is only used for naming the file, so be as specific as we
+            # can be, but it's ok if the unit name isn't exactly correct, so
+            # long as we don't dedupe away the alerts, which will be
+            identifier = JujuTopology(
+                model=self._charm.model.name,
+                model_uuid=self._charm.model.uuid,
+                application=relation.app.name if relation.app else "unknown",
+                unit=self._charm.unit.name,
+            ).identifier
             if rules := self._fetch_data_from_relation(relation, "logs", "alert_rules"):
-                alert_rules.update(rules)
+                alert_rules.update({identifier: rules})
         return alert_rules
 
     @property
