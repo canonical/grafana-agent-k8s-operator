@@ -49,7 +49,6 @@ class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
-    _promtail_positions = "/run/promtail-positions.yaml"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
@@ -447,7 +446,6 @@ class GrafanaAgentCharm(CharmBase):
                 {
                     "name": "push_api_server",
                     "clients": loki_endpoints,
-                    "positions": {"filename": self._promtail_positions},
                     "scrape_configs": [
                         {
                             "job_name": "loki",
@@ -463,7 +461,14 @@ class GrafanaAgentCharm(CharmBase):
             )
 
         configs.extend(self._additional_log_configs)  # type: ignore
-        return {"configs": configs} if configs else {}
+        return (
+            {
+                "positions_directory": "/tmp/grafana-agent-positions",
+                "configs": configs,
+            }
+            if configs
+            else {}
+        )
 
     @property
     def _instance_topology(self) -> Dict[str, str]:

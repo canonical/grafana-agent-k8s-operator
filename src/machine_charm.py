@@ -196,7 +196,6 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             {
                 "name": "log_file_scraper",
                 "clients": loki_endpoints,
-                "positions": {"filename": self._promtail_positions},
                 "scrape_configs": [
                     {
                         "job_name": "varlog",
