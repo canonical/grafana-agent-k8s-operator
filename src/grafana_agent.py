@@ -460,10 +460,14 @@ class GrafanaAgentCharm(CharmBase):
             )
 
         configs.extend(self._additional_log_configs)  # type: ignore
-        return {
-            "positions_directory": "/tmp/grafana-agent-positions",
-            "configs": configs,
-        } if configs else {}
+        return (
+            {
+                "positions_directory": "/tmp/grafana-agent-positions",
+                "configs": configs,
+            }
+            if configs
+            else {}
+        )
 
     @property
     def _instance_topology(self) -> Dict[str, str]:

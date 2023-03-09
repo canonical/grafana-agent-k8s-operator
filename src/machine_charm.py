@@ -287,8 +287,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             try:
                 subprocess.check_output(shlex.split(cmd))
             except subprocess.CalledProcessError:
-                logger.error(f"error connecting plug {plug} to grafana-agent:logs",
-                             exc_info=True)
+                logger.error(f"error connecting plug {plug} to grafana-agent:logs", exc_info=True)
         # TODO: figure out if we need to do anything to add the new log dirs/files to the tail
 
 
