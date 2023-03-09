@@ -445,7 +445,6 @@ class GrafanaAgentCharm(CharmBase):
                 {
                     "name": "push_api_server",
                     "clients": loki_endpoints,
-                    "positions": {"filename": "/run/push_api_server_positions.yaml"},
                     "scrape_configs": [
                         {
                             "job_name": "loki",
@@ -461,7 +460,10 @@ class GrafanaAgentCharm(CharmBase):
             )
 
         configs.extend(self._additional_log_configs)  # type: ignore
-        return {"configs": configs} if configs else {}
+        return {
+            "positions_directory": "/tmp/grafana-agent-positions",
+            "configs": configs,
+        } if configs else {}
 
     @property
     def _instance_topology(self) -> Dict[str, str]:
