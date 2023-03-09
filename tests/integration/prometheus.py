@@ -145,7 +145,7 @@ class Prometheus:
                 #           "severity": "High"
                 #         },
                 #         "annotations": {
-                #           "description": " .... ",
+                #           "description": " is firing the placeholder alarm.",
                 #           "summary": "Instance  placeholder alarm (always firing)"
                 #         },
                 #         "state": "firing",
