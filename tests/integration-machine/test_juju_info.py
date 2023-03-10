@@ -69,7 +69,7 @@ async def test_metrics(ops_test: OpsTest):
 
     machines: List[str] = await ops_test.model.get_machines()
 
-    # AND juju topology labels are present in for all targets and all targets are 'up'
+    # AND juju topology labels are present for all targets and all targets are 'up'
     machine_targets = {
         machine_id: await ops_test.model.machines[machine_id].ssh(
             "curl localhost:12345/agent/api/v1/metrics/targets"
@@ -122,7 +122,7 @@ async def test_metrics(ops_test: OpsTest):
 async def test_logs(ops_test: OpsTest):
     machines: List[str] = await ops_test.model.get_machines()
 
-    # AND juju topology labels are present in for all targets
+    # AND juju topology labels are present for all targets
     machine_targets = {
         machine_id: await ops_test.model.machines[machine_id].ssh(
             "curl localhost:12345/agent/api/v1/logs/targets"
