@@ -279,9 +279,11 @@ class GrafanaAgentCharm(CharmBase):
             if len(relations):
                 if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                     self.unit.status = WaitingStatus("no related Prometheus remote-write")
+                    return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
+            return
 
         self.unit.status = ActiveStatus()
 
