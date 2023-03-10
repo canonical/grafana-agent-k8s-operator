@@ -11,6 +11,7 @@ import subprocess
 from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_machine import COSMachineRequirer
+from charms.operator_libs_linux.v1 import snap
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, Relation, Unit
 
@@ -49,6 +50,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         # we always listen to juju-info-joined events even though one of the two paths will be
         # at all effects unused.
         self._cos = COSMachineRequirer(self)
+        self.snap = snap.SnapCache()["grafana-agent"]
         self.framework.observe(self._cos.on.data_changed, self._on_cos_data_changed)
         self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
 
@@ -75,33 +77,37 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         """Install the Grafana Agent snap."""
         # Check if Grafana Agent is installed
         self.unit.status = MaintenanceStatus("Installing grafana-agent snap")
-        if not self._is_installed:
-            subprocess.run(["sudo", "snap", "install", "grafana-agent"])
-            if not self._is_installed:
-                raise GrafanaAgentInstallError("Failed to install grafana-agent.")
+        try:
+            self.snap.ensure(state=snap.SnapState.Latest)
+        except snap.SnapError as e:
+            raise GrafanaAgentInstallError("Failed to install grafana-agent.") from e
 
     def _on_start(self, _event) -> None:
         # Ensure the config is up-to-date before we start to avoid racy relation
         # changes and starting with a "bare" config in ActiveStatus
         self._update_config()
         self.unit.status = MaintenanceStatus("Starting grafana-agent snap")
-        start_process = subprocess.run(["sudo", "snap", "start", "--enable", self.service_name])
-        if start_process.returncode != 0:
-            raise GrafanaAgentServiceError("Failed to start grafana-agent")
+
+        try:
+            self.snap.start(enable=True)
+        except snap.SnapError as e:
+            raise GrafanaAgentServiceError("Failed to start grafana-agent") from e
         self.unit.status = ActiveStatus("")
 
     def _on_stop(self, _event) -> None:
         self.unit.status = MaintenanceStatus("Stopping grafana-agent snap")
-        stop_process = subprocess.run(["sudo", "snap", "stop", "--disable", self.service_name])
-        if stop_process.returncode != 0:
-            raise GrafanaAgentServiceError("Failed to stop grafana-agent")
+        try:
+            self.snap.stop(disable=True)
+        except snap.SnapError as e:
+            raise GrafanaAgentServiceError("Failed to stop grafana-agent") from e
 
     def _on_remove(self, _event) -> None:
         """Uninstall the Grafana Agent snap."""
         self.unit.status = MaintenanceStatus("Uninstalling grafana-agent snap")
-        subprocess.run(["sudo", "snap", "remove", "--purge", "grafana-agent"])
-        if self._is_installed:
-            raise GrafanaAgentInstallError("Failed to uninstall grafana-agent")
+        try:
+            self.snap.ensure(state=snap.SnapState.Absent)
+        except snap.SnapError as e:
+            raise GrafanaAgentInstallError("Failed to uninstall grafana-agent") from e
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
@@ -159,13 +165,16 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     def restart(self) -> None:
         """Restart grafana agent."""
-        subprocess.run(["sudo", "snap", "restart", self.service_name])
+        try:
+            self.snap.restart()
+        except snap.SnapError as e:
+            raise GrafanaAgentServiceError("Failed to restart grafana-agent") from e
+        self.unit.status = ActiveStatus("")
 
     @property
     def _is_installed(self) -> bool:
         """Check if the Grafana Agent snap is installed."""
-        package_check = subprocess.run("snap list grafana-agent", shell=True)
-        return package_check.returncode == 0
+        return self.snap.present
 
     @property
     def _additional_integrations(self) -> Dict[str, Any]:
@@ -210,6 +219,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                         ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
+                    self._snap_plug_logs,
                 ],
             }
         ]
@@ -286,14 +296,29 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             }
         ] + topology_relabels  # type: ignore
 
-    def _update_snap_logs(self):
+    @property
+    def _snap_plug_logs(self) -> Dict[str, Any]:
         for plug in self._cos.snap_log_plugs:
-            cmd = f"sudo snap connect {plug} grafana-agent:logs"
             try:
-                subprocess.check_output(shlex.split(cmd))
-            except subprocess.CalledProcessError:
-                logger.error(f"error connecting plug {plug} to grafana-agent:logs", exc_info=True)
-        # TODO: figure out if we need to do anything to add the new log dirs/files to the tail
+                self.snap.connect(plug, slot="logs")
+            except snap.SnapError as e:
+                logger.error(f"error connecting plug {plug} to grafana-agent:logs")
+                logger.error(e.message)
+
+        # TODO: try to determine a way to map which snap is in which path without
+        # stepping out to the special fstab
+        return {
+            "job_name": "plugged-snaps",
+            "static_configs": [
+                {
+                    "targets": ["localhost"],
+                    "labels": {
+                        "__path__": "/snap/grafana-agent/current/shared-logs/*",
+                        **self._principal_labels,
+                    },
+                }
+            ],
+        }
 
 
 if __name__ == "__main__":
