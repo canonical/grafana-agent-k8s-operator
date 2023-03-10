@@ -56,7 +56,7 @@ The constructor of `COSMachineProvider` has only one required and eight optional
 - `recurse_rules_dirs`: This paramenters set wheter Grafana Agent machine Charmed Operator has to search
     alert rules files recursively in the previous two directories or not.
 
-- `logs_slots`: Snap slots to connect to for scraping logs in the form ["snap-name:slot", ...].
+- `log_slots`: Snap slots to connect to for scraping logs in the form ["snap-name:slot", ...].
 
 - `dashboard_dirs`: List of directories where the dashboards are stored in the Charmed Operator.
 
@@ -97,7 +97,7 @@ class TelemetryProviderCharm(CharmBase):
             metrics_rules_dir="./src/alert_rules/prometheus",
             logs_rules_dir="./src/alert_rules/loki",
             recursive_rules_dir=True,
-            logs_slots=["my-app:slot"],
+            log_slots=["my-app:slot"],
             dashboard_dirs=["./src/dashboards_1", "./src/dashboards_2"],
             refresh_events=["update-status", "upgrade-charm"],
         )
@@ -200,7 +200,7 @@ class COSMachineProvider(Object):
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
-        logs_slots: Optional[List[str]] = None,
+        log_slots: Optional[List[str]] = None,
         dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
@@ -213,7 +213,7 @@ class COSMachineProvider(Object):
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
             recurse_rules_dirs: Whether or not to recurse into rule paths.
-            logs_slots: Snap slots to connect to for scraping logs
+            log_slots: Snap slots to connect to for scraping logs
                 in the form ["snap-name:slot", ...].
             dashboard_dirs: Directory where the dashboards are stored.
             refresh_events: List of events on which to refresh relation data.
@@ -228,7 +228,7 @@ class COSMachineProvider(Object):
         self._metrics_rules = metrics_rules_dir
         self._logs_rules = logs_rules_dir
         self._recursive = recurse_rules_dirs
-        self._logs_slots = logs_slots or []
+        self._log_slots = log_slots or []
         self._dashboard_dirs = dashboard_dirs
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
 
@@ -261,7 +261,7 @@ class COSMachineProvider(Object):
                 "alert_rules": self._metrics_alert_rules,
             },
             "logs": {
-                "targets": self._logs_slots,
+                "targets": self._log_slots,
                 "alert_rules": self._log_alert_rules,
             },
             "dashboards": {
