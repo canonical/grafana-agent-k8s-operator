@@ -1,20 +1,16 @@
-#!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# Learn more at: https://juju.is/docs/sdk
 
 r"""## Overview.
 
-This document explains how to use the two principal objects this library provides:
+This library can be used to manage the cos_machine relation interface:
 
-- `COSMachineProvider`: This object can be used by any Charmed Operator which needs to
-send telemetry, such metrics, logs and dashboards to Prometheus, Loki and Grafana through
-Grafana Agent machine charm.
+- `COSMachineProvider`: Use in machine charms that need to have a workload's metrics
+  or logs scraped, or forward rule files or dashboards to Prometheus, Loki or Grafana through
+  the Grafana Agent machine charm.
 
-- `COSMachineConsumer`: This object can be used by any Charmed Operator that needs to implement
-the consumer side of this `cos_machine` interface, for instance this Grafana Agent machine
-Charmed Operator.
+- `COSMachineConsumer`: Used in the Grafana Agent machine charm to manage the requrier side of 
+  the `cos_machine` interface.
 
 
 ## COSMachineProvider Library Usage
@@ -37,7 +33,7 @@ The constructor of `COSMachineProvider` has only one required and eight optional
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
-        logs_slots: Optional[List[str]] = None,
+        log_slots: Optional[List[str]] = None,
         dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
