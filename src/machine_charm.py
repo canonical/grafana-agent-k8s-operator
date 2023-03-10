@@ -6,7 +6,6 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 import logging
 import pathlib
-import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
@@ -70,7 +69,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._update_status()
         self._update_metrics_alerts()
         self._update_loki_alerts()
-        self._update_snap_logs()
+        self._connect_logging_snap_endpoints()
         self._update_grafana_dashboards()  # TODO rbarry check this
 
     def on_install(self, _event) -> None:
@@ -219,10 +218,28 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                         ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
-                    self._snap_plug_logs,
-                ],
+                ]
+                + self._principal_snaps_scrape_configs,
             }
         ]
+
+    @property
+    def _principal_snaps_scrape_configs(self) -> List[Dict[str, Any]]:
+        """One scrape config for each separate snap connected over the logs endpoint."""
+        shared_logs_configs = [
+            {
+                "job_name": endpoint.owner,
+                "static_configs": {
+                    "targets": ["localhost"],
+                    "labels": {
+                        "job": endpoint.owner,
+                        "__path__": f"/snap/grafana-agent/current/shared-logs/{endpoint.name}",
+                    },
+                },
+            }
+            for endpoint in self._cos.snap_log_endpoints
+        ]
+        return shared_logs_configs
 
     @property
     def _principal_relation(self) -> Optional[Relation]:
@@ -296,29 +313,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             }
         ] + topology_relabels  # type: ignore
 
-    @property
-    def _snap_plug_logs(self) -> Dict[str, Any]:
-        for plug in self._cos.snap_log_plugs:
+    def _connect_logging_snap_endpoints(self):
+        for plug in self._cos.snap_log_endpoints:
             try:
-                self.snap.connect(plug, slot="logs")
+                self.snap.connect(plug.name, slot="logs")
             except snap.SnapError as e:
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)
-
-        # TODO: try to determine a way to map which snap is in which path without
-        # stepping out to the special fstab
-        return {
-            "job_name": "plugged-snaps",
-            "static_configs": [
-                {
-                    "targets": ["localhost"],
-                    "labels": {
-                        "__path__": "/snap/grafana-agent/current/shared-logs/*",
-                        **self._principal_labels,
-                    },
-                }
-            ],
-        }
 
 
 if __name__ == "__main__":
