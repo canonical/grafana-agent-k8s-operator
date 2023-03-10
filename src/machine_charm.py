@@ -219,13 +219,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                         ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
-                    self._snap_logs(),
-                ],
+                ] + self._principal_snaps_scrape_configs,
             }
         ]
 
     @property
-    def _additional_scrape_configs(self):
+    def _principal_snaps_scrape_configs(self) -> List[Dict[str, Any]]:
+        """One scrape config for each separate snap connected over the logs endpoint."""
         shared_logs_configs = [
             {
                 "job_name": endpoint.owner,
@@ -233,10 +233,9 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                     "targets": ["localhost"],
                     "labels": {
                         "job": endpoint.owner,
-                        # todo verify path
-                        "__path__": f"/snap/{endpoint.owner}/current/shared-logs/{endpoint.name}",
-                    },
-                },
+                        "__path__": f"/snap/grafana-agent/current/shared-logs/{endpoint.name}",
+                    }
+                }
             }
             for endpoint in self._cos.snap_log_endpoints
         ]
@@ -314,30 +313,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             }
         ] + topology_relabels  # type: ignore
 
-    @property
-    def _connect_logging_snap_endpoints(self) -> Dict[str, Any]:
-        for plug in self._cos.snap_log_plugs:
+    def _connect_logging_snap_endpoints(self):
+        for plug in self._cos.snap_log_endpoints:
             try:
-                self.snap.connect(plug, slot="logs")
+                self.snap.connect(plug.name, slot="logs")
             except snap.SnapError as e:
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)
-
-    def _snap_logs(self):
-        # TODO: try to determine a way to map which snap is in which path without
-        # stepping out to the special fstab
-        return {
-            "job_name": "plugged-snaps",
-            "static_configs": [
-                {
-                    "targets": ["localhost"],
-                    "labels": {
-                        "__path__": "/snap/grafana-agent/current/shared-logs/*",
-                        **self._principal_labels,
-                    },
-                }
-            ],
-        }
 
 
 if __name__ == "__main__":
