@@ -176,9 +176,7 @@ LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
 LIBAPI = 0
 LIBPATCH = 1
 
-# FIXME: Packing the charm with 2.2.0+139.gd011d92 will produce this error:
-# https://chat.charmhub.io/charmhub/pl/wngp665ycjnb78ar9ojrfhxjkr
-# PYDEPS = ["cosl"]
+PYDEPS = ["cosl"]
 
 DEFAULT_RELATION_NAME = "cos-machine"
 DEFAULT_METRICS_ENDPOINT = {
