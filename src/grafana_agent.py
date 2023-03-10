@@ -171,6 +171,11 @@ class GrafanaAgentCharm(CharmBase):
         raise NotImplementedError("Please override the _additional_integrations method")
 
     @property
+    def _additional_scrape_configs(self) -> List[Dict[str, Any]]:
+        """Additional scrape configs to inject."""
+        raise NotImplementedError("Please override the _additional_integrations method")
+
+    @property
     def _additional_log_configs(self) -> List[Dict[str, Any]]:
         """Additional per-type integrations to inject."""
         raise NotImplementedError("Please override the _additional_log_configs method")
@@ -440,23 +445,25 @@ class GrafanaAgentCharm(CharmBase):
         _, loki_endpoints = self._enrich_endpoints()
 
         configs = []
-
         if self._loki_consumer.loki_endpoints:
+            loki_push_config = [
+                {
+                    "job_name": "loki",
+                    "loki_push_api": {
+                        "server": {
+                            "http_listen_port": self._http_listen_port,
+                            "grpc_listen_port": self._grpc_listen_port,
+                        },
+                    },
+                }
+            ]
+
+            scrape_configs = loki_push_config + self._additional_scrape_configs
             configs.append(
                 {
                     "name": "push_api_server",
                     "clients": loki_endpoints,
-                    "scrape_configs": [
-                        {
-                            "job_name": "loki",
-                            "loki_push_api": {
-                                "server": {
-                                    "http_listen_port": self._http_listen_port,
-                                    "grpc_listen_port": self._grpc_listen_port,
-                                },
-                            },
-                        }
-                    ],
+                    "scrape_configs": scrape_configs,
                 }
             )
 

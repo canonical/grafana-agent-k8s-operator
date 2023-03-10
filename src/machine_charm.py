@@ -70,7 +70,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._update_status()
         self._update_metrics_alerts()
         self._update_loki_alerts()
-        self._update_snap_logs()
+        self._connect_logging_snap_endpoints()
         self._update_grafana_dashboards()  # TODO rbarry check this
 
     def on_install(self, _event) -> None:
@@ -219,10 +219,28 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                         ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
-                    self._snap_plug_logs,
+                    self._snap_logs(),
                 ],
             }
         ]
+
+    @property
+    def _additional_scrape_configs(self):
+        shared_logs_configs = [
+            {
+                "job_name": endpoint.owner,
+                "static_configs": {
+                    "targets": ["localhost"],
+                    "labels": {
+                        "job": endpoint.owner,
+                        # todo verify path
+                        "__path__": f"/snap/{endpoint.owner}/current/shared-logs/{endpoint.name}",
+                    },
+                },
+            }
+            for endpoint in self._cos.snap_log_endpoints
+        ]
+        return shared_logs_configs
 
     @property
     def _principal_relation(self) -> Optional[Relation]:
@@ -297,7 +315,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         ] + topology_relabels  # type: ignore
 
     @property
-    def _snap_plug_logs(self) -> Dict[str, Any]:
+    def _connect_logging_snap_endpoints(self) -> Dict[str, Any]:
         for plug in self._cos.snap_log_plugs:
             try:
                 self.snap.connect(plug, slot="logs")
@@ -305,6 +323,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)
 
+    def _snap_logs(self):
         # TODO: try to determine a way to map which snap is in which path without
         # stepping out to the special fstab
         return {

@@ -108,6 +108,11 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Additional per-type integrations to inject."""
         return []
 
+    @property
+    def _additional_scrape_configs(self) -> List[Dict[str, Any]]:
+        """Additional scrape configs to inject."""
+        return []
+
     def agent_version_output(self) -> str:
         """Runs `agent -version` and returns the output.
 
