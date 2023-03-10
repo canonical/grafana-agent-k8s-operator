@@ -41,16 +41,16 @@ class COSMachineProvider(Object):
     """Integration endpoint wrapper for the provider side of the cos_machine interface."""
 
     def __init__(
-            self,
-            charm: CharmType,
-            relation_name: str = DEFAULT_RELATION_NAME,
-            metrics_endpoints: Optional[List[dict]] = None,
-            metrics_rules_dir: str = "./src/prometheus_alert_rules",
-            logs_rules_dir: str = "./src/loki_alert_rules",
-            recurse_rules_dirs: bool = False,
-            logs_slots: Optional[List[str]] = None,
-            dashboard_dirs: Optional[List[str]] = None,
-            refresh_events: Optional[List] = None,
+        self,
+        charm: CharmType,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        metrics_endpoints: Optional[List[dict]] = None,
+        metrics_rules_dir: str = "./src/prometheus_alert_rules",
+        logs_rules_dir: str = "./src/loki_alert_rules",
+        recurse_rules_dirs: bool = False,
+        logs_slots: Optional[List[str]] = None,
+        dashboard_dirs: Optional[List[str]] = None,
+        refresh_events: Optional[List] = None,
     ):
         """Create a COSMachineProvider instance.
 
@@ -177,10 +177,10 @@ class COSMachineRequirer(Object):
     on = COSMachineRequirerEvents()
 
     def __init__(
-            self,
-            charm: CharmType,
-            relation_name: str = DEFAULT_RELATION_NAME,
-            refresh_events: Optional[List[str]] = None,
+        self,
+        charm: CharmType,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        refresh_events: Optional[List[str]] = None,
     ):
         """Create a COSMachineRequirer instance.
 
@@ -265,15 +265,16 @@ class COSMachineRequirer(Object):
                 for target in targets:
                     if target in plugs:
                         logger.warning(
-                            f'plug {target} already listed. '
-                            'The same snap is being passed from multiple '
-                            'endpoints; this should not happen.')
+                            f"plug {target} already listed. "
+                            "The same snap is being passed from multiple "
+                            "endpoints; this should not happen."
+                        )
                     else:
                         plugs.append(target)
 
         endpoints = []
         for plug in plugs:
-            if not ":" in plug:
+            if ":" not in plug:
                 logger.error(f"invalid plug definition received: {plug}. Ignoring...")
             else:
                 endpoint = SnapEndpoint(*plug.split(":"))
@@ -304,7 +305,7 @@ class COSMachineRequirer(Object):
         dashboards = []  # type: List[Dict[str, str]]
         for relation in self._relations:
             if dashboard_data := self._fetch_data_from_relation(
-                    relation, "dashboards", "dashboards"
+                relation, "dashboards", "dashboards"
             ):
                 for dashboard in dashboard_data:
                     dashboards.append(

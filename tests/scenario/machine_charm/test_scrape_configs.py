@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
 import inspect
 import json
 import tempfile
@@ -64,16 +68,18 @@ def test_snap_endpoints():
 
     my_uuid = str(uuid.uuid4())
 
-    with patch("machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
-        with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
-            State(
-                relations=[cos_relation, loki_relation], model=Model(name="my-model", uuid=my_uuid)
-            ).trigger(
-                event=cos_relation.changed_event,
-                charm_type=machine_charm.GrafanaAgentMachineCharm,
-                meta=machine_meta,
-                charm_root=vroot.name,
-            )
+    with patch("charms.operator_libs_linux.v1.snap.SnapCache"):
+        with patch("machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
+            with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
+                State(
+                    relations=[cos_relation, loki_relation],
+                    model=Model(name="my-model", uuid=my_uuid),
+                ).trigger(
+                    event=cos_relation.changed_event,
+                    charm_type=machine_charm.GrafanaAgentMachineCharm,
+                    meta=machine_meta,
+                    charm_root=vroot.name,
+                )
 
     assert written_path == "/etc/grafana-agent.yaml"
     written_config = yaml.safe_load(written_text)
@@ -172,27 +178,7 @@ def test_snap_endpoints():
                             "loki_push_api": {
                                 "server": {"grpc_listen_port": 3600, "http_listen_port": 3500}
                             },
-                        },
-                        {
-                            "job_name": "foo",
-                            "static_configs": {
-                                "labels": {
-                                    "__path__": "/snap/foo/current/shared-logs/bar",
-                                    "job": "foo",
-                                },
-                                "targets": ["localhost"],
-                            },
-                        },
-                        {
-                            "job_name": "oh",
-                            "static_configs": {
-                                "labels": {
-                                    "__path__": "/snap/oh/current/shared-logs/snap",
-                                    "job": "oh",
-                                },
-                                "targets": ["localhost"],
-                            },
-                        },
+                        }
                     ],
                 },
                 {
@@ -230,6 +216,26 @@ def test_snap_endpoints():
                                     "juju_model_uuid": my_uuid,
                                     "juju_unit": "principal/0",
                                 }
+                            },
+                        },
+                        {
+                            "job_name": "foo",
+                            "static_configs": {
+                                "labels": {
+                                    "__path__": "/snap/grafana-agent/current/shared-logs/bar",
+                                    "job": "foo",
+                                },
+                                "targets": ["localhost"],
+                            },
+                        },
+                        {
+                            "job_name": "oh",
+                            "static_configs": {
+                                "labels": {
+                                    "__path__": "/snap/grafana-agent/current/shared-logs/snap",
+                                    "job": "oh",
+                                },
+                                "targets": ["localhost"],
                             },
                         },
                     ],

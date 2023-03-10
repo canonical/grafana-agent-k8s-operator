@@ -6,7 +6,6 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 import logging
 import pathlib
-import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
@@ -219,7 +218,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                         ],
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
-                ] + self._principal_snaps_scrape_configs,
+                ]
+                + self._principal_snaps_scrape_configs,
             }
         ]
 
@@ -234,8 +234,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                     "labels": {
                         "job": endpoint.owner,
                         "__path__": f"/snap/grafana-agent/current/shared-logs/{endpoint.name}",
-                    }
-                }
+                    },
+                },
             }
             for endpoint in self._cos.snap_log_endpoints
         ]

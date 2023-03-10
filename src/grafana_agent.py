@@ -446,16 +446,16 @@ class GrafanaAgentCharm(CharmBase):
                     "name": "push_api_server",
                     "clients": loki_endpoints,
                     "scrape_configs": [
-                {
-                    "job_name": "loki",
-                    "loki_push_api": {
-                        "server": {
-                            "http_listen_port": self._http_listen_port,
-                            "grpc_listen_port": self._grpc_listen_port,
-                        },
-                    },
-                }
-            ],
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": self._http_listen_port,
+                                    "grpc_listen_port": self._grpc_listen_port,
+                                },
+                            },
+                        }
+                    ],
                 }
             )
 
