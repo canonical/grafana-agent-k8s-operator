@@ -77,6 +77,7 @@ async def test_metrics(ops_test: OpsTest):
         for machine_id in machines
     }
     machine_targets = {k: json.loads(v)["data"] for k, v in machine_targets.items()}
+    assert len(machine_targets) > 1  # Self-scrape + node-exporter
     for targets in machine_targets.values():
         for target in targets:
             target_labels = target["labels"].keys()
@@ -130,6 +131,7 @@ async def test_logs(ops_test: OpsTest):
         for machine_id in machines
     }
     machine_targets = {k: json.loads(v)["data"] for k, v in machine_targets.items()}
+    assert len(machine_targets) > 1  # Self-scrape + node-exporter
     for targets in machine_targets.values():
         for target in targets:
             target_labels = target["labels"].keys()
