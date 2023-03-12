@@ -5,8 +5,10 @@
 
 """A  juju charm for Grafana Agent on Kubernetes."""
 import logging
-import pathlib
+import re
 import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_machine import COSMachineRequirer
@@ -17,6 +19,89 @@ from ops.model import ActiveStatus, MaintenanceStatus, Relation, Unit
 from grafana_agent import GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
+
+_FsType = str
+_MountOption = str
+_MountOptions = List[_MountOption]
+
+
+@dataclass
+class _SnapFstabEntry:
+    """Representation of an individual fstab entry for snap plugs."""
+
+    source: str
+    target: str
+    fstype: Union[_FsType, None]
+    options: _MountOptions
+    dump: int
+    fsck: int
+
+    owner: str = field(init=False)
+    endpoint_source: str = field(init=False)
+    relative_target: str = field(init=False)
+
+    def __post_init__(self):
+        """Populate with calculated values at runtime."""
+        self.owner = re.sub(
+            r"^(.*?)?/snap/(?P<owner>([A-Za-z0-9_-])+)/.*$", r"\g<owner>", self.source
+        )
+        self.endpoint_source = re.sub(
+            r"^(.*?)?/snap/([A-Za-z0-9_-])+/(?P<path>.*$)", r"\g<path>", self.source
+        )
+        self.relative_target = re.sub(
+            r"^(.*?)?/snap/grafana-agent/\d+/shared-logs+(?P<path>/.*$)", r"\g<path>", self.target
+        )
+
+
+@dataclass
+class SnapFstab:
+    """Build a small representation/wrapper for snap fstab files."""
+
+    fstab_file: Union[Path, str]
+    entries: List[_SnapFstabEntry] = field(init=False)
+
+    def __post_init__(self):
+        """Populate with calculated values at runtime."""
+        self.fstab_file = (
+            self.fstab_file if isinstance(self.fstab_file, Path) else Path(self.fstab_file)
+        )
+        if not self.fstab_file.exists():
+            self.entries = []
+            return
+
+        entries = []
+        for line in self.fstab_file.read_text().split("\n"):
+            if not line.strip():
+                # skip whitespace-only lines
+                continue
+            raw_entry = line.split()
+            fields = {
+                "source": raw_entry[0],
+                "target": raw_entry[1],
+                "fstype": None if raw_entry[2] == "none" else raw_entry[2],
+                "options": raw_entry[3].split(","),
+                "dump": int(raw_entry[4]),
+                "fsck": int(raw_entry[5]),
+            }
+            entry = _SnapFstabEntry(**fields)
+            entries.append(entry)
+
+        self.entries = entries
+
+    def entry(self, owner: str, endpoint_name: str) -> Optional[_SnapFstabEntry]:
+        """Find and return a specific entry if it exists."""
+        entries = [
+            e for e in self.entries if e.owner == owner and endpoint_name in e.endpoint_source
+        ]
+        if len(entries) > 1 or not entries:
+            logger.debug(
+                "Ambiguous or unknown mountpoint for snap %s at slot %s, not relabeling.",
+                owner,
+                endpoint_name,
+            )
+            return None
+
+        return entries[0]
 
 
 class GrafanaAgentError(Exception):
@@ -65,12 +150,12 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     def _on_cos_data_changed(self, _event):
         """Trigger renewals of all data if there is a change."""
+        self._connect_logging_snap_endpoints()
         self._update_config()
         self._update_status()
         self._update_metrics_alerts()
         self._update_loki_alerts()
-        self._connect_logging_snap_endpoints()
-        self._update_grafana_dashboards()  # TODO rbarry check this
+        self._update_grafana_dashboards()
 
     def on_install(self, _event) -> None:
         """Install the Grafana Agent snap."""
@@ -143,7 +228,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         """
         return subprocess.run(["/bin/agent", "-version"], capture_output=True, text=True).stdout
 
-    def read_file(self, filepath: Union[str, pathlib.Path]):
+    def read_file(self, filepath: Union[str, Path]):
         """Read a file's contents.
 
         Returns:
@@ -152,7 +237,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         with open(filepath) as f:
             return f.read()
 
-    def write_file(self, path: Union[str, pathlib.Path], text: str) -> None:
+    def write_file(self, path: Union[str, Path], text: str) -> None:
         """Write text to a file.
 
         Args:
@@ -219,27 +304,9 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                     },
                     {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
                 ]
-                + self._principal_snaps_scrape_configs,
+                + self._snap_plugs_logging_configs,
             }
         ]
-
-    @property
-    def _principal_snaps_scrape_configs(self) -> List[Dict[str, Any]]:
-        """One scrape config for each separate snap connected over the logs endpoint."""
-        shared_logs_configs = [
-            {
-                "job_name": endpoint.owner,
-                "static_configs": {
-                    "targets": ["localhost"],
-                    "labels": {
-                        "job": endpoint.owner,
-                        "__path__": f"/snap/grafana-agent/current/shared-logs/{endpoint.name}",
-                    },
-                },
-            }
-            for endpoint in self._cos.snap_log_endpoints
-        ]
-        return shared_logs_configs
 
     @property
     def _principal_relation(self) -> Optional[Relation]:
@@ -313,10 +380,54 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             }
         ] + topology_relabels  # type: ignore
 
+    @property
+    def _snap_plugs_logging_configs(self) -> List[Dict[str, Any]]:
+        """One logging config for each separate snap connected over the logs endpoint."""
+        agent_fstab = SnapFstab(Path("/var/lib/snapd/mount/snap.grafana-agent.fstab"))
+
+        shared_logs_configs = []
+        for endpoint in self._cos.snap_log_endpoints:
+            fstab_entry = agent_fstab.entry(endpoint.owner, endpoint.name)
+            target_path = (
+                fstab_entry.target
+                if fstab_entry
+                else f"/snap/grafana-agent/current/shared-logs/{endpoint.name}"
+            )
+            job = {
+                "job_name": endpoint.owner,
+                "static_configs": [
+                    {
+                        "targets": ["localhost"],
+                        "labels": {
+                            "job": endpoint.owner,
+                            "__path__": target_path,
+                            **{
+                                k: v
+                                for k, v in self._instance_topology.items()
+                                if k not in ["juju_unit", "juju_application"]
+                            },
+                        },
+                    }
+                ],
+            }
+
+            if fstab_entry:
+                job["relabel_configs"] = [
+                    {
+                        "source_labels": ["__path__"],
+                        "target_label": "path",
+                        "replacement": fstab_entry.relative_target,
+                    }
+                ]
+
+            shared_logs_configs.append(job)
+
+        return shared_logs_configs
+
     def _connect_logging_snap_endpoints(self):
         for plug in self._cos.snap_log_endpoints:
             try:
-                self.snap.connect(plug.name, slot="logs")
+                self.snap.connect("logs", service=plug.owner, slot=plug.name)
             except snap.SnapError as e:
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)

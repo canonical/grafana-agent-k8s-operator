@@ -11,9 +11,8 @@ import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, State, Relation
+from scenario import Container, ExecOutput, Relation, State
 
-import grafana_agent
 import k8s_charm
 import machine_charm
 
@@ -61,7 +60,7 @@ def patch_all(substrate, placeholder_cfg_path):
 
 @pytest.fixture
 def vroot(tmp_path) -> Path:
-    shutil.copytree(CHARM_ROOT / 'src', tmp_path / 'src')
+    shutil.copytree(CHARM_ROOT / "src", tmp_path / "src")
     return tmp_path
 
 
@@ -98,14 +97,14 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert not charm.is_ready
 
-    juju_info = Relation('juju-info')
+    juju_info = Relation("juju-info")
     with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", False):
         out = State(relations=[juju_info]).trigger(
             juju_info.joined_event,
             charm_type=charm_type,
             meta=charm_meta,
             charm_root=vroot,
-            post_event=post_event
+            post_event=post_event,
         )
 
     assert out.status.unit == ("waiting", "waiting for the agent to start")
