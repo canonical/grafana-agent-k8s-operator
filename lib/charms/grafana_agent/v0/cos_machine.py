@@ -162,6 +162,7 @@ import base64
 import json
 import logging
 import lzma
+from collections import namedtuple
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -185,6 +186,7 @@ DEFAULT_METRICS_ENDPOINT = {
 }
 
 logger = logging.getLogger(__name__)
+SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
 
 
 class COSMachineProvider(Object):
@@ -407,13 +409,29 @@ class COSMachineRequirer(Object):
         return scrape_jobs
 
     @property
-    def snap_log_plugs(self) -> List[str]:
-        """Fetch logging plugs exposed by related snaps."""
-        plugs = set()
+    def snap_log_endpoints(self) -> List[SnapEndpoint]:
+        """Fetch logging endpoints exposed by related snaps."""
+        plugs = []
         for relation in self._relations:
             if targets := self._fetch_data_from_relation(relation, "logs", "targets"):
-                plugs.update(targets)
-        return list(plugs)
+                for target in targets:
+                    if target in plugs:
+                        logger.warning(
+                            f"plug {target} already listed. "
+                            "The same snap is being passed from multiple "
+                            "endpoints; this should not happen."
+                        )
+                    else:
+                        plugs.append(target)
+
+        endpoints = []
+        for plug in plugs:
+            if ":" not in plug:
+                logger.error(f"invalid plug definition received: {plug}. Ignoring...")
+            else:
+                endpoint = SnapEndpoint(*plug.split(":"))
+                endpoints.append(endpoint)
+        return endpoints
 
     @property
     def logs_alerts(self) -> Dict[str, Any]:

@@ -21,7 +21,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from requests.packages.urllib3.util import Retry  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -279,9 +279,11 @@ class GrafanaAgentCharm(CharmBase):
             if len(relations):
                 if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
                     self.unit.status = WaitingStatus("no related Prometheus remote-write")
+                    return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
+            return
 
         self.unit.status = ActiveStatus()
 
@@ -431,7 +433,7 @@ class GrafanaAgentCharm(CharmBase):
         return conf
 
     @property
-    def _loki_config(self) -> Dict[str, List[Any]]:
+    def _loki_config(self) -> Dict[str, Union[Any, List[Any]]]:
         """Modifies the loki section of the config.
 
         Returns:
@@ -440,7 +442,6 @@ class GrafanaAgentCharm(CharmBase):
         _, loki_endpoints = self._enrich_endpoints()
 
         configs = []
-
         if self._loki_consumer.loki_endpoints:
             configs.append(
                 {
