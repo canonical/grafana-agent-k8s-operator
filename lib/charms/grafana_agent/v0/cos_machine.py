@@ -1,8 +1,162 @@
-#!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Library for the cos_machine relation interface."""
+r"""## Overview.
+
+This library can be used to manage the cos_machine relation interface:
+
+- `COSMachineProvider`: Use in machine charms that need to have a workload's metrics
+  or logs scraped, or forward rule files or dashboards to Prometheus, Loki or Grafana through
+  the Grafana Agent machine charm.
+
+- `COSMachineConsumer`: Used in the Grafana Agent machine charm to manage the requrier side of 
+  the `cos_machine` interface.
+
+
+## COSMachineProvider Library Usage
+
+Grafana Agent machine Charmed Operator interacts with its clients using the cos_machine library.
+Charms seeking to send telemetry, must do so using the `COSMachineProvider` object from
+this charm library.
+
+Using the `COSMachineProvider` object only requires instantiating it,
+typically in the `__init__` method of your charm (the one which sends telemetry).
+
+The constructor of `COSMachineProvider` has only one required and eight optional parameters:
+
+```python
+    def __init__(
+        self,
+        charm: CharmType,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        metrics_endpoints: Optional[List[dict]] = None,
+        metrics_rules_dir: str = "./src/prometheus_alert_rules",
+        logs_rules_dir: str = "./src/loki_alert_rules",
+        recurse_rules_dirs: bool = False,
+        log_slots: Optional[List[str]] = None,
+        dashboard_dirs: Optional[List[str]] = None,
+        refresh_events: Optional[List] = None,
+    ):
+```
+
+### Paramenters
+
+- `charm`: The instance of the charm that instantiates `COSMachineProvider`, tipically `self`.
+
+- `relation_name`: If your charmed operator uses a relation name other than `cos-machine` to use
+    the `cos_machine` interface, this is where you have to specify that.
+
+- `metrics_endpoints`: In this parameter you can specify the metrics endpoints that Grafana Agent
+    machine Charmed Operator will scrape.
+
+- `metrics_rules_dir`: The directory in which the Charmed Operator stores its metrics alert rules files.
+
+- `logs_rules_dir`: The directory in which the Charmed Operator stores its logs alert rules files.
+
+- `recurse_rules_dirs`: This paramenters set wheter Grafana Agent machine Charmed Operator has to search
+    alert rules files recursively in the previous two directories or not.
+
+- `log_slots`: Snap slots to connect to for scraping logs in the form ["snap-name:slot", ...].
+
+- `dashboard_dirs`: List of directories where the dashboards are stored in the Charmed Operator.
+
+- `refresh_events`: List of events on which to refresh relation data.
+
+
+### Example 1 - Minimal instrumentation:
+
+In order to use this object the following should be in the `charm.py` file.
+
+```python
+from charms.grafana_agent.v0.cos_machine import COSMachineProvider
+...
+class TelemetryProviderCharm(CharmBase):
+    def __init__(self, *args):
+        ...
+        self._grafana_agent = COSMachineProvider(self)
+```
+
+### Example 2 - Full instrumentation:
+
+In order to use this object the following should be in the `charm.py` file.
+
+```python
+from charms.grafana_agent.v0.cos_machine import COSMachineProvider
+...
+class TelemetryProviderCharm(CharmBase):
+    def __init__(self, *args):
+        ...
+        self._grafana_agent = COSMachineProvider(
+            self,
+            relation_name="custom-cos-machine",
+            metrics_endpoints=[
+                {"path": "/metrics", "port": 9000},
+                {"path": "/metrics", "port": 9001},
+                {"path": "/metrics", "port": 9002},
+            ],
+            metrics_rules_dir="./src/alert_rules/prometheus",
+            logs_rules_dir="./src/alert_rules/loki",
+            recursive_rules_dir=True,
+            log_slots=["my-app:slot"],
+            dashboard_dirs=["./src/dashboards_1", "./src/dashboards_2"],
+            refresh_events=["update-status", "upgrade-charm"],
+        )
+```
+
+## COSMachineConsumer Library Usage
+
+This object may be used by any Charmed Operator which gathers telemetry data by
+implementing the consumer side of the `cos_machine` interface.
+For instance Grafana Agent machine Charmed Operator.
+
+For this purposes the charm needs to instantiate the `COSMachineConsumer` object with one mandatory
+and two optional arguments.
+
+### Paramenters
+
+- `charm`: A reference to the parent (Grafana Agent machine) charm.
+
+- `relation_name`: The name of the relation that the charm uses to interact
+  with its clients that provides telemetry data using the `COSMachineProvider` object.
+
+  If provided, this relation name must match a provided relation in metadata.yaml with the
+  `cos_machine` interface.
+  The default value of this arguments is "cos-machine".
+
+- `refresh_events`: List of events on which to refresh relation data.
+
+
+### Example 1 - Minimal instrumentation:
+
+In order to use this object the following should be in the `charm.py` file.
+
+```python
+from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
+...
+class GrafanaAgentMachineCharm(GrafanaAgentCharm)
+    def __init__(self, *args):
+        ...
+        self._cos = COSMachineRequirer(self)
+```
+
+
+### Example 2 - Full instrumentation:
+
+In order to use this object the following should be in the `charm.py` file.
+
+```python
+from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
+...
+class GrafanaAgentMachineCharm(GrafanaAgentCharm)
+    def __init__(self, *args):
+        ...
+        self._cos = COSMachineRequirer(
+            self,
+            relation_name="cos-machine-consumer",
+            refresh_events=["update-status", "upgrade-charm"],
+        )
+```
+"""
 
 import base64
 import json
@@ -23,9 +177,7 @@ LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
 LIBAPI = 0
 LIBPATCH = 1
 
-# FIXME: Packing the charm with 2.2.0+139.gd011d92 will produce this error:
-# https://chat.charmhub.io/charmhub/pl/bjyt3dahd7y9dcube6nicaxfmc
-# PYDEPS = ["cosl"]
+PYDEPS = ["cosl"]
 
 DEFAULT_RELATION_NAME = "cos-machine"
 DEFAULT_METRICS_ENDPOINT = {
@@ -48,7 +200,7 @@ class COSMachineProvider(Object):
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
-        logs_slots: Optional[List[str]] = None,
+        log_slots: Optional[List[str]] = None,
         dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
@@ -61,7 +213,7 @@ class COSMachineProvider(Object):
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
             recurse_rules_dirs: Whether or not to recurse into rule paths.
-            logs_slots: Snap slots to connect to for scraping logs
+            log_slots: Snap slots to connect to for scraping logs
                 in the form ["snap-name:slot", ...].
             dashboard_dirs: Directory where the dashboards are stored.
             refresh_events: List of events on which to refresh relation data.
@@ -76,7 +228,7 @@ class COSMachineProvider(Object):
         self._metrics_rules = metrics_rules_dir
         self._logs_rules = logs_rules_dir
         self._recursive = recurse_rules_dirs
-        self._logs_slots = logs_slots or []
+        self._log_slots = log_slots or []
         self._dashboard_dirs = dashboard_dirs
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
 
@@ -109,7 +261,7 @@ class COSMachineProvider(Object):
                 "alert_rules": self._metrics_alert_rules,
             },
             "logs": {
-                "targets": self._logs_slots,
+                "targets": self._log_slots,
                 "alert_rules": self._log_alert_rules,
             },
             "dashboards": {
