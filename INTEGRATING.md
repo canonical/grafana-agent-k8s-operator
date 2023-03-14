@@ -86,7 +86,7 @@ from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 
 class MyOperatorCharm(CharmBase):
     def __init__(self, *args):
-        ....
+        ...
         self._logging = LogProxyConsumer(self, relation_name="logging", log_files=logs_files)
 ```
 
@@ -104,7 +104,7 @@ Once the relation is established, Zinc charm can start sending logs to Grafana A
 #### This charm
 
 ```yaml
-provides
+provides:
   grafana-dashboard:
     interface: grafana_dashboard
 ```

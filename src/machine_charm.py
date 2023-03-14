@@ -382,7 +382,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _snap_plugs_logging_configs(self) -> List[Dict[str, Any]]:
-        """One logging config for each separate snap connected over the logs endpoint."""
+        """One logging config for each separate snap connected over the "logs" endpoint."""
         agent_fstab = SnapFstab(Path("/var/lib/snapd/mount/snap.grafana-agent.fstab"))
 
         shared_logs_configs = []

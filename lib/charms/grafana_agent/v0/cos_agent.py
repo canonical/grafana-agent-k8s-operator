@@ -110,10 +110,10 @@ This object may be used by any Charmed Operator which gathers telemetry data by
 implementing the consumer side of the `cos_agent` interface.
 For instance Grafana Agent machine Charmed Operator.
 
-For this purposes the charm needs to instantiate the `COSAgentConsumer` object with one mandatory
+For this purpose the charm needs to instantiate the `COSAgentConsumer` object with one mandatory
 and two optional arguments.
 
-### Paramenters
+### Parameters
 
 - `charm`: A reference to the parent (Grafana Agent machine) charm.
 
@@ -122,7 +122,7 @@ and two optional arguments.
 
   If provided, this relation name must match a provided relation in metadata.yaml with the
   `cos_agent` interface.
-  The default value of this arguments is "cos-agent".
+  The default value of this argument is "cos-agent".
 
 - `refresh_events`: List of events on which to refresh relation data.
 
@@ -213,7 +213,7 @@ class COSAgentProvider(Object):
             metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
-            recurse_rules_dirs: Whether or not to recurse into rule paths.
+            recurse_rules_dirs: Whether to recurse into rule paths.
             log_slots: Snap slots to connect to for scraping logs
                 in the form ["snap-name:slot", ...].
             dashboard_dirs: Directory where the dashboards are stored.
@@ -340,7 +340,7 @@ class COSAgentRequirer(Object):
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
             relation_name: The name of the relation to communicate over.
-            refresh_events: List of events on which to resfresh relation data.
+            refresh_events: List of events on which to refresh relation data.
         """
         super().__init__(charm, relation_name)
         self._charm = charm
