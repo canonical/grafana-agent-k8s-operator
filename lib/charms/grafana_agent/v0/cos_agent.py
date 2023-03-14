@@ -9,7 +9,7 @@ This library can be used to manage the cos_agent relation interface:
   or logs scraped, or forward rule files or dashboards to Prometheus, Loki or Grafana through
   the Grafana Agent machine charm.
 
-- `COSAgentConsumer`: Used in the Grafana Agent machine charm to manage the requrier side of
+- `COSAgentConsumer`: Used in the Grafana Agent machine charm to manage the requirer side of
   the `cos_agent` interface.
 
 
