@@ -174,7 +174,7 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation
 from ops.testing import CharmType
 
-LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
+LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
 LIBPATCH = 1
 
