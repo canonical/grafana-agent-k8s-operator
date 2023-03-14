@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from charms.grafana_agent.v0.cos_machine import COSMachineRequirer
+from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
 from charms.operator_libs_linux.v1 import snap
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, Relation, Unit
@@ -129,11 +129,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     def __init__(self, *args):
         super().__init__(*args)
-        # technically, only one of 'cos-machine' and 'juju-info' are likely to ever be active at
+        # technically, only one of 'cos-agent' and 'juju-info' are likely to ever be active at
         # any given time. however, for the sake of understandability, we always set _cos, and
         # we always listen to juju-info-joined events even though one of the two paths will be
         # at all effects unused.
-        self._cos = COSMachineRequirer(self)
+        self._cos = COSAgentRequirer(self)
         self.snap = snap.SnapCache()["grafana-agent"]
         self.framework.observe(self._cos.on.data_changed, self._on_cos_data_changed)
         self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
@@ -310,14 +310,14 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _principal_relation(self) -> Optional[Relation]:
-        """The cos-machine relation, if the charm we're related to supports it, else juju-info."""
-        # juju relate will do "the right thing" and default to cos-machine, falling back to
-        # juju-info if no cos-machine endpoint is available on the principal.
+        """The cos-agent relation, if the charm we're related to supports it, else juju-info."""
+        # juju relate will do "the right thing" and default to cos-agent, falling back to
+        # juju-info if no cos-agent endpoint is available on the principal.
         # Technically, if the charm is executing, there MUST be one of these two relations
         # (otherwise, the subordinate won't even execute). However, for the sake of juju maybe not
         # showing us the relation until after the first few install/start/config-changed, we err on
         # the safe side and type this as Optional.
-        return self.model.get_relation("cos-machine") or self.model.get_relation("juju-info")
+        return self.model.get_relation("cos-agent") or self.model.get_relation("juju-info")
 
     @property
     def principal_unit(self) -> Optional[Unit]:
@@ -382,7 +382,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _snap_plugs_logging_configs(self) -> List[Dict[str, Any]]:
-        """One logging config for each separate snap connected over the logs endpoint."""
+        """One logging config for each separate snap connected over the "logs" endpoint."""
         agent_fstab = SnapFstab(Path("/var/lib/snapd/mount/snap.grafana-agent.fstab"))
 
         shared_logs_configs = []

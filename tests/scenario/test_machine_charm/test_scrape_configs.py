@@ -39,7 +39,7 @@ def test_snap_endpoints():
     )
 
     cos_relation = Relation(
-        "cos-machine",
+        "cos-agent",
         remote_app_name="principal",
         remote_app_data={
             "config": json.dumps(

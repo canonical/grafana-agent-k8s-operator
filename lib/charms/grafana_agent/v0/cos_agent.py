@@ -3,26 +3,26 @@
 
 r"""## Overview.
 
-This library can be used to manage the cos_machine relation interface:
+This library can be used to manage the cos_agent relation interface:
 
-- `COSMachineProvider`: Use in machine charms that need to have a workload's metrics
+- `COSAgentProvider`: Use in machine charms that need to have a workload's metrics
   or logs scraped, or forward rule files or dashboards to Prometheus, Loki or Grafana through
   the Grafana Agent machine charm.
 
-- `COSMachineConsumer`: Used in the Grafana Agent machine charm to manage the requrier side of 
-  the `cos_machine` interface.
+- `COSAgentConsumer`: Used in the Grafana Agent machine charm to manage the requirer side of
+  the `cos_agent` interface.
 
 
-## COSMachineProvider Library Usage
+## COSAgentProvider Library Usage
 
-Grafana Agent machine Charmed Operator interacts with its clients using the cos_machine library.
-Charms seeking to send telemetry, must do so using the `COSMachineProvider` object from
+Grafana Agent machine Charmed Operator interacts with its clients using the cos_agent library.
+Charms seeking to send telemetry, must do so using the `COSAgentProvider` object from
 this charm library.
 
-Using the `COSMachineProvider` object only requires instantiating it,
+Using the `COSAgentProvider` object only requires instantiating it,
 typically in the `__init__` method of your charm (the one which sends telemetry).
 
-The constructor of `COSMachineProvider` has only one required and eight optional parameters:
+The constructor of `COSAgentProvider` has only one required and eight optional parameters:
 
 ```python
     def __init__(
@@ -39,22 +39,23 @@ The constructor of `COSMachineProvider` has only one required and eight optional
     ):
 ```
 
-### Paramenters
+### Parameters
 
-- `charm`: The instance of the charm that instantiates `COSMachineProvider`, tipically `self`.
+- `charm`: The instance of the charm that instantiates `COSAgentProvider`, typically `self`.
 
-- `relation_name`: If your charmed operator uses a relation name other than `cos-machine` to use
-    the `cos_machine` interface, this is where you have to specify that.
+- `relation_name`: If your charmed operator uses a relation name other than `cos-agent` to use
+    the `cos_agent` interface, this is where you have to specify that.
 
 - `metrics_endpoints`: In this parameter you can specify the metrics endpoints that Grafana Agent
     machine Charmed Operator will scrape.
 
-- `metrics_rules_dir`: The directory in which the Charmed Operator stores its metrics alert rules files.
+- `metrics_rules_dir`: The directory in which the Charmed Operator stores its metrics alert rules
+  files.
 
 - `logs_rules_dir`: The directory in which the Charmed Operator stores its logs alert rules files.
 
-- `recurse_rules_dirs`: This paramenters set wheter Grafana Agent machine Charmed Operator has to search
-    alert rules files recursively in the previous two directories or not.
+- `recurse_rules_dirs`: This parameters set whether Grafana Agent machine Charmed Operator has to
+  search alert rules files recursively in the previous two directories or not.
 
 - `log_slots`: Snap slots to connect to for scraping logs in the form ["snap-name:slot", ...].
 
@@ -68,12 +69,12 @@ The constructor of `COSMachineProvider` has only one required and eight optional
 In order to use this object the following should be in the `charm.py` file.
 
 ```python
-from charms.grafana_agent.v0.cos_machine import COSMachineProvider
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 ...
 class TelemetryProviderCharm(CharmBase):
     def __init__(self, *args):
         ...
-        self._grafana_agent = COSMachineProvider(self)
+        self._grafana_agent = COSAgentProvider(self)
 ```
 
 ### Example 2 - Full instrumentation:
@@ -81,14 +82,14 @@ class TelemetryProviderCharm(CharmBase):
 In order to use this object the following should be in the `charm.py` file.
 
 ```python
-from charms.grafana_agent.v0.cos_machine import COSMachineProvider
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 ...
 class TelemetryProviderCharm(CharmBase):
     def __init__(self, *args):
         ...
-        self._grafana_agent = COSMachineProvider(
+        self._grafana_agent = COSAgentProvider(
             self,
-            relation_name="custom-cos-machine",
+            relation_name="custom-cos-agent",
             metrics_endpoints=[
                 {"path": "/metrics", "port": 9000},
                 {"path": "/metrics", "port": 9001},
@@ -103,25 +104,25 @@ class TelemetryProviderCharm(CharmBase):
         )
 ```
 
-## COSMachineConsumer Library Usage
+## COSAgentConsumer Library Usage
 
 This object may be used by any Charmed Operator which gathers telemetry data by
-implementing the consumer side of the `cos_machine` interface.
+implementing the consumer side of the `cos_agent` interface.
 For instance Grafana Agent machine Charmed Operator.
 
-For this purposes the charm needs to instantiate the `COSMachineConsumer` object with one mandatory
+For this purpose the charm needs to instantiate the `COSAgentConsumer` object with one mandatory
 and two optional arguments.
 
-### Paramenters
+### Parameters
 
 - `charm`: A reference to the parent (Grafana Agent machine) charm.
 
 - `relation_name`: The name of the relation that the charm uses to interact
-  with its clients that provides telemetry data using the `COSMachineProvider` object.
+  with its clients that provides telemetry data using the `COSAgentProvider` object.
 
   If provided, this relation name must match a provided relation in metadata.yaml with the
-  `cos_machine` interface.
-  The default value of this arguments is "cos-machine".
+  `cos_agent` interface.
+  The default value of this argument is "cos-agent".
 
 - `refresh_events`: List of events on which to refresh relation data.
 
@@ -131,12 +132,12 @@ and two optional arguments.
 In order to use this object the following should be in the `charm.py` file.
 
 ```python
-from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
+from charms.grafana_agent.v0.cos_agent import COSAgentConsumer
 ...
 class GrafanaAgentMachineCharm(GrafanaAgentCharm)
     def __init__(self, *args):
         ...
-        self._cos = COSMachineRequirer(self)
+        self._cos = COSAgentRequirer(self)
 ```
 
 
@@ -145,14 +146,14 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm)
 In order to use this object the following should be in the `charm.py` file.
 
 ```python
-from charms.grafana_agent.v0.cos_machine import COSMachineConsumer
+from charms.grafana_agent.v0.cos_agent import COSAgentConsumer
 ...
 class GrafanaAgentMachineCharm(GrafanaAgentCharm)
     def __init__(self, *args):
         ...
-        self._cos = COSMachineRequirer(
+        self._cos = COSAgentRequirer(
             self,
-            relation_name="cos-machine-consumer",
+            relation_name="cos-agent-consumer",
             refresh_events=["update-status", "upgrade-charm"],
         )
 ```
@@ -173,13 +174,13 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation
 from ops.testing import CharmType
 
-LIBID = "1212"  # FIXME: Need to get a valid ID from charmhub
+LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
 LIBPATCH = 1
 
 PYDEPS = ["cosl"]
 
-DEFAULT_RELATION_NAME = "cos-machine"
+DEFAULT_RELATION_NAME = "cos-agent"
 DEFAULT_METRICS_ENDPOINT = {
     "path": "/metrics",
     "port": 80,
@@ -189,8 +190,8 @@ logger = logging.getLogger(__name__)
 SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
 
 
-class COSMachineProvider(Object):
-    """Integration endpoint wrapper for the provider side of the cos_machine interface."""
+class COSAgentProvider(Object):
+    """Integration endpoint wrapper for the provider side of the cos_agent interface."""
 
     def __init__(
         self,
@@ -204,7 +205,7 @@ class COSMachineProvider(Object):
         dashboard_dirs: Optional[List[str]] = None,
         refresh_events: Optional[List] = None,
     ):
-        """Create a COSMachineProvider instance.
+        """Create a COSAgentProvider instance.
 
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
@@ -212,7 +213,7 @@ class COSMachineProvider(Object):
             metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
-            recurse_rules_dirs: Whether or not to recurse into rule paths.
+            recurse_rules_dirs: Whether to recurse into rule paths.
             log_slots: Snap slots to connect to for scraping logs
                 in the form ["snap-name:slot", ...].
             dashboard_dirs: Directory where the dashboards are stored.
@@ -313,20 +314,20 @@ class COSMachineProvider(Object):
         return base64.b64encode(lzma.compress(content)).decode("utf-8")
 
 
-class COSMachineDataChanged(EventBase):
-    """Event emitted by `COSMachineRequirer` when relation data changes."""
+class COSAgentDataChanged(EventBase):
+    """Event emitted by `COSAgentRequirer` when relation data changes."""
 
 
-class COSMachineRequirerEvents(ObjectEvents):
-    """`COSMachineRequirer` events."""
+class COSAgentRequirerEvents(ObjectEvents):
+    """`COSAgentRequirer` events."""
 
-    data_changed = EventSource(COSMachineDataChanged)
+    data_changed = EventSource(COSAgentDataChanged)
 
 
-class COSMachineRequirer(Object):
-    """Integration endpoint wrapper for the Requirer side of the cos_machine interface."""
+class COSAgentRequirer(Object):
+    """Integration endpoint wrapper for the Requirer side of the cos_agent interface."""
 
-    on = COSMachineRequirerEvents()
+    on = COSAgentRequirerEvents()
 
     def __init__(
         self,
@@ -334,12 +335,12 @@ class COSMachineRequirer(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         refresh_events: Optional[List[str]] = None,
     ):
-        """Create a COSMachineRequirer instance.
+        """Create a COSAgentRequirer instance.
 
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
             relation_name: The name of the relation to communicate over.
-            refresh_events: List of events on which to resfresh relation data.
+            refresh_events: List of events on which to refresh relation data.
         """
         super().__init__(charm, relation_name)
         self._charm = charm

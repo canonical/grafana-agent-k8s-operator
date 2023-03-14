@@ -36,12 +36,12 @@ requires:
     interface: juju-info
     scope: container
 
-  cos-machine:
+  cos-agent:
     description: |
-      `cos-machine` is a dedicated relation for the grafana agent machine
-      charm. it will allow you to set up custom scrape jobs, fetch files
+      `cos-agent` is a dedicated relation for the grafana agent machine
+      charm. It will allow you to set up custom scrape jobs, fetch files
       from arbitrary locations, send alert rules, dashboards, etc.
-    interface: cos_machine
+    interface: cos_agent
     scope: container
 
   send-remote-write:

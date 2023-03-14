@@ -304,7 +304,7 @@ class GrafanaAgentCharm(CharmBase):
             pass
 
         if config == old_config:
-            # Nothing changed, possibly new install. Set us active and move on.
+            # Nothing changed, possibly new installation. Set us active and move on.
             self.unit.status = ActiveStatus()
             return
 

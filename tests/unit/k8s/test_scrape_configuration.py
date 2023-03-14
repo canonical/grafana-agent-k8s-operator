@@ -286,7 +286,6 @@ class TestScrapeConfiguration(unittest.TestCase):
                             "tls_config": {"insecure_skip_verify": False},
                         },
                     ],
-                    "positions": {"filename": "/run/promtail-positions.yaml"},
                     "scrape_configs": [
                         {
                             "job_name": "loki",
@@ -298,8 +297,9 @@ class TestScrapeConfiguration(unittest.TestCase):
                             },
                         }
                     ],
-                }
-            ]
+                },
+            ],
+            "positions_directory": "/tmp/grafana-agent-positions",
         }
         self.assertEqual(
             DeepDiff(expected, self.harness.charm._loki_config, ignore_order=True), {}
