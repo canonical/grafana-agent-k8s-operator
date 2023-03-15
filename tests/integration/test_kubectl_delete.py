@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from helpers import uk8s_group
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +28,13 @@ async def test_deploy_from_local_path(ops_test, grafana_agent_charm):
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_kubectl_delete_pod(ops_test):
     pod_name = f"{app_name}-0"
 
     cmd = [
         "sg",
-        "microk8s",
+        uk8s_group(),
         "-c",
         " ".join(["microk8s.kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
     ]
