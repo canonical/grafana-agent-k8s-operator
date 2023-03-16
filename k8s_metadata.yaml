@@ -28,7 +28,7 @@ containers:
 resources:
   agent-image:
     type: oci-image
-    upstream-source: ghcr.io/canonical/grafana-agent:0.32.1
+    upstream-source: ghcr.io/canonical/grafana-agent:latest
     description: OCI image for Grafana Agent
 
 requires:
