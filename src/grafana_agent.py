@@ -252,7 +252,7 @@ class GrafanaAgentCharm(CharmBase):
         shutil.copytree(mapping.src, mapping.dest)
         for dash in dashboards:
             identifier = f'{dash.get("charm", "charm-name")}-{dash.get("relation_id", "rel_id")}'
-            file_handle = pathlib.Path(mapping.dest, "juju_{}.json".format(identifier))
+            file_handle = pathlib.Path(mapping.dest, f"juju_{identifier}.json")
             file_handle.write_text(json.dumps(dash["content"]))
             logger.debug("updated dashboard file {}".format(file_handle.absolute()))
         reload_func()
