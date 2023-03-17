@@ -249,13 +249,16 @@ class GrafanaAgentCharm(CharmBase):
 
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
-        for dash in enumerate(dashboards):
-            charm = dash[1].get("charm", "charm-name")
-            rel_id = dash[1].get("relation_id", "rel_id")
-            identifier = f"{dash[0]}-{charm}-{rel_id}"
-            file_handle = pathlib.Path(mapping.dest, f"juju_{identifier}.json")
-            file_handle.write_text(dash[1]["content"], "utf-8")
-            logger.debug("updated dashboard file {file_handle.absolute()}")
+        for key, dash in enumerate(dashboards):
+            # Build dashboard custom filename
+            charm = dash.get("charm", "charm-name")
+            rel_id = dash.get("relation_id", "rel_id")
+            filename = f"juju_{key}-{charm}-{rel_id}.json"
+
+            file_handle = pathlib.Path(mapping.dest, filename)
+            file_handle.write_text(dash["content"], "utf-8")
+            logger.debug("updated dashboard file %s", file_handle.absolute())
+
         reload_func()
 
     def on_scrape_targets_changed(self, _event) -> None:
