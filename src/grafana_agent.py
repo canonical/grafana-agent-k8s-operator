@@ -289,16 +289,15 @@ class GrafanaAgentCharm(CharmBase):
             ("cos-agent", "logging-consumer"),
             ("cos-agent", "grafana-dashboards-consumer"),
         ]:
-            if relations := self.model.relations.get(incoming):
-                if len(relations):
-                    if not len(self.model.relations.get(outgoing, [])):
-                        logger.warning(
-                            "An incoming '%s' relation does not yet have a matching outgoing '%s' relation",
-                            incoming,
-                            outgoing,
-                        )
-                        self.unit.status = BlockedStatus(f"Missing relation: '{outgoing}'")
-                        return
+            if self.model.relations.get(incoming):
+                if not len(self.model.relations.get(outgoing, [])):
+                    logger.warning(
+                        "An incoming '%s' relation does not yet have a matching outgoing '%s' relation",
+                        incoming,
+                        outgoing,
+                    )
+                    self.unit.status = BlockedStatus(f"Missing relation: '{outgoing}'")
+                    return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
