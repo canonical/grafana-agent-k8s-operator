@@ -461,12 +461,15 @@ class COSAgentRequirer(Object):
                 relation, "dashboards", "dashboards"
             ):
                 for dashboard in dashboard_data:
+                    content = self._decode_dashboard_content(dashboard)
+                    title = json.loads(content).get("title", "no_title")
                     dashboards.append(
                         {
                             "relation_id": str(relation.id),
                             # We don't have the remote charm name, but give us an identifier
                             "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
-                            "content": self._decode_dashboard_content(dashboard),
+                            "content": content,
+                            "title": title,
                         }
                     )
         return dashboards
