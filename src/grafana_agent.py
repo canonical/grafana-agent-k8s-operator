@@ -32,7 +32,6 @@ METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
 METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
 DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
-REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -279,11 +278,27 @@ class GrafanaAgentCharm(CharmBase):
 
         Sets unit status to either Waiting or Active.
         """
-        if relations := self.model.relations.get("metrics-endpoint"):
-            if len(relations):
-                if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                    self.unit.status = WaitingStatus("no related Prometheus remote-write")
-                    return
+        # Make sure every incoming relation has a matching outgoing relation
+        for incoming, outgoing in [
+            # K8s
+            ("metrics-endpoint", "send-remote-write"),
+            ("logging-provider", "logging-consumer"),
+            ("grafana-dashboards-provider", "grafana-dashboards-consumer"),
+            # Machine
+            ("cos-agent", "send-remote-write"),
+            ("cos-agent", "logging-consumer"),
+            ("cos-agent", "grafana-dashboards-consumer"),
+        ]:
+            if relations := self.model.relations.get(incoming):
+                if len(relations):
+                    if not len(self.model.relations.get(outgoing, [])):
+                        logger.warning(
+                            "An incoming '%s' relation does not yet have a matching outgoing '%s' relation",
+                            incoming,
+                            outgoing,
+                        )
+                        self.unit.status = BlockedStatus(f"Missing relation: '{outgoing}'")
+                        return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
