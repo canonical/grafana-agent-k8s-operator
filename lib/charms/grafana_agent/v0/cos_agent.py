@@ -247,7 +247,7 @@ class COSAgentProvider(Object):
             relations = self._charm.model.relations[self._relation_name]
 
         for relation in relations:
-            if relation.data:
+            if relation.data and self._charm.unit.is_leader():
                 relation.data[self._charm.app].update({"config": self._generate_databag_content()})
 
     def _generate_databag_content(self) -> str:
