@@ -262,7 +262,7 @@ class COSAgentProvider(Object):
                 # secondary key
                 "alert_rules": self._metrics_alert_rules,
             },
-            "log": {
+            "logs": {
                 "alert_rules": self._log_alert_rules,
             },
             "dashboards": {
