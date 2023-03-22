@@ -59,6 +59,9 @@ class GrafanaAgentCharm(CharmBase):
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
+    # Property to facilitate centralized status update
+    mandatory_relation_pairs: list  # overridden
+
     def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
         """Forbid the usage of GrafanaAgentCharm directly."""
         if cls is GrafanaAgentCharm:
