@@ -176,7 +176,7 @@ from ops.testing import CharmType
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
-LIBPATCH = 2
+LIBPATCH = 3
 
 PYDEPS = ["cosl"]
 
@@ -247,8 +247,8 @@ class COSAgentProvider(Object):
             relations = self._charm.model.relations[self._relation_name]
 
         for relation in relations:
-            if relation.data and self._charm.unit.is_leader():
-                relation.data[self._charm.app].update({"config": self._generate_databag_content()})
+            if relation.data:
+                relation.data[self._charm.unit].update({"config": self._generate_databag_content()})
 
     def _generate_databag_content(self) -> str:
         """Collate the data for each nested databag and return it."""
