@@ -133,6 +133,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         ("cos-agent", "send-remote-write"),
         ("cos-agent", "logging-consumer"),
         ("cos-agent", "grafana-dashboards-provider"),
+        ("juju-info", "send-remote-write"),
+        ("juju-info", "logging-consumer"),
     ]
 
     def __init__(self, *args):

@@ -45,7 +45,7 @@ class TestRelationStatus(unittest.TestCase):
         # THEN status is still "active"
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-    def test_with_relations(self):
+    def test_cos_agent_with_relations(self):
         # WHEN an incoming relation is added
         rel_id = self.harness.add_relation("cos-agent", "grafana-agent")
         self.harness.add_relation_unit(rel_id, "grafana-agent/0")
@@ -55,6 +55,25 @@ class TestRelationStatus(unittest.TestCase):
 
         # AND WHEN all the necessary outgoing relations are added
         for outgoing in ["send-remote-write", "logging-consumer", "grafana-dashboards-provider"]:
+            # Before the relation is added, the charm is still in blocked status
+            self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+
+            rel_id = self.harness.add_relation(outgoing, "grafana-agent")
+            self.harness.add_relation_unit(rel_id, "grafana-agent/0")
+
+        # THEN the charm goes into active status
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+    def test_juju_info_with_relations(self):
+        # WHEN an incoming relation is added
+        rel_id = self.harness.add_relation("juju-info", "grafana-agent")
+        self.harness.add_relation_unit(rel_id, "grafana-agent/0")
+
+        # THEN the charm goes into blocked status
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+
+        # AND WHEN all the necessary outgoing relations are added
+        for outgoing in ["send-remote-write", "logging-consumer"]:
             # Before the relation is added, the charm is still in blocked status
             self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
