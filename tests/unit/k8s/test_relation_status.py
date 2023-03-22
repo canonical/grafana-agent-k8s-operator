@@ -26,15 +26,21 @@ class TestRelationStatus(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
 
     def test_no_relations(self):
+        # GIVEN no relations joined (see SetUp)
+        # WHEN the charm starts (see SetUp)
+        # THEN status is "active"
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+        # AND WHEN "update-status" fires
         self.harness.charm.on.update_status.emit()
+        # THEN status is still "active"
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test_with_relations(self):
         for incoming, outgoing in [
-            # K8s
             ("logging-provider", "logging-consumer"),
             ("metrics-endpoint", "send-remote-write"),
-            ("grafana-dashboards-provider", "grafana-dashboards-consumer"),
+            ("grafana-dashboards-consumer", "grafana-dashboards-provider"),
         ]:
             with self.subTest(incoming=incoming, outgoing=outgoing):
                 # WHEN an incoming relation is added
