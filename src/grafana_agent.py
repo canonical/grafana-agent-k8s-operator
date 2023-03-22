@@ -138,18 +138,22 @@ class GrafanaAgentCharm(CharmBase):
         self._update_metrics_alerts()
         self._update_loki_alerts()
         self._update_config()
+        self._update_status()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
+        self._update_status()
 
     def _on_loki_push_api_endpoint_departed(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
+        self._update_status()
 
     def _on_config_changed(self, _event=None):
         """Rebuild the config."""
         self._update_config()
+        self._update_status()
 
     # Abstract Methods
     def agent_version_output(self) -> str:
