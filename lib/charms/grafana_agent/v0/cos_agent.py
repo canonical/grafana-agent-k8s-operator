@@ -249,8 +249,7 @@ class COSAgentProvider(Object):
         for relation in relations:
             if relation.data:
                 relation.data[self._charm.app].update({"config": self._generate_application_databag_content()})
-                unit = next(iter(relation.units))
-                relation.data[unit].update({"config": self._generate_unit_databag_content()})
+                relation.data[self._charm.unit].update({"config": self._generate_unit_databag_content()})
 
     def _generate_application_databag_content(self) -> str:
         """Collate the data for each nested app databag and return it."""
