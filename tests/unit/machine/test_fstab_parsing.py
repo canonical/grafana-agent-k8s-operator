@@ -22,9 +22,10 @@ class TestFstabParsing(unittest.TestCase):
         fstab_file.write_text(fstab)
 
         fstab = SnapFstab(fstab_file)
-        entry = fstab.entry("charmed-kafka", "common/log")
+        entry = fstab.entry("charmed-kafka", "logs")
         self.assertEqual(entry.owner, "charmed-kafka")
         self.assertEqual(entry.endpoint_source, "common/log")
+        self.assertEqual(entry.target, "/snap/grafana-agent/7/shared-logs/log")
         self.assertEqual(entry.relative_target, "/log")
 
     def test_multiple_plugs_parses(self):
@@ -36,30 +37,34 @@ class TestFstabParsing(unittest.TestCase):
         fstab_file.write_text(fstab)
 
         fstab = SnapFstab(fstab_file)
-        entry = fstab.entry("charmed-kafka", "common/log")
+        entry = fstab.entry("charmed-kafka", "logs")
         self.assertEqual(entry.owner, "charmed-kafka")
         self.assertEqual(entry.endpoint_source, "common/log")
+        self.assertEqual(entry.target, "/snap/grafana-agent/7/shared-logs/log")
         self.assertEqual(entry.relative_target, "/log")
 
-        other_entry = fstab.entry("other-snap", "logs/shared")
+        other_entry = fstab.entry("other-snap", "shared-logs")
         self.assertEqual(other_entry.owner, "other-snap")
         self.assertEqual(other_entry.endpoint_source, "logs/shared")
+        self.assertEqual(other_entry.target, "/snap/grafana-agent/7/shared-logs/shared")
         self.assertEqual(other_entry.relative_target, "/shared")
 
     def test_same_slot_plugs_parses(self):
         fstab = """
         /var/snap/charmed-kafka/common/log /snap/grafana-agent/7/shared-logs/log none bind,ro 0 0\n
-        /var/snap/other-snap/common/log /snap/grafana-agent/7/shared-logs/log-2 none bind,ro 0 0\n
+        /var/snap/other-snap/common/log /snap/grafana-agent/7/shared-logs/log-1 none bind,ro 0 0\n
         """
         fstab_file = Path(self.sandbox_root) / "single-plug-fstab"
         fstab_file.write_text(fstab)
 
         fstab = SnapFstab(fstab_file)
-        entry = fstab.entry("charmed-kafka", "common/log")
+        entry = fstab.entry("charmed-kafka", "logs")
         self.assertEqual(entry.endpoint_source, "common/log")
+        self.assertEqual(entry.target, "/snap/grafana-agent/7/shared-logs/log")
         self.assertEqual(entry.relative_target, "/log")
 
-        other_entry = fstab.entry("other-snap", "common/log")
+        other_entry = fstab.entry("other-snap", "logs")
         self.assertEqual(other_entry.owner, "other-snap")
         self.assertEqual(other_entry.endpoint_source, "common/log")
-        self.assertEqual(other_entry.relative_target, "/log-2")
+        self.assertEqual(other_entry.target, "/snap/grafana-agent/7/shared-logs/log-1")
+        self.assertEqual(other_entry.relative_target, "/log-1")
