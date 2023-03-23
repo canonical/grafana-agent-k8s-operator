@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Union
 from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
 from charms.operator_libs_linux.v1 import snap
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, Relation, Unit
+from ops.model import MaintenanceStatus, Relation, Unit
 
 from grafana_agent import GrafanaAgentCharm
 
@@ -127,6 +127,16 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     service_name = "grafana-agent.grafana-agent"
 
+    # Pairs of (incoming, outgoing) relation names. If any 'incoming' is joined without a matching
+    # 'outgoing', the charm will block. Without an outgoing relation we may incur data loss.
+    mandatory_relation_pairs = [
+        ("cos-agent", "send-remote-write"),
+        ("cos-agent", "logging-consumer"),
+        ("cos-agent", "grafana-dashboards-provider"),
+        ("juju-info", "send-remote-write"),
+        ("juju-info", "logging-consumer"),
+    ]
+
     def __init__(self, *args):
         super().__init__(*args)
         # technically, only one of 'cos-agent' and 'juju-info' are likely to ever be active at
@@ -176,7 +186,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             self.snap.start(enable=True)
         except snap.SnapError as e:
             raise GrafanaAgentServiceError("Failed to start grafana-agent") from e
-        self.unit.status = ActiveStatus("")
+
+        self._update_status()
 
     def _on_stop(self, _event) -> None:
         self.unit.status = MaintenanceStatus("Stopping grafana-agent snap")
@@ -184,6 +195,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             self.snap.stop(disable=True)
         except snap.SnapError as e:
             raise GrafanaAgentServiceError("Failed to stop grafana-agent") from e
+
+        self._update_status()
 
     def _on_remove(self, _event) -> None:
         """Uninstall the Grafana Agent snap."""
@@ -253,7 +266,6 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             self.snap.restart()
         except snap.SnapError as e:
             raise GrafanaAgentServiceError("Failed to restart grafana-agent") from e
-        self.unit.status = ActiveStatus("")
 
     @property
     def _is_installed(self) -> bool:

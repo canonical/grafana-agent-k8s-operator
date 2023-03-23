@@ -27,6 +27,14 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
 
+    # Pairs of (incoming, outgoing) relation names. If any 'incoming' is joined without a matching
+    # 'outgoing', the charm will block. Without an outgoing relation we may incur data loss.
+    mandatory_relation_pairs = [
+        ("metrics-endpoint", "send-remote-write"),
+        ("logging-provider", "logging-consumer"),
+        ("grafana-dashboards-consumer", "grafana-dashboards-provider"),
+    ]
+
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)

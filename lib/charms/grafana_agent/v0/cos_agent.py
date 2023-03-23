@@ -249,12 +249,18 @@ class COSAgentProvider(Object):
         for relation in relations:
             if relation.data:
                 if self._charm.unit.is_leader():
-                    relation.data[self._charm.app].update({"config": self._generate_application_databag_content()})
-                relation.data[self._charm.unit].update({"config": self._generate_unit_databag_content()})
+                    relation.data[self._charm.app].update(
+                        {"config": self._generate_application_databag_content()}
+                    )
+                relation.data[self._charm.unit].update(
+                    {"config": self._generate_unit_databag_content()}
+                )
 
     def _generate_application_databag_content(self) -> str:
         """Collate the data for each nested app databag and return it."""
-        # The application databag is divided in two chunks: metrics (alert rules only) and dashboards.
+        # The application databag is divided in three chunks: alert rules (metrics and logs) and
+        # dashboards.
+        # Scrape jobs and log slots are unit-dependent and are therefore stored in unit databag.
 
         data = {
             # primary key
@@ -275,6 +281,7 @@ class COSAgentProvider(Object):
     def _generate_unit_databag_content(self) -> str:
         """Collate the data for each nested unit databag and return it."""
         # The unit databag is divided in two chunks: metrics (scrape jobs only) and logs.
+        # Alert rules and dashboards are unit-independent and are therefore stored in app databag.
 
         data = {
             # primary key
@@ -382,9 +389,11 @@ class COSAgentRequirer(Object):
     def _relation_unit(relation: Relation) -> Optional[Unit]:
         """Return the principal unit for a relation."""
         if relation and relation.units:
+            # With subordiante charms, relation.units is always either empty or has only the
+            # principal unit, so next(iter(...)) is fine.
             return next(iter(relation.units))
         return None
-    
+
     @property
     def _relations(self):
         return self._charm.model.relations[self._relation_name]

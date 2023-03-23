@@ -8,6 +8,7 @@ import pathlib
 import re
 import shutil
 from collections import namedtuple
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
@@ -17,7 +18,7 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from ops.charm import CharmBase
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
@@ -32,7 +33,6 @@ METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
 METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
 DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
 DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
-REMOTE_WRITE_RELATION_NAME = "send-remote-write"
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -45,12 +45,22 @@ class GrafanaAgentReloadError(Exception):
         super().__init__(self.message)
 
 
+@dataclass
+class CompoundStatus:
+    """'Dumb struct' for helping with centralized status setting."""
+
+    update_config: Optional[StatusBase] = None
+
+
 class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
+
+    # Property to facilitate centralized status update
+    mandatory_relation_pairs: list  # overridden
 
     def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
         """Forbid the usage of GrafanaAgentCharm directly."""
@@ -60,6 +70,9 @@ class GrafanaAgentCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+
+        # Property to facilitate centralized status update
+        self.status = CompoundStatus()
 
         self.loki_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
@@ -116,23 +129,34 @@ class GrafanaAgentCharm(CharmBase):
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
+        # Register status observers
+        for incoming, outgoing in self.mandatory_relation_pairs:
+            self.framework.observe(self.on[incoming].relation_joined, self._update_status)
+            self.framework.observe(self.on[incoming].relation_broken, self._update_status)
+            self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
+            self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
         self._update_metrics_alerts()
         self._update_loki_alerts()
         self._update_config()
+        self._update_status()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
+        self._update_status()
 
     def _on_loki_push_api_endpoint_departed(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
+        self._update_status()
 
     def _on_config_changed(self, _event=None):
         """Rebuild the config."""
         self._update_config()
+        self._update_status()
 
     # Abstract Methods
     def agent_version_output(self) -> str:
@@ -274,15 +298,33 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self):
+    def _update_status(self, *_):
         """Determine the charm status based on relation health and grafana-agent service readiness.
 
-        Sets unit status to either Waiting or Active.
+        This is a centralized status setter. Status should only be calculated here, or, if you need
+        to temporarily change the status (e.g. during snap install), always call this method after
+        so the status is re-calculated (exceptions: on_install, on_remove).
+        TODO: Rework this when "compound status" is implemented
+         https://github.com/canonical/operator/issues/665
         """
-        if relations := self.model.relations.get("metrics-endpoint"):
-            if len(relations):
-                if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                    self.unit.status = WaitingStatus("no related Prometheus remote-write")
+        if not self.is_ready:
+            self.unit.status = WaitingStatus("waiting for agent to start")
+            return
+
+        if self.status.update_config:
+            self.unit.status = self.status.update_config
+            return
+
+        # Make sure every incoming relation has a matching outgoing relation
+        for incoming, outgoing in self.mandatory_relation_pairs:
+            if self.model.relations.get(incoming):
+                if not len(self.model.relations.get(outgoing, [])):
+                    logger.warning(
+                        "An incoming '%s' relation does not yet have a matching outgoing '%s' relation",
+                        incoming,
+                        outgoing,
+                    )
+                    self.unit.status = BlockedStatus(f"Missing relation: '{outgoing}'")
                     return
 
         if not self.is_ready:
@@ -294,7 +336,6 @@ class GrafanaAgentCharm(CharmBase):
     def _update_config(self) -> None:
         if not self.is_ready:
             # Grafana-agent is not yet available so no need to update config
-            self.unit.status = WaitingStatus("waiting for agent to start")
             return
 
         config = self._generate_config()
@@ -308,8 +349,7 @@ class GrafanaAgentCharm(CharmBase):
             pass
 
         if config == old_config:
-            # Nothing changed, possibly new installation. Set us active and move on.
-            self.unit.status = ActiveStatus()
+            # Nothing changed, possibly new installation. Move on.
             return
 
         try:
@@ -318,11 +358,12 @@ class GrafanaAgentCharm(CharmBase):
                 # FIXME: change this to self._reload_config when #19 is fixed
                 # Restart the service to pick up the new config
                 self.restart()
-                self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
-            self.unit.status = BlockedStatus(str(e))
+            logger.error(str(e))
+            self.status.update_config = BlockedStatus(str(e))
         except APIError as e:
-            self.unit.status = WaitingStatus(str(e))
+            logger.warning(str(e))
+            self.status.update_config = WaitingStatus(str(e))
 
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
@@ -330,6 +371,7 @@ class GrafanaAgentCharm(CharmBase):
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False
         )  # noqa
+        self._update_status()
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
@@ -500,7 +542,7 @@ class GrafanaAgentCharm(CharmBase):
             GrafanaAgentReloadError: if configuration could not be reloaded.
         """
         try:
-            self.unit.status = MaintenanceStatus("reloading agent configuration")
+            logger.debug("reloading agent configuration")
             url = "http://localhost/-/reload"
             errors = list(range(400, 452)) + list(range(500, 513))
             s = Session()
