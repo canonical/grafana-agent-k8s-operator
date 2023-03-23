@@ -28,12 +28,12 @@ PROMETHEUS_ALERT_RULES = {
                     "alert": "CPUOverUse",
                     "expr": 'process_cpu_seconds_total{juju_application="provider-tester",'
                     'juju_model="lma",'
-                    'juju_model_uuid="f2c1b2a6-e006-11eb-ba80-0242ac130004"} > 0.12',
+                    'juju_model_uuid="81cafdbe-ccaa-4048-bd91-d3e5ece673ad"} > 0.12',
                     "for": "0m",
                     "labels": {
                         "severity": "Low",
                         "juju_model": "lma",
-                        "juju_model_uuid": "f2c1b2a6-e006-11eb-ba80-0242ac130004",
+                        "juju_model_uuid": "81cafdbe-ccaa-4048-bd91-d3e5ece673ad",
                         "juju_application": "provider-tester",
                     },
                     "annotations": {
@@ -45,12 +45,12 @@ PROMETHEUS_ALERT_RULES = {
                 {
                     "alert": "PrometheusTargetMissing",
                     "expr": 'up{juju_application="provider-tester",juju_model="lma",'
-                    'juju_model_uuid="f2c1b2a6-e006-11eb-ba80-0242ac130004"} == 0',
+                    'juju_model_uuid="81cafdbe-ccaa-4048-bd91-d3e5ece673ad"} == 0',
                     "for": "0m",
                     "labels": {
                         "severity": "critical",
                         "juju_model": "lma",
-                        "juju_model_uuid": "f2c1b2a6-e006-11eb-ba80-0242ac130004",
+                        "juju_model_uuid": "81cafdbe-ccaa-4048-bd91-d3e5ece673ad",
                         "juju_application": "provider-tester",
                     },
                     "annotations": {
@@ -68,19 +68,19 @@ PROMETHEUS_ALERT_RULES = {
 LOKI_ALERT_RULES = {
     "groups": [
         {
-            "name": "lma_f2c1b2a6-e006-11eb-ba80-0242ac130004_provider-tester_alerts",
+            "name": "lma_81cafdbe-ccaa-4048-bd91-d3e5ece673ad_provider-tester_alerts",
             "rules": [
                 {
                     "alert": "TooManyLogMessages",
                     "expr": 'count_over_time({job=".+",'
                     'juju_application="provider-tester",'
                     'juju_model="lma",'
-                    'juju_model_uuid="f2c1b2a6-e006-11eb-ba80-0242ac130004"}[1m]) > 10',
+                    'juju_model_uuid="81cafdbe-ccaa-4048-bd91-d3e5ece673ad"}[1m]) > 10',
                     "for": "0m",
                     "labels": {
                         "severity": "Low",
                         "juju_model": "lma",
-                        "juju_model_uuid": "f2c1b2a6-e006-11eb-ba80-0242ac130004",
+                        "juju_model_uuid": "81cafdbe-ccaa-4048-bd91-d3e5ece673ad",
                         "juju_application": "provider-tester",
                     },
                     "annotations": {
