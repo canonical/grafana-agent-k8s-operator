@@ -339,12 +339,12 @@ class GrafanaAgentCharm(CharmBase):
         for incoming, outgoings in self.mandatory_relation_pairs:
             if not self.model.relations.get(incoming):
                 continue
-            
+
             has_outgoing = False
             for outgoing in outgoings:
                 if len(self.model.relations.get(outgoing, [])):
                     has_outgoing = True
-                    
+
             if not has_outgoing:
                 logger.warning(
                     "An incoming '%s' relation does not yet have a matching outgoing [%s] relation",
