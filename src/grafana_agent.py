@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
+from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
+    GrafanaCloudConfigRequirer,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
@@ -108,6 +111,14 @@ class GrafanaAgentCharm(CharmBase):
             relation_name="grafana-dashboards-provider",
             dashboards_path=self.dashboard_paths.dest,
         )
+
+        self._cloud = GrafanaCloudConfigRequirer(self)
+
+        self.framework.observe(
+            self._cloud.on.cloud_config_available, self._on_cloud_config_available
+        )
+        self.framework.observe(self._cloud.on.cloud_config_revoked, self._on_cloud_config_revoked)
+
         self.framework.observe(
             self._grafana_dashboards_provider.on.dashboard_status_changed,
             self._on_dashboard_status_changed,
@@ -157,6 +168,14 @@ class GrafanaAgentCharm(CharmBase):
         """Rebuild the config."""
         self._update_config()
         self._update_status()
+
+    def _on_cloud_config_available(self, _) -> None:
+        logger.info("cloud config available")
+        self._update_config()
+
+    def _on_cloud_config_revoked(self, _) -> None:
+        logger.info("cloud config revoked")
+        self._update_config()
 
     # Abstract Methods
     def agent_version_output(self) -> str:
@@ -376,7 +395,31 @@ class GrafanaAgentCharm(CharmBase):
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
         prometheus_endpoints = self._remote_write.endpoints
+
+        if self._cloud.prometheus_ready:
+            prometheus_endpoints.append(
+                {
+                    "url": self._cloud.prometheus_url,
+                    "basic_auth": {
+                        "username": self._cloud.credentials.username,
+                        "password": self._cloud.credentials.password,
+                    },
+                }
+            )
+
         loki_endpoints = self._loki_consumer.loki_endpoints
+
+        if self._cloud.loki_ready:
+            loki_endpoints.append(
+                {
+                    "url": self._cloud.loki_url,
+                    "basic_auth": {
+                        "username": self._cloud.credentials.username,
+                        "password": self._cloud.credentials.password,
+                    },
+                }
+            )
+
         for endpoint in prometheus_endpoints + loki_endpoints:
             endpoint["tls_config"] = {
                 "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")

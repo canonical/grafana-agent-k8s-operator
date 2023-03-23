@@ -35,7 +35,6 @@ requires:
       this relation will be enough.
     interface: juju-info
     scope: container
-
   cos-agent:
     description: |
       `cos-agent` is a dedicated relation for the grafana agent machine
@@ -46,9 +45,11 @@ requires:
 
   send-remote-write:
     interface: prometheus_remote_write
-
   logging-consumer:
     interface: loki_push_api
+  grafana-cloud-config:
+    interface: grafana_cloud_config
+    limit: 1
 
 provides:
   grafana-dashboards-provider:

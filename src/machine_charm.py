@@ -423,7 +423,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             target_path = (
                 f"{fstab_entry.target}/*"
                 if fstab_entry
-                else f"/snap/grafana-agent/current/shared-logs/**/*"
+                else "/snap/grafana-agent/current/shared-logs/**/*"
             )
             job = {
                 "job_name": endpoint.owner,
