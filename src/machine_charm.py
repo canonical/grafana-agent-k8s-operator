@@ -97,6 +97,10 @@ class SnapFstab:
             # the sourcce *or* path. charmed-kafka uses 'logs' as the plug name, and maps
             # .../common/logs to .../log inside Grafana Agent
             #
+            # The only meaningful scenario in which this could happen (multiple fstab
+            # entries with the same snap "owning" the originating path) is if a snap provides
+            # multiple paths as part of the same plug.
+            #
             # In this case, for a cheap comparison (rather than implementing some recursive
             # LCS just for this, convert all possible endpoint sources into a list of unique
             # characters, as well as the endpoint name, and build a dict of entries with
