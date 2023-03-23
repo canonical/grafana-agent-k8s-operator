@@ -29,7 +29,7 @@ The constructor of `COSAgentProvider` has only one required and eight optional p
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: Optional[List[dict]] = None,
+        metrics_endpoints: Optional[List[_MetricsEndpointDict]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
@@ -165,7 +165,7 @@ import logging
 import lzma
 from collections import namedtuple
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from cosl import JujuTopology
 from cosl.rules import AlertRules
@@ -173,6 +173,19 @@ from ops.charm import RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation, Unit
 from ops.testing import CharmType
+
+
+if TYPE_CHECKING:
+    try:
+        from typing import TypedDict
+
+        class _MetricsEndpointDict(TypedDict):
+            path: str
+            port: int
+
+    except ModuleNotFoundError:
+        _MetricsEndpointDict = dict
+
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
@@ -197,7 +210,7 @@ class COSAgentProvider(Object):
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: Optional[List[dict]] = None,
+        metrics_endpoints: Optional[List['_MetricsEndpointDict']] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
