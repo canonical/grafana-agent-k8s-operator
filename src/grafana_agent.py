@@ -141,11 +141,12 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
         # Register status observers
-        for incoming, outgoing in self.mandatory_relation_pairs:
+        for incoming, outgoings in self.mandatory_relation_pairs:
             self.framework.observe(self.on[incoming].relation_joined, self._update_status)
             self.framework.observe(self.on[incoming].relation_broken, self._update_status)
-            self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
-            self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+            for outgoing in outgoings:
+                self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
+                self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
 
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
@@ -335,16 +336,23 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         # Make sure every incoming relation has a matching outgoing relation
-        for incoming, outgoing in self.mandatory_relation_pairs:
-            if self.model.relations.get(incoming):
-                if not len(self.model.relations.get(outgoing, [])):
-                    logger.warning(
-                        "An incoming '%s' relation does not yet have a matching outgoing '%s' relation",
-                        incoming,
-                        outgoing,
-                    )
-                    self.unit.status = BlockedStatus(f"Missing relation: '{outgoing}'")
-                    return
+        for incoming, outgoings in self.mandatory_relation_pairs:
+            if not self.model.relations.get(incoming):
+                continue
+            
+            has_outgoing = False
+            for outgoing in outgoings:
+                if len(self.model.relations.get(outgoing, [])):
+                    has_outgoing = True
+                    
+            if not has_outgoing:
+                logger.warning(
+                    "An incoming '%s' relation does not yet have a matching outgoing [%s] relation",
+                    incoming,
+                    '|'.join(outgoings),
+                )
+                self.unit.status = BlockedStatus(f"Missing relation: [{'|'.join(outgoings)}]")
+                return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
