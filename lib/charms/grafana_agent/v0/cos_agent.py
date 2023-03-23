@@ -389,8 +389,8 @@ class COSAgentRequirer(Object):
     def _relation_unit(relation: Relation) -> Optional[Unit]:
         """Return the principal unit for a relation."""
         if relation and relation.units:
-            # TODO: Is the implied order guaranteed?
-            #  I.e. is the principal guaranteed to be the first item in the list?
+            # With subordiante charms, relation.units is always either empty or has only the
+            # principal unit, so next(iter(...)) is fine.
             return next(iter(relation.units))
         return None
 
