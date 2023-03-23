@@ -88,11 +88,31 @@ class SnapFstab:
 
         self.entries = entries
 
-    def entry(self, owner: str, endpoint_name: str) -> Optional[_SnapFstabEntry]:
+    def entry(self, owner: str, endpoint_name: Optional[str]) -> Optional[_SnapFstabEntry]:
         """Find and return a specific entry if it exists."""
-        entries = [
-            e for e in self.entries if e.owner == owner and endpoint_name in e.endpoint_source
-        ]
+        entries = [e for e in self.entries if e.owner == owner]
+
+        if len(entries) > 1 and endpoint_name:
+            # If there's more than one entry, the endpoint name may not directlly map to
+            # the sourcce *or* path. charmed-kafka uses 'logs' as the plug name, and maps
+            # .../common/logs to .../log inside Grafana Agent
+            #
+            # The only meaningful scenario in which this could happen (multiple fstab
+            # entries with the same snap "owning" the originating path) is if a snap provides
+            # multiple paths as part of the same plug.
+            #
+            # In this case, for a cheap comparison (rather than implementing some recursive
+            # LCS just for this, convert all possible endpoint sources into a list of unique
+            # characters, as well as the endpoint name, and build a dict of entries with
+            # a value that's the length of the intersection, the pick the first one.
+            character_matches = {
+                e: len(set(endpoint_name) & set(e.endpoint_source)) for e in entries
+            }
+            sorted_matches = {
+                k: v for k, v in sorted(character_matches.items(), key=lambda x: x[1])
+            }
+            entries = [next(iter(sorted_matches.keys()))]
+
         if len(entries) > 1 or not entries:
             logger.debug(
                 "Ambiguous or unknown mountpoint for snap %s at slot %s, not relabeling.",
@@ -401,9 +421,9 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         for endpoint in self._cos.snap_log_endpoints:
             fstab_entry = agent_fstab.entry(endpoint.owner, endpoint.name)
             target_path = (
-                fstab_entry.target
+                f"{fstab_entry.target}/*"
                 if fstab_entry
-                else f"/snap/grafana-agent/current/shared-logs/{endpoint.name}"
+                else f"/snap/grafana-agent/current/shared-logs/**/*"
             )
             job = {
                 "job_name": endpoint.owner,
