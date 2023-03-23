@@ -176,7 +176,7 @@ from ops.testing import CharmType
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
-LIBPATCH = 3
+LIBPATCH = 2
 
 PYDEPS = ["cosl"]
 
