@@ -147,7 +147,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         self._container.restart("agent")
 
     def positions_dir(self) -> str:
-        """Return the correct positions directory."""
+        """Return the positions directory."""
         return "/run"
 
 
