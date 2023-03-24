@@ -465,7 +465,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 logger.error(e.message)
 
     def positions_dir(self) -> str:
-        """Return the correct positions directory."""
+        """Return the positions directory."""
         return "${SNAP_DATA}"
 
 
