@@ -299,7 +299,7 @@ class TestScrapeConfiguration(unittest.TestCase):
                     ],
                 },
             ],
-            "positions_directory": "/tmp/grafana-agent-positions",
+            "positions_directory": "/run/grafana-agent-positions",
         }
         self.assertEqual(
             DeepDiff(expected, self.harness.charm._loki_config, ignore_order=True), {}

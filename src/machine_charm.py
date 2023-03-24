@@ -464,6 +464,10 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)
 
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        return "${SNAP_DATA}"
+
 
 if __name__ == "__main__":
     main(GrafanaAgentMachineCharm)
