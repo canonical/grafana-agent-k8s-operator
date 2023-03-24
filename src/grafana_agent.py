@@ -217,7 +217,7 @@ class GrafanaAgentCharm(CharmBase):
         raise NotImplementedError("Please override the dashboards method")
 
     def positions_dir(self) -> str:
-        """Return the correct positions directory."""
+        """Return the positions directory."""
         raise NotImplementedError("Please override the positions_dir method")
 
     # End: Abstract Methods
