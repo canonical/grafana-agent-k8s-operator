@@ -28,6 +28,38 @@ class TestFstabParsing(unittest.TestCase):
         self.assertEqual(entry.target, "/snap/grafana-agent/7/shared-logs/log")
         self.assertEqual(entry.relative_target, "/log")
 
+    def test_multiple_owners_parses(self):
+        fstab = """
+        /var/snap/charmed-kafka/common/aei /snap/grafana-agent/7/shared-logs/aei none bind,ro 0 0\n
+        /var/snap/charmed-kafka/common/log /snap/grafana-agent/7/shared-logs/log none bind,ro 0 0\n
+        /var/snap/other-snap/logs/shared /snap/grafana-agent/7/shared-logs/shared none bind,ro 0 0\n
+        """
+        fstab_file = Path(self.sandbox_root) / "single-plug-fstab"
+        fstab_file.write_text(fstab)
+
+        fstab = SnapFstab(fstab_file)
+        entry = fstab.entry("charmed-kafka", "logs")
+        self.assertEqual(entry.owner, "charmed-kafka")
+        self.assertEqual(entry.endpoint_source, "common/log")
+        self.assertEqual(entry.target, "/snap/grafana-agent/7/shared-logs/log")
+        self.assertEqual(entry.relative_target, "/log")
+
+    def test_multiple_owners_parses_inverted_order(self):
+        fstab = """
+        /var/snap/charmed-kafka/common/log /snap/grafana-agent/7/shared-logs/log none bind,ro 0 0\n
+        /var/snap/charmed-kafka/common/aei /snap/grafana-agent/7/shared-logs/aei none bind,ro 0 0\n
+        /var/snap/other-snap/logs/shared /snap/grafana-agent/7/shared-logs/shared none bind,ro 0 0\n
+        """
+        fstab_file = Path(self.sandbox_root) / "single-plug-fstab"
+        fstab_file.write_text(fstab)
+
+        fstab = SnapFstab(fstab_file)
+        entry = fstab.entry("charmed-kafka", "aei")
+        self.assertEqual(entry.owner, "charmed-kafka")
+        self.assertEqual(entry.endpoint_source, "common/aei")
+        self.assertEqual(entry.target, "/snap/grafana-agent/7/shared-logs/aei")
+        self.assertEqual(entry.relative_target, "/aei")
+
     def test_multiple_plugs_parses(self):
         fstab = """
         /var/snap/charmed-kafka/common/log /snap/grafana-agent/7/shared-logs/log none bind,ro 0 0\n

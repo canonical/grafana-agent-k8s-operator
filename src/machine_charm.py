@@ -93,8 +93,8 @@ class SnapFstab:
         entries = [e for e in self.entries if e.owner == owner]
 
         if len(entries) > 1 and endpoint_name:
-            # If there's more than one entry, the endpoint name may not directlly map to
-            # the sourcce *or* path. charmed-kafka uses 'logs' as the plug name, and maps
+            # If there's more than one entry, the endpoint name may not directly map to
+            # the source *or* path. charmed-kafka uses 'logs' as the plug name, and maps
             # .../common/logs to .../log inside Grafana Agent
             #
             # The only meaningful scenario in which this could happen (multiple fstab
@@ -102,16 +102,18 @@ class SnapFstab:
             # multiple paths as part of the same plug.
             #
             # In this case, for a cheap comparison (rather than implementing some recursive
-            # LCS just for this, convert all possible endpoint sources into a list of unique
-            # characters, as well as the endpoint name, and build a dict of entries with
-            # a value that's the length of the intersection, the pick the first one.
-            character_matches = {
-                e: len(set(endpoint_name) & set(e.endpoint_source)) for e in entries
-            }
-            sorted_matches = {
-                k: v for k, v in sorted(character_matches.items(), key=lambda x: x[1])
-            }
-            entries = [next(iter(sorted_matches.keys()))]
+            # LCS just for this), convert all possible endpoint sources into a list of unique
+            # characters, as well as the endpoint name, and build a sequence of entries with
+            # a value that's the length of the intersection, the pick the first one i.e. the one
+            # with the largest intersection.
+            ordered_entries = sorted(
+                entries,
+                # descending order
+                reverse=True,
+                # size of the character-level similarity of the two strings
+                key=lambda e: len(set(endpoint_name) & set(e.endpoint_source)),
+            )
+            return ordered_entries[0]
 
         if len(entries) > 1 or not entries:
             logger.debug(
@@ -302,14 +304,14 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             "node_exporter": {
                 "enabled": True,
                 "relabel_configs": [
-                    # Align the "job" name with those of prometheus_scrape
-                    {
-                        "target_label": "job",
-                        "regex": "(.*)",
-                        "replacement": node_exporter_job_name,
-                    },
-                ]
-                + self._principal_relabeling_config,
+                                       # Align the "job" name with those of prometheus_scrape
+                                       {
+                                           "target_label": "job",
+                                           "regex": "(.*)",
+                                           "replacement": node_exporter_job_name,
+                                       },
+                                   ]
+                                   + self._principal_relabeling_config,
             }
         }
 
@@ -322,21 +324,21 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "name": "log_file_scraper",
                 "clients": loki_endpoints,
                 "scrape_configs": [
-                    {
-                        "job_name": "varlog",
-                        "static_configs": [
-                            {
-                                "targets": ["localhost"],
-                                "labels": {
-                                    "__path__": "/var/log/*log",
-                                    **self._principal_labels,
-                                },
-                            }
-                        ],
-                    },
-                    {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
-                ]
-                + self._snap_plugs_logging_configs,
+                                      {
+                                          "job_name": "varlog",
+                                          "static_configs": [
+                                              {
+                                                  "targets": ["localhost"],
+                                                  "labels": {
+                                                      "__path__": "/var/log/*log",
+                                                      **self._principal_labels,
+                                                  },
+                                              }
+                                          ],
+                                      },
+                                      {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
+                                  ]
+                                  + self._snap_plugs_logging_configs,
             }
         ]
 
@@ -365,7 +367,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _instance_topology(
-        self,
+            self,
     ) -> Dict[str, str]:
         unit = self.principal_unit
         if unit:
