@@ -304,14 +304,14 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             "node_exporter": {
                 "enabled": True,
                 "relabel_configs": [
-                                       # Align the "job" name with those of prometheus_scrape
-                                       {
-                                           "target_label": "job",
-                                           "regex": "(.*)",
-                                           "replacement": node_exporter_job_name,
-                                       },
-                                   ]
-                                   + self._principal_relabeling_config,
+                    # Align the "job" name with those of prometheus_scrape
+                    {
+                        "target_label": "job",
+                        "regex": "(.*)",
+                        "replacement": node_exporter_job_name,
+                    },
+                ]
+                + self._principal_relabeling_config,
             }
         }
 
@@ -324,21 +324,21 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "name": "log_file_scraper",
                 "clients": loki_endpoints,
                 "scrape_configs": [
-                                      {
-                                          "job_name": "varlog",
-                                          "static_configs": [
-                                              {
-                                                  "targets": ["localhost"],
-                                                  "labels": {
-                                                      "__path__": "/var/log/*log",
-                                                      **self._principal_labels,
-                                                  },
-                                              }
-                                          ],
-                                      },
-                                      {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
-                                  ]
-                                  + self._snap_plugs_logging_configs,
+                    {
+                        "job_name": "varlog",
+                        "static_configs": [
+                            {
+                                "targets": ["localhost"],
+                                "labels": {
+                                    "__path__": "/var/log/*log",
+                                    **self._principal_labels,
+                                },
+                            }
+                        ],
+                    },
+                    {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
+                ]
+                + self._snap_plugs_logging_configs,
             }
         ]
 
@@ -367,7 +367,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     @property
     def _instance_topology(
-            self,
+        self,
     ) -> Dict[str, str]:
         unit = self.principal_unit
         if unit:
