@@ -216,6 +216,10 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of dashboards."""
         raise NotImplementedError("Please override the dashboards method")
 
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        raise NotImplementedError("Please override the positions_dir method")
+
     # End: Abstract Methods
 
     def _update_metrics_alerts(self):
@@ -510,7 +514,7 @@ class GrafanaAgentCharm(CharmBase):
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
             {
-                "positions_directory": "/tmp/grafana-agent-positions",
+                "positions_directory": f"{self.positions_dir()}/grafana-agent-positions",
                 "configs": configs,
             }
             if configs

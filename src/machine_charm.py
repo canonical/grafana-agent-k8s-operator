@@ -425,7 +425,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             target_path = (
                 f"{fstab_entry.target}/*"
                 if fstab_entry
-                else f"/snap/grafana-agent/current/shared-logs/**/*"
+                else "/snap/grafana-agent/current/shared-logs/**/*"
             )
             job = {
                 "job_name": endpoint.owner,
@@ -465,6 +465,10 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             except snap.SnapError as e:
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)
+
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        return "${SNAP_DATA}"
 
 
 if __name__ == "__main__":

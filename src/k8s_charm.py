@@ -91,7 +91,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
-        return self._scrape.alerts()
+        return self._scrape.alerts
 
     def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""
@@ -145,6 +145,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def restart(self) -> None:
         """Restart grafana agent."""
         self._container.restart("agent")
+
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        return "/run"
 
 
 if __name__ == "__main__":
