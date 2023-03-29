@@ -505,7 +505,7 @@ class COSAgentRequirer(Object):
             # this data is not per app: simply collect it for all peers.
             for unit in chain((self._charm.unit, ), relation.units):
                 config = json.loads(relation.data[next(iter(relation.units))].get("config", "{}"))
-                # todo: fill this in?
+                # todo: fill this in
 
         return config
 
