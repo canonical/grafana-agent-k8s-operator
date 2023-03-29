@@ -193,6 +193,7 @@ LIBPATCH = 2
 PYDEPS = ["cosl"]
 
 DEFAULT_RELATION_NAME = "cos-agent"
+DEFAULT_PEER_RELATION_NAME = "cluster"
 DEFAULT_METRICS_ENDPOINT = {
     "path": "/metrics",
     "port": 80,
@@ -260,15 +261,21 @@ class COSAgentProvider(Object):
 
         for relation in relations:
             if relation.data:
-                if self._charm.unit.is_leader():
-                    relation.data[self._charm.app].update(
-                        {"config": self._generate_application_databag_content()}
-                    )
+                # Subordinate relations can communicate only over unit data.
+
                 relation.data[self._charm.unit].update(
-                    {"config": self._generate_unit_databag_content()}
+                    {
+                        # When the same subordinate is related to multiple apps, "app-data" can
+                        # come from different charms, but is expected to be deduplicated on the
+                        # requirer side.
+                        "app": self._generate_app_databag_content(),
+                        # "unit-data" is unique per unit, regardless of the app it belongs to, and
+                        # is not expected to be deduplicated on the requirer side.
+                        "unit": self._generate_unit_databag_content(),
+                    }
                 )
 
-    def _generate_application_databag_content(self) -> str:
+    def _generate_app_databag_content(self) -> str:
         """Collate the data for each nested app databag and return it."""
         # The application databag is divided in three chunks: alert rules (metrics and logs) and
         # dashboards.
@@ -368,7 +375,9 @@ class COSAgentRequirer(Object):
     def __init__(
         self,
         charm: CharmType,
+        *,
         relation_name: str = DEFAULT_RELATION_NAME,
+        peer_relation_name: str = DEFAULT_PEER_RELATION_NAME,
         refresh_events: Optional[List[str]] = None,
     ):
         """Create a COSAgentRequirer instance.
@@ -376,11 +385,13 @@ class COSAgentRequirer(Object):
         Args:
             charm: The `CharmBase` instance that is instantiating this object.
             relation_name: The name of the relation to communicate over.
+            peer_relation_name: The name of the peer relation to communicate over.
             refresh_events: List of events on which to refresh relation data.
         """
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
+        self._peer_relation_name = peer_relation_name
         self._refresh_events = refresh_events or [self._charm.on.config_changed]
 
         events = self._charm.on[relation_name]
@@ -389,8 +400,44 @@ class COSAgentRequirer(Object):
         for event in self._refresh_events:
             self.framework.observe(event, self.trigger_refresh)
 
-    def _on_relation_data_changed(self, _):
-        self.on.data_changed.emit()
+        # Peer relation events
+        # A peer relation is needed as it is the only mechanism for exchanging data across
+        # subordinate units.
+        # self.framework.observe(
+        #     self.on[self._peer_relation_name].relation_joined, self._on_peer_relation_joined
+        # )
+        peer_events = self._charm.on[peer_relation_name]
+        self.framework.observe(peer_events.relation_changed, self._on_peer_relation_changed)
+
+    @property
+    def peer_relation(self) -> Optional["Relation"]:
+        """Helper function for obtaining the peer relation object.
+
+        Returns: peer relation object
+        (NOTE: would return None if called too early, e.g. during install).
+        """
+        return self.model.get_relation(self._peer_relation_name)
+
+    def _on_peer_relation_changed(self, _):
+        # Peer data is the only means of communication between subordinate units.
+        # Need to update the outgoing relations.
+        if self._charm.unit.is_leader():
+            self.on.data_changed.emit()
+
+    def _on_relation_data_changed(self, event):
+        # Peer data is the only means of communication between subordinate units.
+        # Copy data from the principal relation to the peer relation, so the leader could
+        # follow up.
+        # Save the originating unit name, so it could be used for topology later on.
+
+        # Need to convert data from ops.model.RelationDataContent to string
+        data = json.dumps(dict(event.relation.data[event.unit]))
+        self.peer_relation.data[self._charm.unit][event.unit.name] = data
+
+        # If this unit is the leader, no additional "relation changed" may be emitted.
+        # Need to update the outgoing relations.
+        if self._charm.unit.is_leader():
+            self.on.data_changed.emit()
 
     def trigger_refresh(self, _):
         """Trigger a refresh of relation data."""
@@ -398,10 +445,10 @@ class COSAgentRequirer(Object):
         self.on.data_changed.emit()
 
     @staticmethod
-    def _relation_unit(relation: Relation) -> Optional[Unit]:
+    def _principal_unit(relation: Relation) -> Optional[Unit]:
         """Return the principal unit for a relation."""
         if relation and relation.units:
-            # With subordiante charms, relation.units is always either empty or has only the
+            # With subordinate charms, relation.units is always either empty or has only the
             # principal unit, so next(iter(...)) is fine.
             return next(iter(relation.units))
         return None
@@ -413,15 +460,25 @@ class COSAgentRequirer(Object):
     @staticmethod
     def _fetch_data_from_relation(relation: Relation, primary_key: str, secondary_key: str):
         """Extract data by path from a relation's app data."""
+        # FIXME: figure out how to collect/convert the "app" and "unit" parts of peer unit data
+
         # ensure that whatever context we're running this in, we take the necessary precautions:
         if not relation.data or not relation.app:
             return None
 
         config = {}
         if primary_key == "dashboards" or secondary_key == "alert_rules":
+            # This needs to be something along the lines of
+            # config = self.peer_relation.data[self._charm.unit].get("app")
+            # but repeated for all peer units
+
             config = json.loads(relation.data[relation.app].get("config", "{}"))
         else:
-            unit = COSAgentRequirer._relation_unit(relation)
+            # This needs to be something along the lines of
+            # config = self.peer_relation.data[self._charm.unit].get("unit")
+            # but repeated for all peer units
+
+            unit = COSAgentRequirer._principal_unit(relation)
             if unit and relation.data[unit]:
                 config = json.loads(relation.data[unit].get("config", "{}"))
         return config.get(primary_key, {}).get(secondary_key, None)
@@ -431,7 +488,7 @@ class COSAgentRequirer(Object):
         """Fetch metrics alerts."""
         alert_rules = {}
         for relation in self._relations:
-            unit = self._relation_unit(relation)
+            unit = self._principal_unit(relation)
             # This is only used for naming the file, so be as specific as we
             # can be, but it's ok if the unit name isn't exactly correct, so
             # long as we don't dedupe away the alerts, which will be
