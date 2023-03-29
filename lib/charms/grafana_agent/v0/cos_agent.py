@@ -550,7 +550,6 @@ class COSAgentRequirer(Object):
     def snap_log_endpoints(self) -> List[SnapEndpoint]:
         """Fetch logging endpoints exposed by related snaps."""
         plugs = []
-        relation = self.peer_relation
         targets = self._gather_peer_data("logs", "targets")
         if targets:
             for target in targets:

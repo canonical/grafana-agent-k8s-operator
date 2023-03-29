@@ -1,6 +1,4 @@
-import base64
 import json
-import lzma
 from unittest.mock import MagicMock
 
 from ops.charm import CharmBase
@@ -146,7 +144,6 @@ def test_cosagent_to_peer_data_flow():
     cos_agent_2 = Relation(
         endpoint='cos-agent', interface='cos_agent',
         remote_app_name='other_primary',
-        remote_app_data=databag_contents_2,
         remote_units_data={0: databag_contents_2}
     )
     peer_relation = Relation(endpoint='cluster', interface='grafana_agent_replica')
@@ -184,13 +181,11 @@ def test_cosagent_to_peer_data_flow_rel_2():
     encoded_content_1 = bytes(json.dumps(raw_content_1), 'utf-8')
     compressed_1 = COSAgentProvider._encode_dashboard_content(encoded_content_1)
     config_1 = {"dashboards": {"dashboards": [compressed_1]}}
-
     databag_contents_1 = {'config': json.dumps(config_1)}
 
     cos_agent_1 = Relation(
         endpoint='cos-agent', interface='cos_agent',
         remote_app_name='primary',
-        remote_app_data=databag_contents_1,
         remote_units_data={0: databag_contents_1}
     )
 
