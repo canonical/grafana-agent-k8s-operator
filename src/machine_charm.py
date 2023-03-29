@@ -152,7 +152,6 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
     # we may incur data loss.
     mandatory_relation_pairs = [
         ("cos-agent", ["send-remote-write", "logging-consumer", "grafana-cloud-config"]),
-        ("cos-agent", ["grafana-dashboards-provider"]),
         ("juju-info", ["send-remote-write", "logging-consumer", "grafana-cloud-config"]),
     ]
 
