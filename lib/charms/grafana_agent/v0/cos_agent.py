@@ -164,12 +164,14 @@ import json
 import logging
 import lzma
 from collections import namedtuple
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+import ops.model
 from cosl import JujuTopology
 from cosl.rules import AlertRules
-from ops.charm import RelationEvent
+from ops.charm import RelationEvent, RelationChangedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation, Unit
 from ops.testing import CharmType
@@ -424,7 +426,7 @@ class COSAgentRequirer(Object):
         if self._charm.unit.is_leader():
             self.on.data_changed.emit()
 
-    def _on_relation_data_changed(self, event):
+    def _on_relation_data_changed(self, event: RelationChangedEvent):
         # Peer data is the only means of communication between subordinate units.
         # Copy data from the principal relation to the peer relation, so the leader could
         # follow up.
@@ -446,7 +448,12 @@ class COSAgentRequirer(Object):
 
     @staticmethod
     def _principal_unit(relation: Relation) -> Optional[Unit]:
-        """Return the principal unit for a relation."""
+        """Return the principal unit for a relation.
+
+        Assumes that the relation is of type subordinate.
+        Relies on the fact that, for subordinate relations, the only remote unit visible to
+        *this unit* is the principal unit that this unit is attached to.
+        """
         if relation and relation.units:
             # With subordinate charms, relation.units is always either empty or has only the
             # principal unit, so next(iter(...)) is fine.
@@ -457,64 +464,85 @@ class COSAgentRequirer(Object):
     def _relations(self):
         return self._charm.model.relations[self._relation_name]
 
-    @staticmethod
-    def _fetch_data_from_relation(relation: Relation, primary_key: str, secondary_key: str):
-        """Extract data by path from a relation's app data."""
-        # FIXME: figure out how to collect/convert the "app" and "unit" parts of peer unit data
+    def _gather_peer_data(self, primary_key: str, secondary_key: str) -> Optional[dict]:
+        """Collect data from the peers."""
+        relation = self.peer_relation
 
         # ensure that whatever context we're running this in, we take the necessary precautions:
-        if not relation.data or not relation.app:
+        if not relation or not relation.data or not relation.app:
             return None
 
-        config = {}
-        if primary_key == "dashboards" or secondary_key == "alert_rules":
-            # This needs to be something along the lines of
-            # config = self.peer_relation.data[self._charm.unit].get("app")
-            # but repeated for all peer units
+        # dashboards and alert rules are per-app.
+        is_per_app_data = primary_key == "dashboards" or secondary_key == "alert_rules"
 
-            config = json.loads(relation.data[relation.app].get("config", "{}"))
+        if is_per_app_data:
+            # then we need to iterate through the peers and only collect every primary once.
+            config_per_app = {}
+            seen_apps = set()
+
+            for unit in chain((self._charm.unit, ), relation.units):
+                if not relation.data[unit]:
+                    logger.info(f'peer {unit} has not set its primary data yet; '
+                                f'skipping for now...')
+
+                for primary in relation.data[unit].keys():
+                    # have we already seen this primary app?
+                    if primary_app_name := primary.split('/')[0] in seen_apps:
+                        continue
+
+                    seen_apps.add(primary_app_name)
+
+                    raw_data = json.loads(relation.data[unit][primary])
+                    if raw_data:
+                        # todo: double json-decode?? verify this is correct
+                        global_config = json.loads(raw_data['config'])
+                        app_config = global_config.get(primary_key, {}).get(secondary_key, None)
+                        config_per_app[primary] = app_config
+
+            config = config_per_app
+
         else:
-            # This needs to be something along the lines of
-            # config = self.peer_relation.data[self._charm.unit].get("unit")
-            # but repeated for all peer units
+            # this data is not per app: simply collect it for all peers.
+            for unit in chain((self._charm.unit, ), relation.units):
+                config = json.loads(relation.data[next(iter(relation.units))].get("config", "{}"))
+                # todo: fill this in?
 
-            unit = COSAgentRequirer._principal_unit(relation)
-            if unit and relation.data[unit]:
-                config = json.loads(relation.data[unit].get("config", "{}"))
-        return config.get(primary_key, {}).get(secondary_key, None)
+        return config
 
     @property
     def metrics_alerts(self) -> Dict[str, Any]:
         """Fetch metrics alerts."""
         alert_rules = {}
-        for relation in self._relations:
-            unit = self._principal_unit(relation)
-            # This is only used for naming the file, so be as specific as we
-            # can be, but it's ok if the unit name isn't exactly correct, so
-            # long as we don't dedupe away the alerts, which will be
-            identifier = JujuTopology(
-                model=self._charm.model.name,
-                model_uuid=self._charm.model.uuid,
-                application=relation.app.name if relation.app else "unknown",
-                unit=unit.name if unit else "unknown",
-            ).identifier
-            if data := self._fetch_data_from_relation(relation, "metrics", "alert_rules"):
-                alert_rules.update({identifier: data})
+        relation = self.peer_relation
+        unit = self._principal_unit(relation)
+        # This is only used for naming the file, so be as specific as we
+        # can be, but it's ok if the unit name isn't exactly correct, so
+        # long as we don't dedupe away the alerts, which will be
+        identifier = JujuTopology(
+            model=self._charm.model.name,
+            model_uuid=self._charm.model.uuid,
+            application=relation.app.name if relation.app else "unknown",
+            unit=unit.name if unit else "unknown",
+        ).identifier
+        data = self._gather_peer_data("metrics", "alert_rules")
+        if data:
+            alert_rules.update({identifier: data})
         return alert_rules
 
     @property
     def metrics_jobs(self) -> List[Dict]:
         """Parse the relation data contents and extract the metrics jobs."""
         scrape_jobs = []
-        for relation in self._relations:
-            if jobs := self._fetch_data_from_relation(relation, "metrics", "scrape_jobs"):
-                for job in jobs:
-                    job_config = {
-                        "job_name": job["job_name"],
-                        "metrics_path": job["path"],
-                        "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
-                    }
-                    scrape_jobs.append(job_config)
+        relation = self.peer_relation
+        jobs = self._gather_peer_data("metrics", "scrape_jobs")
+        if jobs:
+            for job in jobs:
+                job_config = {
+                    "job_name": job["job_name"],
+                    "metrics_path": job["path"],
+                    "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
+                }
+                scrape_jobs.append(job_config)
 
         return scrape_jobs
 
@@ -522,17 +550,18 @@ class COSAgentRequirer(Object):
     def snap_log_endpoints(self) -> List[SnapEndpoint]:
         """Fetch logging endpoints exposed by related snaps."""
         plugs = []
-        for relation in self._relations:
-            if targets := self._fetch_data_from_relation(relation, "logs", "targets"):
-                for target in targets:
-                    if target in plugs:
-                        logger.warning(
-                            f"plug {target} already listed. "
-                            "The same snap is being passed from multiple "
-                            "endpoints; this should not happen."
-                        )
-                    else:
-                        plugs.append(target)
+        relation = self.peer_relation
+        targets = self._gather_peer_data("logs", "targets")
+        if targets:
+            for target in targets:
+                if target in plugs:
+                    logger.warning(
+                        f"plug {target} already listed. "
+                        "The same snap is being passed from multiple "
+                        "endpoints; this should not happen."
+                    )
+                else:
+                    plugs.append(target)
 
         endpoints = []
         for plug in plugs:
@@ -547,36 +576,37 @@ class COSAgentRequirer(Object):
     def logs_alerts(self) -> Dict[str, Any]:
         """Fetch log alerts."""
         alert_rules = {}
-        for relation in self._relations:
-            # This is only used for naming the file, so be as specific as we
-            # can be, but it's ok if the unit name isn't exactly correct, so
-            # long as we don't dedupe away the alerts, which will be
+        # This is only used for naming the file, so be as specific as we
+        # can be, but it's ok if the unit name isn't exactly correct, so
+        # long as we don't dedupe away the alerts, which will be
+        source, rules = self._gather_peer_data("logs", "alert_rules")
+        if rules:
             identifier = JujuTopology(
                 model=self._charm.model.name,
                 model_uuid=self._charm.model.uuid,
-                application=relation.app.name if relation.app else "unknown",
+                application=source or "unknown",
                 unit=self._charm.unit.name,
             ).identifier
-            if rules := self._fetch_data_from_relation(relation, "logs", "alert_rules"):
-                alert_rules.update({identifier: rules})
+
+            alert_rules.update({identifier: rules})
         return alert_rules
 
     @property
     def dashboards(self) -> List[Dict[str, str]]:
         """Fetch dashboards as encoded content."""
         dashboards = []  # type: List[Dict[str, str]]
-        for relation in self._relations:
-            if dashboard_data := self._fetch_data_from_relation(
-                relation, "dashboards", "dashboards"
-            ):
-                for dashboard in dashboard_data:
-                    content = self._decode_dashboard_content(dashboard)
+        relation = self.peer_relation
+        dashboard_data = self._gather_peer_data("dashboards", "dashboards")
+        if dashboard_data:
+            for primary, primary_dashboards in dashboard_data.items():
+                for encoded_dashboard in primary_dashboards:
+                    content = self._decode_dashboard_content(encoded_dashboard)
                     title = json.loads(content).get("title", "no_title")
                     dashboards.append(
                         {
                             "relation_id": str(relation.id),
                             # We don't have the remote charm name, but give us an identifier
-                            "charm": f"{relation.name}-{relation.app.name if relation.app else 'unknown'}",
+                            "charm": f"{relation.name}-{primary if primary else 'unknown'}",
                             "content": content,
                             "title": title,
                         }
