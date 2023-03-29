@@ -32,7 +32,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     # incur data loss.
     mandatory_relation_pairs = [
         ("metrics-endpoint", ["send-remote-write", "logging-consumer", "grafana-cloud-config"]),
-        ("grafana-dashboards-consumer", ["grafana-dashboards-provider"]),
     ]
 
     def __init__(self, *args):
