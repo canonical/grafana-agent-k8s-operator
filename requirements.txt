@@ -6,6 +6,7 @@
 # That's why we are including cosl here until the bug in charmcraft is solved
 cosl
 ops
+pydantic
 requests
 kubernetes
 lightkube

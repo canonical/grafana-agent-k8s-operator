@@ -1,30 +1,47 @@
 import json
 from unittest.mock import MagicMock
 
-from charms.grafana_agent.v0.cos_agent import COSAgentProvider, COSAgentRequirer
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider, COSAgentRequirer, CosAgentProviderUnitData, \
+    GrafanaDashboard, CosAgentClusterUnitData
 from ops.charm import CharmBase
 from ops.framework import Framework
 from scenario import Relation, State
+
+
+def encode_as_dashboard(dct: dict):
+    return GrafanaDashboard.serialize(json.dumps(dct).encode('utf-8'))
 
 
 def test_fetch_data_from_relation():
     relation = MagicMock()
     unit = MagicMock()
     app = MagicMock()
+    py_dash = {"title": "title", "foo": "bar"}
 
-    relation.units = [unit]
-    content = json.dumps({"title": "title", "foo": "bar"})
-    encoded_content = bytes(json.dumps(content), "utf-8")
-    compressed = COSAgentProvider._encode_dashboard_content(encoded_content)
-    config = {"dashboards": {"dashboards": [compressed]}}
+    relation.units = []  # there should be remote units in here, presumably
+    config = {
+        "principal_unit_name": "principal/0",
+        "principal_relation_id": "0",
+        "principal_relation_name": "foo",
+        "dashboards": [encode_as_dashboard(py_dash)]
+    }
     relation.app = app
-    relation.data = {app: {"config": json.dumps(config)}, unit: {}}
+    relation.data = {
+        unit: {CosAgentClusterUnitData.VERSION: json.dumps(config)},
+        app: {}
+    }
 
     obj = MagicMock()
     obj._charm.unit = unit
 
     obj.peer_relation = relation
-    COSAgentRequirer._gather_peer_data(obj, "dashboards", "dashboards")
+    data = COSAgentRequirer._gather_peer_data(obj)
+    assert len(data) == 1
+
+    data_peer_1 = data[0]
+    assert len(data_peer_1.dashboards) == 1
+    dash_out_raw = data_peer_1.dashboards[0]
+    assert GrafanaDashboard(dash_out_raw).deserialize() == py_dash
 
 
 class MyRequirerCharm(CharmBase):
@@ -91,19 +108,16 @@ def test_no_dashboards_peer_cosagent():
 
 
 def test_cosagent_to_peer_data_flow_dashboards():
-    raw_content_1 = {"title": "title", "foo": "bar"}
-    encoded_content_1 = bytes(json.dumps(raw_content_1), "utf-8")
-    compressed_1 = COSAgentProvider._encode_dashboard_content(encoded_content_1)
-    config_1 = {"dashboards": {"dashboards": [compressed_1]}}
+    # This test verifies that if the charm receives via cos-agent a dashboard,
+    # it is correctly transferred to peer relation data.
 
-    databag_contents_1 = {"config": json.dumps(config_1)}
-
+    raw_dashboard_1 = {"title": "title", "foo": "bar"}
+    raw_data_1 = CosAgentProviderUnitData(dashboards=[encode_as_dashboard(raw_dashboard_1)])
     cos_agent = Relation(
         endpoint="cos-agent",
         interface="cos_agent",
         remote_app_name="primary",
-        remote_app_data=databag_contents_1,
-        remote_units_data={0: databag_contents_1},
+        remote_units_data={0: json.loads(raw_data_1.json())},
     )
     peer_relation = Relation(endpoint="cluster", interface="grafana_agent_replica")
 
@@ -120,96 +134,31 @@ def test_cosagent_to_peer_data_flow_dashboards():
     )
 
     peer_relation_out = next(filter(lambda r: r.endpoint == "cluster", state_out.relations))
-    assert peer_relation_out.local_unit_data["primary/0"] == json.dumps(databag_contents_1)
-
-
-def test_cosagent_to_peer_data_flow():
-    raw_content_1 = {"title": "title", "foo": "bar"}
-    encoded_content_1 = bytes(json.dumps(raw_content_1), "utf-8")
-    compressed_1 = COSAgentProvider._encode_dashboard_content(encoded_content_1)
-    config_1 = {"dashboards": {"dashboards": [compressed_1]}}
-
-    databag_contents_1 = {"config": json.dumps(config_1)}
-
-    cos_agent_1 = Relation(
-        endpoint="cos-agent",
-        interface="cos_agent",
-        remote_app_name="primary",
-        remote_app_data=databag_contents_1,
-        remote_units_data={0: databag_contents_1},
-    )
-
-    raw_content_2 = {"title": "other_title", "foo": "other bar (would that be a pub?)"}
-    encoded_content_2 = bytes(json.dumps(raw_content_2), "utf-8")
-    compressed_2 = COSAgentProvider._encode_dashboard_content(encoded_content_2)
-    config_2 = {"dashboards": {"dashboards": [compressed_2]}}
-
-    databag_contents_2 = {"config": json.dumps(config_2)}
-
-    cos_agent_2 = Relation(
-        endpoint="cos-agent",
-        interface="cos_agent",
-        remote_app_name="other_primary",
-        remote_units_data={0: databag_contents_2},
-    )
-    peer_relation = Relation(endpoint="cluster", interface="grafana_agent_replica")
-
-    state = State(
-        relations=[
-            peer_relation,
-            cos_agent_1,
-            cos_agent_2,
+    peer_data = peer_relation_out.local_unit_data["v1"]
+    assert json.loads(peer_data)['dashboards'] == [
+            encode_as_dashboard(raw_dashboard_1)
         ]
-    )
-
-    def post_event(charm: MyRequirerCharm):
-        dashboards = charm.cosagent.dashboards
-        assert dashboards
-
-        assert len(dashboards) == 1
-
-        dash = dashboards[0]
-        assert dash["title"] == "title"
-        assert json.loads(dash["content"]) == raw_content_1
-
-    state_out = state.trigger(
-        charm_type=MyRequirerCharm,
-        meta=MyRequirerCharm.META,
-        event=cos_agent_1.changed_event(remote_unit=0),
-        post_event=post_event,
-    )
-
-    peer_relation_out = next(filter(lambda r: r.endpoint == "cluster", state_out.relations))
-    assert peer_relation_out.local_unit_data["primary/0"] == json.dumps(databag_contents_1)
 
 
-def test_cosagent_to_peer_data_flow_rel_2():
-    raw_content_1 = {"title": "title", "foo": "bar"}
-    encoded_content_1 = bytes(json.dumps(raw_content_1), "utf-8")
-    compressed_1 = COSAgentProvider._encode_dashboard_content(encoded_content_1)
-    config_1 = {"dashboards": {"dashboards": [compressed_1]}}
-    databag_contents_1 = {"config": json.dumps(config_1)}
-
+def test_cosagent_to_peer_data_flow_relation():
+    # dump the data the same way the provider would
+    raw_dashboard_1 = {"title": "title", "foo": "bar"}
+    data_1 = CosAgentProviderUnitData(dashboards=[encode_as_dashboard(raw_dashboard_1)])
     cos_agent_1 = Relation(
         endpoint="cos-agent",
         interface="cos_agent",
         remote_app_name="primary",
-        remote_units_data={0: databag_contents_1},
+        remote_units_data={0: json.loads(data_1.json())},
     )
 
-    raw_content_2 = {"title": "other_title", "foo": "other bar (would that be a pub?)"}
-    encoded_content_2 = bytes(json.dumps(raw_content_2), "utf-8")
-    compressed_2 = COSAgentProvider._encode_dashboard_content(encoded_content_2)
-    config_2 = {"dashboards": {"dashboards": [compressed_2]}}
-
-    databag_contents_2 = {"config": json.dumps(config_2)}
+    raw_dashboard_2 = {"title": "other_title", "foo": "other bar (would that be a pub?)"}
+    data_2 = CosAgentProviderUnitData(dashboards=[encode_as_dashboard(raw_dashboard_2)])
 
     cos_agent_2 = Relation(
         endpoint="cos-agent",
         interface="cos_agent",
         remote_app_name="other_primary",
-        remote_app_data=databag_contents_2,
-        remote_units_data={0: databag_contents_2},
+        remote_units_data={0: json.loads(data_2.json())},
     )
 
     # now the peer relation already contains the primary/0 information
@@ -217,7 +166,13 @@ def test_cosagent_to_peer_data_flow_rel_2():
     peer_relation = Relation(
         endpoint="cluster",
         interface="grafana_agent_replica",
-        local_unit_data={"primary/0": json.dumps(databag_contents_1)},
+        local_unit_data={
+            CosAgentClusterUnitData.VERSION: CosAgentClusterUnitData(
+                principal_unit_name='principal',
+                principal_relation_id='42',
+                principal_relation_name='foobar-relation',
+                dashboards=[encode_as_dashboard(raw_dashboard_1)]).json()
+        }
     )
 
     state = State(
@@ -228,17 +183,25 @@ def test_cosagent_to_peer_data_flow_rel_2():
         ]
     )
 
-    def post_event(charm: MyRequirerCharm):
+    def pre_event(charm: MyRequirerCharm):
         dashboards = charm.cosagent.dashboards
-        assert dashboards
+        assert len(dashboards) == 1
 
         dash = dashboards[0]
         assert dash["title"] == "title"
-        assert json.loads(dash["content"]) == raw_content_1
+        assert dash["content"] == raw_dashboard_1
+
+    def post_event(charm: MyRequirerCharm):
+        dashboards = charm.cosagent.dashboards
+        assert len(dashboards) == 2
+
+        dash = dashboards[0]
+        assert dash["title"] == "title"
+        assert dash["content"] == raw_dashboard_1
 
         dash = dashboards[1]
         assert dash["title"] == "other_title"
-        assert json.loads(dash["content"]) == raw_content_2
+        assert dash["content"] == raw_dashboard_2
 
     state_out = state.trigger(
         charm_type=MyRequirerCharm,
@@ -247,9 +210,13 @@ def test_cosagent_to_peer_data_flow_rel_2():
         # the charm should update peer data
         # and in post_event the dashboard should be there.
         event=cos_agent_2.changed_event(remote_unit=0),
+        pre_event=pre_event,
         post_event=post_event,
     )
 
     peer_relation_out = next(filter(lambda r: r.endpoint == "cluster", state_out.relations))
-    assert peer_relation_out.local_unit_data["primary/0"] == json.dumps(databag_contents_1)
-    assert peer_relation_out.local_unit_data["other_primary/0"] == json.dumps(databag_contents_2)
+    peer_data = peer_relation_out.local_unit_data["v1"]
+    assert set(json.loads(peer_data)['dashboards']) == {
+            encode_as_dashboard(raw_dashboard_1),
+            encode_as_dashboard(raw_dashboard_2)
+        }
