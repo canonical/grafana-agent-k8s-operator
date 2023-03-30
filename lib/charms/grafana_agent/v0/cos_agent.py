@@ -171,7 +171,6 @@ from typing import (
     Any,
     ClassVar,
     Dict,
-    Iterable,
     List,
     Optional,
     Set,
@@ -217,19 +216,21 @@ SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
 class GrafanaDashboard(str):
     """Grafana Dashboard encoded json; lzma-compressed."""
 
-    # TODO (Leon): when pydantic v2 releases, you shall replace this with a custom type.
+    # TODO Replace this with a custom type when pydantic v2 released (end of 2023 Q1?)
+    # https://github.com/pydantic/pydantic/issues/4887
     @staticmethod
-    def serialize(raw_json: Union[str, bytes]) -> "GrafanaDashboard":
+    def _serialize(raw_json: Union[str, bytes]) -> "GrafanaDashboard":
         if not isinstance(raw_json, bytes):
             raw_json = raw_json.encode("utf-8")
         encoded = base64.b64encode(lzma.compress(raw_json)).decode("utf-8")
         return GrafanaDashboard(encoded)
 
-    def deserialize(self) -> Dict:
+    def _deserialize(self) -> Dict:
         raw = lzma.decompress(base64.b64decode(self.encode("utf-8"))).decode()
         return json.loads(raw)
 
     def __repr__(self):
+        """Return string representation of self."""
         return "<GrafanaDashboard>"
 
 
@@ -277,6 +278,11 @@ class CosAgentClusterUnitData(pydantic.BaseModel):
 
     @property
     def app_name(self) -> str:
+        """Parse out the app name from the unit name.
+
+        TODO: Switch to using `model_post_init` when pydantic v2 is released?
+          https://github.com/pydantic/pydantic/issues/1729#issuecomment-1300576214
+        """
         return self.principal_unit_name.split("/")[0]
 
 
@@ -383,7 +389,7 @@ class COSAgentProvider(Object):
         dashboards: List[GrafanaDashboard] = []
         for d in self._dashboard_dirs:
             for path in Path(d).glob("*"):
-                dashboard = GrafanaDashboard.serialize(path.read_bytes())
+                dashboard = GrafanaDashboard._serialize(path.read_bytes())
                 dashboards.append(dashboard)
         return dashboards
 
@@ -698,7 +704,7 @@ class COSAgentRequirer(Object):
             seen_apps.append(app_name)
 
             for encoded_dashboard in data.dashboards or ():
-                content = GrafanaDashboard(encoded_dashboard).deserialize()
+                content = GrafanaDashboard(encoded_dashboard)._deserialize()
 
                 title = content.get("title", "no_title")
 

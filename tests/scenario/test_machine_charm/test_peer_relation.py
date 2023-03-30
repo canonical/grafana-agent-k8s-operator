@@ -1,3 +1,5 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
 import json
 import tempfile
 from pathlib import Path
@@ -20,7 +22,7 @@ from scenario import PeerRelation, Relation, State, SubordinateRelation
 
 
 def encode_as_dashboard(dct: dict):
-    return GrafanaDashboard.serialize(json.dumps(dct).encode("utf-8"))
+    return GrafanaDashboard._serialize(json.dumps(dct).encode("utf-8"))
 
 
 def test_fetch_data_from_relation():
@@ -49,7 +51,7 @@ def test_fetch_data_from_relation():
     data_peer_1 = data[0]
     assert len(data_peer_1.dashboards) == 1
     dash_out_raw = data_peer_1.dashboards[0]
-    assert GrafanaDashboard(dash_out_raw).deserialize() == py_dash
+    assert GrafanaDashboard(dash_out_raw)._deserialize() == py_dash
 
 
 class MyRequirerCharm(CharmBase):
@@ -260,11 +262,11 @@ def test_cosagent_to_peer_data_flow_relation(leader):
 @pytest.mark.parametrize("leader", (True, False))
 def test_cosagent_to_peer_data_app_vs_unit(leader):
     # this test verifies that if multiple units (belonging to different apps) all publish their own
-    # CosAgentProviderUnitData via `cos-agent`, then the `cluster` peer relation will be populated with
-    # the right data.
-    # this means:
-    # the per-app data is only collected once per application (dedup'ed)
-    # the per-unit data is collected across all units.
+    # CosAgentProviderUnitData via `cos-agent`, then the `cluster` peer relation will be populated
+    # with the right data.
+    # This means:
+    # - The per-app data is only collected once per application (dedup'ed).
+    # - The per-unit data is collected across all units.
 
     # dump the data the same way the provider would
     raw_dashboard_1 = {"title": "title", "foo": "bar"}
@@ -335,8 +337,8 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
         assert dash["content"] == raw_dashboard_1
 
     def post_event(charm: MyRequirerCharm):
-        # after the event is processed, the charm has copied its primary's 'cos-agent' data into its
-        # 'cluster' peer databag, therefore there are now two dashboards.
+        # after the event is processed, the charm has copied its primary's 'cos-agent' data into
+        # its 'cluster' peer databag, therefore there are now two dashboards.
         # The source of the dashboards is peer data.
 
         dashboards = charm.cosagent.dashboards
