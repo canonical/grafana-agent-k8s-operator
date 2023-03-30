@@ -551,7 +551,7 @@ class COSAgentRequirer(Object):
             if units := principal_relation.units:
                 # Technically it's a list, but for subordinates there can only be one
                 unit = next(iter(units))
-                data = principal_relation.data[unit][CosAgentProviderUnitData.KEY]
+                data = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
                 if data:
                     return CosAgentProviderUnitData(**data)
 
