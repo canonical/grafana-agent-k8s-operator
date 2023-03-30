@@ -190,7 +190,6 @@ if TYPE_CHECKING:
     try:
         from typing import TypedDict
 
-
         class _MetricsEndpointDict(TypedDict):
             path: str
             port: int
@@ -216,9 +215,9 @@ SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
 
 
 class GrafanaDashboard(str):
-    """Grafana Dashboard encoded json; encoded."""
+    """Grafana Dashboard encoded json; lzma-compressed."""
 
-    # todo: when pydantic v2 releases, we should replace this with a custom type.
+    # TODO (Leon): when pydantic v2 releases, you shall replace this with a custom type.
     @staticmethod
     def serialize(raw_json: Union[str, bytes]) -> "GrafanaDashboard":
         if not isinstance(raw_json, bytes):
@@ -239,13 +238,15 @@ class CosAgentProviderUnitData(pydantic.BaseModel):
 
     # The following entries are the same for all units of the same principal.
     # Note that the same grafana agent subordinate may be related to several apps.
-    metrics_alert_rules: Optional[dict] = None
-    log_alert_rules: Optional[dict] = None
-    dashboards: Optional[List[GrafanaDashboard]] = None
+    # this needs to make its way to the gagent leader
+    metrics_alert_rules: dict
+    log_alert_rules: dict
+    dashboards: List[GrafanaDashboard]
 
     # The following entries may vary across units of the same principal app.
-    metrics_scrape_jobs: Optional[List[Dict]]
-    log_slots: Optional[List[str]]
+    # this data does not need to be forwarded to the gagent leader
+    metrics_scrape_jobs: List[Dict]
+    log_slots: List[str]
 
     # when this whole datastructure is dumped into a databag, it will be nested under this key.
     # while not strictly necessary (we could have it 'flattened out' into the databag),
@@ -283,16 +284,16 @@ class COSAgentProvider(Object):
     """Integration endpoint wrapper for the provider side of the cos_agent interface."""
 
     def __init__(
-            self,
-            charm: CharmType,
-            relation_name: str = DEFAULT_RELATION_NAME,
-            metrics_endpoints: Optional[List["_MetricsEndpointDict"]] = None,
-            metrics_rules_dir: str = "./src/prometheus_alert_rules",
-            logs_rules_dir: str = "./src/loki_alert_rules",
-            recurse_rules_dirs: bool = False,
-            log_slots: Optional[List[str]] = None,
-            dashboard_dirs: Optional[List[str]] = None,
-            refresh_events: Optional[List] = None,
+        self,
+        charm: CharmType,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        metrics_endpoints: Optional[List["_MetricsEndpointDict"]] = None,
+        metrics_rules_dir: str = "./src/prometheus_alert_rules",
+        logs_rules_dir: str = "./src/loki_alert_rules",
+        recurse_rules_dirs: bool = False,
+        log_slots: Optional[List[str]] = None,
+        dashboard_dirs: Optional[List[str]] = None,
+        refresh_events: Optional[List] = None,
     ):
         """Create a COSAgentProvider instance.
 
@@ -350,8 +351,7 @@ class COSAgentProvider(Object):
                         metrics_scrape_jobs=self._scrape_jobs,
                         log_slots=self._log_slots,
                     )
-
-                    relation.data[self._charm.unit][CosAgentProviderUnitData.KEY] = data.json()
+                    relation.data[self._charm.unit][data.KEY] = data.json()
 
     @property
     def _scrape_jobs(self) -> List[Dict]:
@@ -404,12 +404,12 @@ class COSAgentRequirer(Object):
     on = COSAgentRequirerEvents()
 
     def __init__(
-            self,
-            charm: CharmType,
-            *,
-            relation_name: str = DEFAULT_RELATION_NAME,
-            peer_relation_name: str = DEFAULT_PEER_RELATION_NAME,
-            refresh_events: Optional[List[str]] = None,
+        self,
+        charm: CharmType,
+        *,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        peer_relation_name: str = DEFAULT_PEER_RELATION_NAME,
+        refresh_events: Optional[List[str]] = None,
     ):
         """Create a COSAgentRequirer instance.
 
@@ -451,11 +451,6 @@ class COSAgentRequirer(Object):
         """
         return self.model.get_relation(self._peer_relation_name)
 
-    @property
-    def cos_agent_relations(self) -> Iterable["Relation"]:
-        """Helper function for obtaining the cos-agent relations."""
-        return self.model.relations[self._relation_name]
-
     def _on_peer_relation_changed(self, _):
         # Peer data is used for forwarding data from principal units to the grafana agent
         # subordinate leader, for updating the app data of the outgoing o11y relations.
@@ -477,21 +472,21 @@ class COSAgentRequirer(Object):
         log_alert_rules = {}
         dashboards = []
 
-        for cos_agent_relation in self.cos_agent_relations:
-            # for all related units: gather the config.
-            units = cos_agent_relation.units
-            if len(units) > 1:
-                # should never happen
-                raise ValueError(
-                    f"unexpected error: subordinate relation {cos_agent_relation} "
-                    f"should have exactly one unit"
-                )
-            unit = next(iter(units))
-            raw = cos_agent_relation.data[unit][CosAgentProviderUnitData.KEY]
-            provider_data = CosAgentProviderUnitData(**json.loads(raw))
-            metrics_alert_rules.update(provider_data.metrics_alert_rules or {})
-            log_alert_rules.update(provider_data.log_alert_rules or {})
-            dashboards.extend(provider_data.dashboards or ())
+        cos_agent_relation = event.relation
+        # for all related units: gather the config.
+        units = cos_agent_relation.units
+        if len(units) > 1:
+            # should never happen
+            raise ValueError(
+                f"unexpected error: subordinate relation {cos_agent_relation} "
+                f"should have exactly one unit"
+            )
+        unit = next(iter(units))
+        raw = cos_agent_relation.data[unit][CosAgentProviderUnitData.KEY]
+        provider_data = CosAgentProviderUnitData(**json.loads(raw))
+        metrics_alert_rules.update(provider_data.metrics_alert_rules or {})
+        log_alert_rules.update(provider_data.log_alert_rules or {})
+        dashboards.extend(provider_data.dashboards or ())
 
         # this is the peer relation databag model
         data = CosAgentClusterUnitData(
@@ -573,7 +568,7 @@ class COSAgentRequirer(Object):
 
         for unit in chain((self._charm.unit,), relation.units):
             if not relation.data.get(unit) or not (
-                    raw := relation.data[unit].get(CosAgentClusterUnitData.KEY)
+                raw := relation.data[unit].get(CosAgentClusterUnitData.KEY)
             ):
                 logger.info(f"peer {unit} has not set its primary data yet; skipping for now...")
                 continue

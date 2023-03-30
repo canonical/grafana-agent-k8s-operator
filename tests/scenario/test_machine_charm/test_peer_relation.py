@@ -1,12 +1,18 @@
 import json
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
 from charms.grafana_agent.v0.cos_agent import (
     CosAgentClusterUnitData,
     COSAgentProvider,
     CosAgentProviderUnitData,
     COSAgentRequirer,
     GrafanaDashboard,
+)
+from charms.prometheus_k8s.v0.prometheus_remote_write import (
+    PrometheusRemoteWriteConsumer,
 )
 from ops.charm import CharmBase
 from ops.framework import Framework
@@ -49,13 +55,17 @@ def test_fetch_data_from_relation():
 class MyRequirerCharm(CharmBase):
     META = {
         "name": "test",
-        "requires": {"cos-agent": {"interface": "cos_agent"}},
+        "requires": {
+            "cos-agent": {"interface": "cos_agent"},
+            "send-remote-write": {"interface": "prometheus_remote_write"},
+        },
         "peers": {"cluster": {"interface": "grafana_agent_replica"}},
     }
 
     def __init__(self, framework: Framework):
         super().__init__(framework)
         self.cosagent = COSAgentRequirer(self)
+        self.prom = PrometheusRemoteWriteConsumer(self)
         framework.observe(self.cosagent.on.data_changed, self._on_cosagent_data_changed)
 
     def _on_cosagent_data_changed(self, _):
@@ -111,12 +121,19 @@ def test_no_dashboards_peer_cosagent():
     )
 
 
-def test_cosagent_to_peer_data_flow_dashboards():
+@pytest.mark.parametrize("leader", (True, False))
+def test_cosagent_to_peer_data_flow_dashboards(leader):
     # This test verifies that if the charm receives via cos-agent a dashboard,
     # it is correctly transferred to peer relation data.
 
     raw_dashboard_1 = {"title": "title", "foo": "bar"}
-    raw_data_1 = CosAgentProviderUnitData(dashboards=[encode_as_dashboard(raw_dashboard_1)])
+    raw_data_1 = CosAgentProviderUnitData(
+        metrics_alert_rules={},
+        log_alert_rules={},
+        metrics_scrape_jobs=[],
+        log_slots=[],
+        dashboards=[encode_as_dashboard(raw_dashboard_1)],
+    )
     cos_agent = SubordinateRelation(
         endpoint="cos-agent",
         interface="cos_agent",
@@ -125,7 +142,7 @@ def test_cosagent_to_peer_data_flow_dashboards():
     )
     peer_relation = PeerRelation(endpoint="cluster", interface="grafana_agent_replica")
 
-    state = State(relations=[peer_relation, cos_agent])
+    state = State(relations=[peer_relation, cos_agent], leader=leader)
 
     def post_event(charm: MyRequirerCharm):
         assert charm.cosagent.dashboards
@@ -142,10 +159,18 @@ def test_cosagent_to_peer_data_flow_dashboards():
     assert json.loads(peer_data)["dashboards"] == [encode_as_dashboard(raw_dashboard_1)]
 
 
-def test_cosagent_to_peer_data_flow_relation():
+@pytest.mark.parametrize("leader", (True, False))
+def test_cosagent_to_peer_data_flow_relation(leader):
     # dump the data the same way the provider would
     raw_dashboard_1 = {"title": "title", "foo": "bar"}
-    data_1 = CosAgentProviderUnitData(dashboards=[encode_as_dashboard(raw_dashboard_1)])
+    data_1 = CosAgentProviderUnitData(
+        metrics_alert_rules={},
+        log_alert_rules={},
+        metrics_scrape_jobs=[],
+        log_slots=[],
+        dashboards=[encode_as_dashboard(raw_dashboard_1)],
+    )
+
     cos_agent_1 = Relation(
         endpoint="cos-agent",
         interface="cos_agent",
@@ -154,7 +179,13 @@ def test_cosagent_to_peer_data_flow_relation():
     )
 
     raw_dashboard_2 = {"title": "other_title", "foo": "other bar (would that be a pub?)"}
-    data_2 = CosAgentProviderUnitData(dashboards=[encode_as_dashboard(raw_dashboard_2)])
+    data_2 = CosAgentProviderUnitData(
+        metrics_alert_rules={},
+        log_alert_rules={},
+        metrics_scrape_jobs=[],
+        log_slots=[],
+        dashboards=[encode_as_dashboard(raw_dashboard_2)],
+    )
 
     cos_agent_2 = SubordinateRelation(
         endpoint="cos-agent",
@@ -179,11 +210,12 @@ def test_cosagent_to_peer_data_flow_relation():
     )
 
     state = State(
+        leader=leader,
         relations=[
             peer_relation,
             cos_agent_1,
             cos_agent_2,
-        ]
+        ],
     )
 
     def pre_event(charm: MyRequirerCharm):
@@ -225,7 +257,8 @@ def test_cosagent_to_peer_data_flow_relation():
     }
 
 
-def test_cosagent_to_peer_data_app_vs_unit():
+@pytest.mark.parametrize("leader", (True, False))
+def test_cosagent_to_peer_data_app_vs_unit(leader):
     # this test verifies that if multiple units (belonging to different apps) all publish their own
     # CosAgentProviderUnitData via `cos-agent`, then the `cluster` peer relation will be populated with
     # the right data.
@@ -241,12 +274,6 @@ def test_cosagent_to_peer_data_app_vs_unit():
         log_alert_rules={"a": "b", "c": 2},
         metrics_scrape_jobs=[{"1": 2, "2": 3}],
         log_slots=["foo:bar", "bax:qux"],
-    )
-    cos_agent_1 = SubordinateRelation(
-        endpoint="cos-agent",
-        interface="cos_agent",
-        primary_app_name="primary",
-        remote_unit_data={data_1.KEY: data_1.json()},
     )
 
     # there's an "other_primary" app also relating over `cos-agent`
@@ -291,14 +318,15 @@ def test_cosagent_to_peer_data_app_vs_unit():
     )
 
     state = State(
+        leader=leader,
         relations=[
             peer_relation,
-            cos_agent_1,
             cos_agent_2,
-        ]
+        ],
     )
 
     def pre_event(charm: MyRequirerCharm):
+        # verify that before the event is processed, the charm correctly gathers only 1 dashboard
         dashboards = charm.cosagent.dashboards
         assert len(dashboards) == 1
 
@@ -307,29 +335,135 @@ def test_cosagent_to_peer_data_app_vs_unit():
         assert dash["content"] == raw_dashboard_1
 
     def post_event(charm: MyRequirerCharm):
+        # after the event is processed, the charm has copied its primary's 'cos-agent' data into its
+        # 'cluster' peer databag, therefore there are now two dashboards.
+        # The source of the dashboards is peer data.
+
         dashboards = charm.cosagent.dashboards
         assert len(dashboards) == 2
 
         dash = dashboards[0]
-        assert dash["title"] == "title"
-        assert dash["content"] == raw_dashboard_1
-
-        dash = dashboards[1]
         assert dash["title"] == "other_title"
         assert dash["content"] == raw_dashboard_2
+
+        dash = dashboards[1]
+        assert dash["title"] == "title"
+        assert dash["content"] == raw_dashboard_1
 
     state_out = state.trigger(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         # our primary #0 has just updated its peer relation databag
-        event=cos_agent_1.changed_event(remote_unit=0),
+        event=cos_agent_2.changed_event(remote_unit=0),
         pre_event=pre_event,
         post_event=post_event,
     )
 
-    peer_relation_out = next(filter(lambda r: r.endpoint == "cluster", state_out.relations))
-    peer_data = peer_relation_out.local_unit_data[CosAgentClusterUnitData.KEY]
-    assert set(json.loads(peer_data)["dashboards"]) == {
-        encode_as_dashboard(raw_dashboard_1),
-        encode_as_dashboard(raw_dashboard_2),
+    peer_relation_out: PeerRelation = next(
+        filter(lambda r: r.endpoint == "cluster", state_out.relations)
+    )
+    my_databag_peer_data = peer_relation_out.local_unit_data[CosAgentClusterUnitData.KEY]
+    assert set(json.loads(my_databag_peer_data)["dashboards"]) == {
+        encode_as_dashboard(raw_dashboard_2)
     }
+
+    peer_databag_peer_data = peer_relation_out.peers_data[1][CosAgentClusterUnitData.KEY]
+    assert json.loads(peer_databag_peer_data)["dashboards"][0] == encode_as_dashboard(
+        raw_dashboard_1
+    )
+
+
+def test_e2e():
+    class MyPrincipal(CharmBase):
+        META = {"name": "mock-principal", "provides": {"cos-agent": {"interface": "cos_agent"}}}
+
+        def __init__(self, framework: Framework):
+            super().__init__(framework)
+            self.gagent = COSAgentProvider(
+                self,
+                metrics_endpoints=[
+                    {"path": "/metrics", "port": "8080"},
+                ],
+                metrics_rules_dir="./src/alert_rules/prometheus",
+                logs_rules_dir="./src/alert_rules/loki",
+                log_slots=["charmed-kafka:logs"],
+                refresh_events=[self.on.cos_agent_relation_changed],
+            )
+
+    cos_agent = Relation("cos-agent")
+
+    with tempfile.TemporaryDirectory() as vroot:
+        vroot = Path(vroot)
+        promroot = vroot / "src/alert_rules/prometheus"
+        lokiroot = vroot / "src/alert_rules/loki"
+        promroot.mkdir(parents=True)
+        lokiroot.mkdir(parents=True)
+
+        (promroot / "prom.rule").write_text(
+            """alert: HostCpuHighIowait
+expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100 > 10
+for: 0m
+labels:
+  severity: warning
+annotations:
+  summary: Host CPU high iowait (instance {{ $labels.instance }})
+  description: "CPU iowait > 10%. A high iowait means that you are disk or network bound.\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+"""
+        )
+        (lokiroot / "loki.rule").write_text(
+            """groups:
+  - name: grafana-agent-high-log-volume
+    rules:
+      - alert: HighLogVolume
+        expr: |
+          count_over_time(({%%juju_topology%%})[30s]) > 100
+        labels:
+            severity: high
+        annotations:
+            summary: Log rate is too high!
+"""
+        )
+
+        state_out = State(
+            relations=[
+                cos_agent,
+            ]
+        ).trigger(
+            cos_agent.changed_event(remote_unit=1),
+            charm_type=MyPrincipal,
+            meta=MyPrincipal.META,
+            charm_root=vroot,
+        )
+
+    # step 2: gagent is notified that the principal has touched its relation data
+    peer = PeerRelation("cluster")
+    cos_agent1 = SubordinateRelation(
+        "cos-agent",
+        primary_app_name="mock-principal",
+        remote_unit_data=state_out.relations[0].local_unit_data,
+    )
+    state_out1 = State(relations=[cos_agent1, peer]).trigger(
+        cos_agent1.changed_event(remote_unit=0),
+        charm_type=MyRequirerCharm,
+        meta=MyRequirerCharm.META,
+    )
+
+    peer_out = state_out1.relations[1]
+    peer_out_data = json.loads(peer_out.local_unit_data[CosAgentClusterUnitData.KEY])
+    assert peer_out_data["principal_unit_name"] == "mock-principal/0"
+
+    # step 3: gagent leader is notified that the principal has touched its relation data
+    prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
+    cos_agent2 = SubordinateRelation(
+        "cos-agent",
+        primary_app_name="mock-principal",
+        remote_unit_data=state_out.relations[0].local_unit_data,
+    )
+    state_out2 = State(leader=True, relations=[cos_agent2, peer_out, prometheus]).trigger(
+        peer_out.changed_event(remote_unit=0),
+        charm_type=MyRequirerCharm,
+        meta=MyRequirerCharm.META,
+    )
+
+    prom_relation_out = state_out2.relations[2]
+    # todo: ensure that the prometheus relation out should have some app data.
