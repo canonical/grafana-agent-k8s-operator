@@ -1,9 +1,36 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+[project]
+name = "grafana-agent-k8s-operator"
+# FIXME: Packing the charm with 2.2.0+139.gd011d92 will not include dependencies in PYDEPS key:
+# https://chat.charmhub.io/charmhub/pl/wngp665ycjnb78ar9ojrfhxjkr
+# That's why we are including cosl here until the bug in charmcraft is solved
+dependencies = [
+    "cosl",
+    "ops>=2.0",
+    "pydantic",
+    "requests",
+    "kubernetes",
+    "lightkube",
+    "lightkube-models",
+]
+version = "0.1"
+
+# required for tox to work with isolated_build
+[build-system]
+requires = [
+    "setuptools >= 35.0.2",
+    "setuptools_scm >= 2.0.0, <3"
+]
+
+build-backend = "setuptools.build_meta"
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
+
+
 
 [tool.coverage.report]
 show_missing = true

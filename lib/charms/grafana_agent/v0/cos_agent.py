@@ -166,7 +166,17 @@ import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Union, Iterable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Union,
+)
 
 import pydantic
 from cosl import JujuTopology
@@ -175,7 +185,6 @@ from ops.charm import RelationChangedEvent, RelationEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation, Unit
 from ops.testing import CharmType
-from pydantic import Json
 
 if TYPE_CHECKING:
     try:
@@ -208,11 +217,12 @@ SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
 
 class GrafanaDashboard(str):
     """Grafana Dashboard encoded json; encoded."""
+
     # todo: when pydantic v2 releases, we should replace this with a custom type.
     @staticmethod
     def serialize(raw_json: Union[str, bytes]) -> "GrafanaDashboard":
         if not isinstance(raw_json, bytes):
-            raw_json = raw_json.encode('utf-8')
+            raw_json = raw_json.encode("utf-8")
         encoded = base64.b64encode(lzma.compress(raw_json)).decode("utf-8")
         return GrafanaDashboard(encoded)
 
@@ -234,8 +244,13 @@ class CosAgentProviderUnitData(pydantic.BaseModel):
     dashboards: Optional[List[GrafanaDashboard]] = None
 
     # The following entries may vary across units of the same principal app.
-    metrics_scrape_jobs: Optional[Json[List[Dict]]]
+    metrics_scrape_jobs: Optional[List[Dict]]
     log_slots: Optional[List[str]]
+
+    # when this whole datastructure is dumped into a databag, it will be nested under this key.
+    # while not strictly necessary (we could have it 'flattened out' into the databag),
+    # this simplifies working with the model.
+    KEY: ClassVar[str] = "config"
 
 
 class CosAgentClusterUnitData(pydantic.BaseModel):
@@ -254,10 +269,14 @@ class CosAgentClusterUnitData(pydantic.BaseModel):
     log_alert_rules: Optional[dict]
     dashboards: Optional[List[GrafanaDashboard]]
 
-    # We need a special key to save this in relation data. This is useful to avoid filtering out
-    # default relation data ('private-address', etc.) when parsing from relation data.
-    # A ClassVar is automatically excluded from the output of `dataclasses.fields`.
-    VERSION: ClassVar[str] = "v1"
+    # when this whole datastructure is dumped into a databag, it will be nested under this key.
+    # while not strictly necessary (we could have it 'flattened out' into the databag),
+    # this simplifies working with the model.
+    KEY: ClassVar[str] = "config"
+
+    @property
+    def app_name(self) -> str:
+        return self.principal_unit_name.split("/")[0]
 
 
 class COSAgentProvider(Object):
@@ -332,7 +351,7 @@ class COSAgentProvider(Object):
                         log_slots=self._log_slots,
                     )
 
-                    relation.data[self._charm.unit].update(data.json())
+                    relation.data[self._charm.unit][CosAgentProviderUnitData.KEY] = data.json()
 
     @property
     def _scrape_jobs(self) -> List[Dict]:
@@ -367,6 +386,7 @@ class COSAgentProvider(Object):
                 dashboard = GrafanaDashboard.serialize(path.read_bytes())
                 dashboards.append(dashboard)
         return dashboards
+
 
 class COSAgentDataChanged(EventBase):
     """Event emitted by `COSAgentRequirer` when relation data changes."""
@@ -453,18 +473,25 @@ class COSAgentRequirer(Object):
         # Copy data from the principal relation to the peer relation, so the leader could
         # follow up.
         # Save the originating unit name, so it could be used for topology later on by the leader.
-        metrics_alert_rules = []
-        log_alert_rules = []
+        metrics_alert_rules = {}
+        log_alert_rules = {}
         dashboards = []
 
         for cos_agent_relation in self.cos_agent_relations:
             # for all related units: gather the config.
-            for unit in cos_agent_relation.units:
-                raw = cos_agent_relation.data[unit]
-                provider_data = CosAgentProviderUnitData(**raw)
-                metrics_alert_rules.extend(provider_data.metrics_alert_rules or ())
-                log_alert_rules.extend(provider_data.log_alert_rules or ())
-                dashboards.extend(provider_data.dashboards or ())
+            units = cos_agent_relation.units
+            if len(units) > 1:
+                # should never happen
+                raise ValueError(
+                    f"unexpected error: subordinate relation {cos_agent_relation} "
+                    f"should have exactly one unit"
+                )
+            unit = next(iter(units))
+            raw = cos_agent_relation.data[unit][CosAgentProviderUnitData.KEY]
+            provider_data = CosAgentProviderUnitData(**json.loads(raw))
+            metrics_alert_rules.update(provider_data.metrics_alert_rules or {})
+            log_alert_rules.update(provider_data.log_alert_rules or {})
+            dashboards.extend(provider_data.dashboards or ())
 
         # this is the peer relation databag model
         data = CosAgentClusterUnitData(
@@ -475,7 +502,7 @@ class COSAgentRequirer(Object):
             log_alert_rules=log_alert_rules,
             dashboards=dashboards,
         )
-        self.peer_relation.data[self._charm.unit][data.VERSION] = data.json()
+        self.peer_relation.data[self._charm.unit][data.KEY] = data.json()
 
         # We can't easily tell if the data that was changed is limited to only the data
         # that goes into peer relation (in which case, if this is not a leader unit, we wouldn't
@@ -523,7 +550,7 @@ class COSAgentRequirer(Object):
             if units := principal_relation.units:
                 # Technically it's a list, but for subordinates there can only be one
                 unit = next(iter(units))
-                data = principal_relation.data[unit]
+                data = principal_relation.data[unit][CosAgentProviderUnitData.KEY]
                 if data:
                     return CosAgentProviderUnitData(**data)
 
@@ -546,16 +573,13 @@ class COSAgentRequirer(Object):
 
         for unit in chain((self._charm.unit,), relation.units):
             if not relation.data.get(unit) or not (
-                    raw := relation.data[unit].get(
-                        CosAgentClusterUnitData.VERSION
-                    )):
-                logger.info(
-                    f"peer {unit} has not set its primary data yet; " f"skipping for now..."
-                )
+                    raw := relation.data[unit].get(CosAgentClusterUnitData.KEY)
+            ):
+                logger.info(f"peer {unit} has not set its primary data yet; skipping for now...")
                 continue
 
             data = CosAgentClusterUnitData(**json.loads(raw))
-            app_name = data.principal_unit_name.split("/")[0]
+            app_name = data.app_name
             # Have we already seen this principal app?
             if app_name in app_names:
                 continue
@@ -568,13 +592,18 @@ class COSAgentRequirer(Object):
         """Fetch metrics alerts."""
         alert_rules = {}
 
+        seen_apps: List[str] = []
         for data in self._gather_peer_data():  # type: CosAgentClusterUnitData
             if rules := data.metrics_alert_rules:
+                app_name = data.app_name
+                if app_name in seen_apps:
+                    continue  # dedup!
+                seen_apps.append(app_name)
                 # This is only used for naming the file, so be as specific as we can be
                 identifier = JujuTopology(
                     model=self._charm.model.name,
                     model_uuid=self._charm.model.uuid,
-                    application=data.principal_unit_name.split("/")[0],
+                    application=app_name,
                     # For the topology unit, we could use `data.principal_unit_name`, but that unit
                     # name may not be very stable: `_gather_peer_data` de-duplicates by app name so
                     # the exact unit name that turns up first in the iterator may vary from time to
@@ -633,14 +662,20 @@ class COSAgentRequirer(Object):
     def logs_alerts(self) -> Dict[str, Any]:
         """Fetch log alerts."""
         alert_rules = {}
+        seen_apps: List[str] = []
 
         for data in self._gather_peer_data():  # type: CosAgentClusterUnitData
             if rules := data.log_alert_rules:
                 # This is only used for naming the file, so be as specific as we can be
+                app_name = data.app_name
+                if app_name in seen_apps:
+                    continue  # dedup!
+                seen_apps.append(app_name)
+
                 identifier = JujuTopology(
                     model=self._charm.model.name,
                     model_uuid=self._charm.model.uuid,
-                    application=data.principal_unit_name.split("/")[0],
+                    application=app_name,
                     # For the topology unit, we could use `data.principal_unit_name`, but that unit
                     # name may not be very stable: `_gather_peer_data` de-duplicates by app name so
                     # the exact unit name that turns up first in the iterator may vary from time to
@@ -654,14 +689,24 @@ class COSAgentRequirer(Object):
 
     @property
     def dashboards(self) -> List[Dict[str, str]]:
-        """Fetch dashboards as encoded content."""
+        """Fetch dashboards as encoded content.
+
+        Dashboards are assumed not to vary across units of the same primary.
+        """
         dashboards: List[Dict[str, str]] = []
 
+        seen_apps: List[str] = []
         for data in self._gather_peer_data():  # type: CosAgentClusterUnitData
+            app_name = data.app_name
+            if app_name in seen_apps:
+                continue  # dedup!
+            seen_apps.append(app_name)
+
             for encoded_dashboard in data.dashboards or ():
                 content = GrafanaDashboard(encoded_dashboard).deserialize()
+
                 title = content.get("title", "no_title")
-                app_name = data.principal_unit_name.split("/")[0]
+
                 dashboards.append(
                     {
                         "relation_id": data.principal_relation_id,
