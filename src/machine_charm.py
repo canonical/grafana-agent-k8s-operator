@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
-from charms.operator_libs_linux.v1 import snap
+from charms.operator_libs_linux.v1 import snap  # type: ignore
 from ops.main import main
 from ops.model import MaintenanceStatus, Relation, Unit
 

@@ -28,12 +28,13 @@ from requests.packages.urllib3.util import Retry  # type: ignore
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/grafana-agent.yaml"
-LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
-LOKI_RULES_DEST_PATH = "./loki_alert_rules"
-METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
-METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
-DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
-DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
+# all these are relative to the charm root
+LOKI_RULES_SRC_PATH = "src/loki_alert_rules"
+LOKI_RULES_DEST_PATH = "loki_alert_rules"
+METRICS_RULES_SRC_PATH = "src/prometheus_alert_rules"
+METRICS_RULES_DEST_PATH = "prometheus_alert_rules"
+DASHBOARDS_SRC_PATH = "src/grafana_dashboards"
+DASHBOARDS_DEST_PATH = "grafana_dashboards"  # placeholder until we figure out the plug
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -75,21 +76,22 @@ class GrafanaAgentCharm(CharmBase):
         # Property to facilitate centralized status update
         self.status = CompoundStatus()
 
+        charm_root = self.charm_dir.absolute()
         self.loki_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
             # FIXED: this is already handled by re-using the *Rules classes
-            src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
-            dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
+            src=charm_root.joinpath(*LOKI_RULES_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*LOKI_RULES_DEST_PATH.split("/")),
         )
         self.metrics_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
             # FIXED: this is already handled by re-using the *Rules classes
-            src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
-            dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
+            src=charm_root.joinpath(*METRICS_RULES_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*METRICS_RULES_DEST_PATH.split("/")),
         )
         self.dashboard_paths = RulesMapping(
-            src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
-            dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
+            src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:

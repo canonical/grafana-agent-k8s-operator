@@ -1,14 +1,11 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from charms.grafana_agent.v0.cos_agent import (
     CosAgentClusterUnitData,
-    COSAgentProvider,
     CosAgentProviderUnitData,
     COSAgentRequirer,
     GrafanaDashboard,

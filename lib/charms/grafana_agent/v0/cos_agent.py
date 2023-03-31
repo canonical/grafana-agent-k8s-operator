@@ -334,21 +334,19 @@ class COSAgentProvider(Object):
             relations = self._charm.model.relations[self._relation_name]
 
         for relation in relations:
-            if relation.data:
+            # Before a principal is related to the grafana-agent subordinate, we'd get
+            # ModelError: ERROR cannot read relation settings: unit "zk/2": settings not found
+            # Add a guard to make sure it doesn't happen.
+            if relation.data and self._charm.unit in relation.data:
                 # Subordinate relations can communicate only over unit data.
-
-                # Before a principal is related to the grafana-agent subordinate, we'd get
-                # ModelError: ERROR cannot read relation settings: unit "zk/2": settings not found
-                # Add a guard to make sure it doesn't happen.
-                if self._charm.unit in relation.data:
-                    data = CosAgentProviderUnitData(
-                        metrics_alert_rules=self._metrics_alert_rules,
-                        log_alert_rules=self._log_alert_rules,
-                        dashboards=self._dashboards,
-                        metrics_scrape_jobs=self._scrape_jobs,
-                        log_slots=self._log_slots,
-                    )
-                    relation.data[self._charm.unit][data.KEY] = data.json()
+                data = CosAgentProviderUnitData(
+                    metrics_alert_rules=self._metrics_alert_rules,
+                    log_alert_rules=self._log_alert_rules,
+                    dashboards=self._dashboards,
+                    metrics_scrape_jobs=self._scrape_jobs,
+                    log_slots=self._log_slots,
+                )
+                relation.data[self._charm.unit][data.KEY] = data.json()
 
     @property
     def _scrape_jobs(self) -> List[Dict]:
