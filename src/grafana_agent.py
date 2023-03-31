@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Common logic for both k8s and machine charms for Grafana Agent."""
+import json
 import logging
 import os
 import pathlib
@@ -285,7 +286,7 @@ class GrafanaAgentCharm(CharmBase):
             filename = f"juju_{title}-{charm}-{rel_id}.json"
 
             with open(pathlib.Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
-                f.write(dash["content"])
+                f.write(json.dumps(dash["content"]))
                 logger.debug("updated dashboard file %s", f.name)
 
         reload_func()

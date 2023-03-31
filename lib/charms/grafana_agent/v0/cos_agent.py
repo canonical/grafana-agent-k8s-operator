@@ -166,16 +166,7 @@ import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ClassVar,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Union
 
 import pydantic
 from cosl import JujuTopology
@@ -468,18 +459,12 @@ class COSAgentRequirer(Object):
         if not self.peer_relation:
             return
 
-        if not event.relation.data[event.unit]:
-            return
-
-        # Copy data from the principal relation to the peer relation, so the leader could
-        # follow up.
-        # Save the originating unit name, so it could be used for topology later on by the leader.
-        metrics_alert_rules = {}
-        log_alert_rules = {}
-        dashboards = []
-
         cos_agent_relation = event.relation
-        # for all related units: gather the config.
+        if not event.unit or not cos_agent_relation.data.get(event.unit):
+            return
+        principal_unit = event.unit
+
+        # Sanity check
         units = cos_agent_relation.units
         if len(units) > 1:
             # should never happen
@@ -487,21 +472,21 @@ class COSAgentRequirer(Object):
                 f"unexpected error: subordinate relation {cos_agent_relation} "
                 f"should have exactly one unit"
             )
-        unit = next(iter(units))
-        raw = cos_agent_relation.data[unit][CosAgentProviderUnitData.KEY]
-        provider_data = CosAgentProviderUnitData(**json.loads(raw))
-        metrics_alert_rules.update(provider_data.metrics_alert_rules or {})
-        log_alert_rules.update(provider_data.log_alert_rules or {})
-        dashboards.extend(provider_data.dashboards or ())
 
-        # this is the peer relation databag model
-        data = CosAgentClusterUnitData(
+        if not (raw := cos_agent_relation.data[principal_unit].get(CosAgentProviderUnitData.KEY)):
+            return
+        provider_data = CosAgentProviderUnitData(**json.loads(raw))
+
+        # Copy data from the principal relation to the peer relation, so the leader could
+        # follow up.
+        # Save the originating unit name, so it could be used for topology later on by the leader.
+        data = CosAgentClusterUnitData(  # peer relation databag model
             principal_unit_name=event.unit.name,
             principal_relation_id=str(event.relation.id),
             principal_relation_name=event.relation.name,
-            metrics_alert_rules=metrics_alert_rules,
-            log_alert_rules=log_alert_rules,
-            dashboards=dashboards,
+            metrics_alert_rules=provider_data.metrics_alert_rules,
+            log_alert_rules=provider_data.log_alert_rules,
+            dashboards=provider_data.dashboards,
         )
         self.peer_relation.data[self._charm.unit][data.KEY] = data.json()
 
@@ -551,9 +536,9 @@ class COSAgentRequirer(Object):
             if units := principal_relation.units:
                 # Technically it's a list, but for subordinates there can only be one
                 unit = next(iter(units))
-                data = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
-                if data:
-                    return CosAgentProviderUnitData(**data)
+                raw = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
+                if raw:
+                    return CosAgentProviderUnitData(**json.loads(raw))
 
         return None
 
