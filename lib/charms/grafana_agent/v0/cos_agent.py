@@ -455,6 +455,7 @@ class COSAgentRequirer(Object):
     def _on_relation_data_changed(self, event: RelationChangedEvent):
         # Peer data is the only means of communication between subordinate units.
         if not self.peer_relation:
+            event.defer()
             return
 
         cos_agent_relation = event.relation
