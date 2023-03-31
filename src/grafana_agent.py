@@ -132,10 +132,23 @@ class GrafanaAgentCharm(CharmBase):
 
         # Register status observers
         for incoming, outgoing in self.mandatory_relation_pairs:
-            self.framework.observe(self.on[incoming].relation_joined, self._update_status)
-            self.framework.observe(self.on[incoming].relation_broken, self._update_status)
-            self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
-            self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+            self.framework.observe(
+                self.on[incoming].relation_joined, self._on_mandatory_relation_event
+            )
+            self.framework.observe(
+                self.on[incoming].relation_broken, self._on_mandatory_relation_event
+            )
+            self.framework.observe(
+                self.on[outgoing].relation_joined, self._on_mandatory_relation_event
+            )
+            self.framework.observe(
+                self.on[outgoing].relation_broken, self._on_mandatory_relation_event
+            )
+
+    def _on_mandatory_relation_event(self, _event=None):
+        """Event handler for any mandatory relation event."""
+        self._update_config()
+        self._update_status()
 
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
@@ -303,7 +316,7 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self, *_):
+    def _update_status(self):
         """Determine the charm status based on relation health and grafana-agent service readiness.
 
         This is a centralized status setter. Status should only be calculated here, or, if you need
