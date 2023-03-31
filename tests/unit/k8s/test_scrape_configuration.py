@@ -4,6 +4,7 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import patch
 
@@ -79,6 +80,7 @@ REWRITE_CONFIGS = [
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch("grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
