@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from charms.grafana_agent.v0.cos_agent import CosAgentClusterUnitData, COSAgentProvider
+from charms.grafana_agent.v0.cos_agent import CosAgentPeersUnitData, COSAgentProvider
 from ops.charm import CharmBase
 from ops.framework import Framework
 from scenario import PeerRelation, Relation, State, SubordinateRelation
@@ -108,7 +108,7 @@ def test_cos_agent_e2e(vroot):
     )
 
     # step 2: gagent is notified that the principal has touched its relation data
-    peer = PeerRelation("cluster")
+    peer = PeerRelation("peers")
     cos_agent1 = SubordinateRelation(
         "cos-agent",
         primary_app_name="mock-principal",
@@ -121,7 +121,7 @@ def test_cos_agent_e2e(vroot):
     )
 
     peer_out = state_out1.relations[1]
-    peer_out_data = json.loads(peer_out.local_unit_data[CosAgentClusterUnitData.KEY])
+    peer_out_data = json.loads(peer_out.local_unit_data[CosAgentPeersUnitData.KEY])
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
 
     # step 3: gagent leader is notified that the principal has touched its relation data

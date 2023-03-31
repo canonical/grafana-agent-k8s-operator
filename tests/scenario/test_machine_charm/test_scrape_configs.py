@@ -62,7 +62,7 @@ def test_snap_endpoints():
         with patch("machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
             with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
                 State(
-                    relations=[cos_relation, loki_relation, PeerRelation("cluster")],
+                    relations=[cos_relation, loki_relation, PeerRelation("peers")],
                     model=Model(name="my-model", uuid=my_uuid),
                 ).trigger(
                     event=cos_relation.changed_event,

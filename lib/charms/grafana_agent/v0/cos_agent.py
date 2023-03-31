@@ -194,7 +194,7 @@ LIBPATCH = 2
 PYDEPS = ["cosl", "pydantic"]
 
 DEFAULT_RELATION_NAME = "cos-agent"
-DEFAULT_PEER_RELATION_NAME = "cluster"
+DEFAULT_PEER_RELATION_NAME = "peers"
 DEFAULT_METRICS_ENDPOINT = {
     "path": "/metrics",
     "port": 80,
@@ -246,7 +246,7 @@ class CosAgentProviderUnitData(pydantic.BaseModel):
     KEY: ClassVar[str] = "config"
 
 
-class CosAgentClusterUnitData(pydantic.BaseModel):
+class CosAgentPeersUnitData(pydantic.BaseModel):
     """Unit databag model for `cluster` cos-agent machine charm peer relation."""
 
     # We need the principal unit name and relation metadata to be able to render identifiers
@@ -479,7 +479,7 @@ class COSAgentRequirer(Object):
         # Copy data from the principal relation to the peer relation, so the leader could
         # follow up.
         # Save the originating unit name, so it could be used for topology later on by the leader.
-        data = CosAgentClusterUnitData(  # peer relation databag model
+        data = CosAgentPeersUnitData(  # peer relation databag model
             principal_unit_name=event.unit.name,
             principal_relation_id=str(event.relation.id),
             principal_relation_name=event.relation.name,
@@ -541,10 +541,10 @@ class COSAgentRequirer(Object):
 
         return None
 
-    def _gather_peer_data(self) -> List[CosAgentClusterUnitData]:
+    def _gather_peer_data(self) -> List[CosAgentPeersUnitData]:
         """Collect data from the peers.
 
-        Returns a trimmed-down list of CosAgentClusterUnitData.
+        Returns a trimmed-down list of CosAgentPeersUnitData.
         """
         relation = self.peer_relation
 
@@ -553,17 +553,17 @@ class COSAgentRequirer(Object):
             return []
 
         # Iterate over all peer unit data and only collect every principal once.
-        peer_data: List[CosAgentClusterUnitData] = []
+        peer_data: List[CosAgentPeersUnitData] = []
         app_names: Set[str] = set()
 
         for unit in chain((self._charm.unit,), relation.units):
             if not relation.data.get(unit) or not (
-                raw := relation.data[unit].get(CosAgentClusterUnitData.KEY)
+                raw := relation.data[unit].get(CosAgentPeersUnitData.KEY)
             ):
                 logger.info(f"peer {unit} has not set its primary data yet; skipping for now...")
                 continue
 
-            data = CosAgentClusterUnitData(**json.loads(raw))
+            data = CosAgentPeersUnitData(**json.loads(raw))
             app_name = data.app_name
             # Have we already seen this principal app?
             if app_name in app_names:
@@ -578,7 +578,7 @@ class COSAgentRequirer(Object):
         alert_rules = {}
 
         seen_apps: List[str] = []
-        for data in self._gather_peer_data():  # type: CosAgentClusterUnitData
+        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
             if rules := data.metrics_alert_rules:
                 app_name = data.app_name
                 if app_name in seen_apps:
@@ -649,7 +649,7 @@ class COSAgentRequirer(Object):
         alert_rules = {}
         seen_apps: List[str] = []
 
-        for data in self._gather_peer_data():  # type: CosAgentClusterUnitData
+        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
             if rules := data.log_alert_rules:
                 # This is only used for naming the file, so be as specific as we can be
                 app_name = data.app_name
@@ -681,7 +681,7 @@ class COSAgentRequirer(Object):
         dashboards: List[Dict[str, str]] = []
 
         seen_apps: List[str] = []
-        for data in self._gather_peer_data():  # type: CosAgentClusterUnitData
+        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
             app_name = data.app_name
             if app_name in seen_apps:
                 continue  # dedup!

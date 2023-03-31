@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from charms.grafana_agent.v0.cos_agent import (
-    CosAgentClusterUnitData,
+    CosAgentPeersUnitData,
     CosAgentProviderUnitData,
     COSAgentRequirer,
     GrafanaDashboard,
@@ -36,7 +36,7 @@ def test_fetch_data_from_relation():
         "dashboards": [encode_as_dashboard(py_dash)],
     }
     relation.app = app
-    relation.data = {unit: {CosAgentClusterUnitData.KEY: json.dumps(config)}, app: {}}
+    relation.data = {unit: {CosAgentPeersUnitData.KEY: json.dumps(config)}, app: {}}
 
     obj = MagicMock()
     obj._charm.unit = unit
@@ -58,7 +58,7 @@ class MyRequirerCharm(CharmBase):
             "cos-agent": {"interface": "cos_agent"},
             "send-remote-write": {"interface": "prometheus_remote_write"},
         },
-        "peers": {"cluster": {"interface": "grafana_agent_replica"}},
+        "peers": {"peers": {"interface": "grafana_agent_replica"}},
     }
 
     def __init__(self, framework: Framework):
@@ -86,7 +86,7 @@ def test_no_dashboards():
 
 
 def test_no_dashboards_peer():
-    peer_relation = PeerRelation(endpoint="cluster", interface="grafana_agent_replica")
+    peer_relation = PeerRelation(endpoint="peers", interface="grafana_agent_replica")
 
     state = State(relations=[peer_relation])
 
@@ -105,7 +105,7 @@ def test_no_dashboards_peer_cosagent():
     cos_agent = SubordinateRelation(
         endpoint="cos-agent", interface="cos_agent", primary_app_name="primary"
     )
-    peer_relation = PeerRelation(endpoint="cluster", interface="grafana_agent_replica")
+    peer_relation = PeerRelation(endpoint="peers", interface="grafana_agent_replica")
 
     state = State(relations=[peer_relation, cos_agent])
 
@@ -139,7 +139,7 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
         primary_app_name="primary",
         remote_unit_data={raw_data_1.KEY: raw_data_1.json()},
     )
-    peer_relation = PeerRelation(endpoint="cluster", interface="grafana_agent_replica")
+    peer_relation = PeerRelation(endpoint="peers", interface="grafana_agent_replica")
 
     state = State(relations=[peer_relation, cos_agent], leader=leader)
 
@@ -153,8 +153,8 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
         post_event=post_event,
     )
 
-    peer_relation_out = next(filter(lambda r: r.endpoint == "cluster", state_out.relations))
-    peer_data = peer_relation_out.local_unit_data[CosAgentClusterUnitData.KEY]
+    peer_relation_out = next(filter(lambda r: r.endpoint == "peers", state_out.relations))
+    peer_data = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
     assert json.loads(peer_data)["dashboards"] == [encode_as_dashboard(raw_dashboard_1)]
 
 
@@ -196,11 +196,11 @@ def test_cosagent_to_peer_data_flow_relation(leader):
     # now the peer relation already contains the primary/0 information
     # i.e. we've already seen cos_agent_1-relation-changed before
     peer_relation = PeerRelation(
-        endpoint="cluster",
+        endpoint="peers",
         interface="grafana_agent_replica",
         peers_data={
             1: {
-                CosAgentClusterUnitData.KEY: CosAgentClusterUnitData(
+                CosAgentPeersUnitData.KEY: CosAgentPeersUnitData(
                     principal_unit_name="principal",
                     principal_relation_id="42",
                     principal_relation_name="foobar-relation",
@@ -250,21 +250,21 @@ def test_cosagent_to_peer_data_flow_relation(leader):
     )
 
     peer_relation_out: PeerRelation = next(
-        filter(lambda r: r.endpoint == "cluster", state_out.relations)
+        filter(lambda r: r.endpoint == "peers", state_out.relations)
     )
     # the dashboard we just received via cos-agent is now in our local peer databag
-    peer_data_local = peer_relation_out.local_unit_data[CosAgentClusterUnitData.KEY]
+    peer_data_local = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
     assert json.loads(peer_data_local)["dashboards"] == [encode_as_dashboard(raw_dashboard_2)]
 
     # the dashboard we previously had via peer data is still there.
-    peer_data_peer = peer_relation_out.peers_data[1][CosAgentClusterUnitData.KEY]
+    peer_data_peer = peer_relation_out.peers_data[1][CosAgentPeersUnitData.KEY]
     assert json.loads(peer_data_peer)["dashboards"] == [encode_as_dashboard(raw_dashboard_1)]
 
 
 @pytest.mark.parametrize("leader", (True, False))
 def test_cosagent_to_peer_data_app_vs_unit(leader):
     # this test verifies that if multiple units (belonging to different apps) all publish their own
-    # CosAgentProviderUnitData via `cos-agent`, then the `cluster` peer relation will be populated
+    # CosAgentProviderUnitData via `cos-agent`, then the `peers` peer relation will be populated
     # with the right data.
     # This means:
     # - The per-app data is only collected once per application (dedup'ed).
@@ -302,13 +302,13 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
     # now the peer relation already contains the primary/0 information
     # i.e. we've already seen cos_agent_1-relation-changed before
     peer_relation = PeerRelation(
-        endpoint="cluster",
+        endpoint="peers",
         interface="grafana_agent_replica",
         # one of this unit's peers, who has as primary "primary/23", has already
         # logged its part of the data
         peers_data={
             1: {
-                CosAgentClusterUnitData.KEY: CosAgentClusterUnitData(
+                CosAgentPeersUnitData.KEY: CosAgentPeersUnitData(
                     principal_unit_name="primary/23",
                     principal_relation_id="42",
                     principal_relation_name="cos-agent",
@@ -340,7 +340,7 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
 
     def post_event(charm: MyRequirerCharm):
         # after the event is processed, the charm has copied its primary's 'cos-agent' data into
-        # its 'cluster' peer databag, therefore there are now two dashboards.
+        # its 'peers' peer databag, therefore there are now two dashboards.
         # The source of the dashboards is peer data.
 
         dashboards = charm.cosagent.dashboards
@@ -364,14 +364,14 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
     )
 
     peer_relation_out: PeerRelation = next(
-        filter(lambda r: r.endpoint == "cluster", state_out.relations)
+        filter(lambda r: r.endpoint == "peers", state_out.relations)
     )
-    my_databag_peer_data = peer_relation_out.local_unit_data[CosAgentClusterUnitData.KEY]
+    my_databag_peer_data = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
     assert set(json.loads(my_databag_peer_data)["dashboards"]) == {
         encode_as_dashboard(raw_dashboard_2)
     }
 
-    peer_databag_peer_data = peer_relation_out.peers_data[1][CosAgentClusterUnitData.KEY]
+    peer_databag_peer_data = peer_relation_out.peers_data[1][CosAgentPeersUnitData.KEY]
     assert json.loads(peer_databag_peer_data)["dashboards"][0] == encode_as_dashboard(
         raw_dashboard_1
     )

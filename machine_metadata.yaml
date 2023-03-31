@@ -55,5 +55,5 @@ provides:
     interface: grafana_dashboard
 
 peers:
-  cluster:
+  peers:
     interface: grafana_agent_replica
