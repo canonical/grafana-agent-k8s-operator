@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Common logic for both k8s and machine charms for Grafana Agent."""
+import json
 import logging
 import os
 import pathlib
@@ -27,12 +28,13 @@ from requests.packages.urllib3.util import Retry  # type: ignore
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/grafana-agent.yaml"
-LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
-LOKI_RULES_DEST_PATH = "./loki_alert_rules"
-METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
-METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
-DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
-DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
+# all these are relative to the charm root
+LOKI_RULES_SRC_PATH = "src/loki_alert_rules"
+LOKI_RULES_DEST_PATH = "loki_alert_rules"
+METRICS_RULES_SRC_PATH = "src/prometheus_alert_rules"
+METRICS_RULES_DEST_PATH = "prometheus_alert_rules"
+DASHBOARDS_SRC_PATH = "src/grafana_dashboards"
+DASHBOARDS_DEST_PATH = "grafana_dashboards"  # placeholder until we figure out the plug
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -74,21 +76,22 @@ class GrafanaAgentCharm(CharmBase):
         # Property to facilitate centralized status update
         self.status = CompoundStatus()
 
+        charm_root = self.charm_dir.absolute()
         self.loki_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
             # FIXED: this is already handled by re-using the *Rules classes
-            src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
-            dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
+            src=charm_root.joinpath(*LOKI_RULES_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*LOKI_RULES_DEST_PATH.split("/")),
         )
         self.metrics_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
             # FIXED: this is already handled by re-using the *Rules classes
-            src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
-            dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
+            src=charm_root.joinpath(*METRICS_RULES_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*METRICS_RULES_DEST_PATH.split("/")),
         )
         self.dashboard_paths = RulesMapping(
-            src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
-            dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
+            src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
@@ -131,10 +134,23 @@ class GrafanaAgentCharm(CharmBase):
 
         # Register status observers
         for incoming, outgoing in self.mandatory_relation_pairs:
-            self.framework.observe(self.on[incoming].relation_joined, self._update_status)
-            self.framework.observe(self.on[incoming].relation_broken, self._update_status)
-            self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
-            self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+            self.framework.observe(
+                self.on[incoming].relation_joined, self._on_mandatory_relation_event
+            )
+            self.framework.observe(
+                self.on[incoming].relation_broken, self._on_mandatory_relation_event
+            )
+            self.framework.observe(
+                self.on[outgoing].relation_joined, self._on_mandatory_relation_event
+            )
+            self.framework.observe(
+                self.on[outgoing].relation_broken, self._on_mandatory_relation_event
+            )
+
+    def _on_mandatory_relation_event(self, _event=None):
+        """Event handler for any mandatory relation event."""
+        self._update_config()
+        self._update_status()
 
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
@@ -285,7 +301,7 @@ class GrafanaAgentCharm(CharmBase):
             filename = f"juju_{title}-{charm}-{rel_id}.json"
 
             with open(pathlib.Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
-                f.write(dash["content"])
+                f.write(json.dumps(dash["content"]))
                 logger.debug("updated dashboard file %s", f.name)
 
         reload_func()
@@ -302,7 +318,7 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self, *_):
+    def _update_status(self):
         """Determine the charm status based on relation health and grafana-agent service readiness.
 
         This is a centralized status setter. Status should only be calculated here, or, if you need

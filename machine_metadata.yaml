@@ -53,3 +53,7 @@ requires:
 provides:
   grafana-dashboards-provider:
     interface: grafana_dashboard
+
+peers:
+  peers:
+    interface: grafana_agent_replica
