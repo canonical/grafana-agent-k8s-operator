@@ -107,7 +107,7 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
             post_event=post_event,
         )
 
-    assert out.status.unit == ("waiting", "waiting for the agent to start")
+    assert out.status.unit == ("waiting", "waiting for agent to start")
 
 
 def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):

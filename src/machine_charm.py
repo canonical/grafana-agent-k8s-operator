@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
-from charms.operator_libs_linux.v1 import snap
+from charms.operator_libs_linux.v1 import snap  # type: ignore
 from ops.main import main
 from ops.model import MaintenanceStatus, Relation, Unit
 
@@ -93,8 +93,8 @@ class SnapFstab:
         entries = [e for e in self.entries if e.owner == owner]
 
         if len(entries) > 1 and endpoint_name:
-            # If there's more than one entry, the endpoint name may not directlly map to
-            # the sourcce *or* path. charmed-kafka uses 'logs' as the plug name, and maps
+            # If there's more than one entry, the endpoint name may not directly map to
+            # the source *or* path. charmed-kafka uses 'logs' as the plug name, and maps
             # .../common/logs to .../log inside Grafana Agent
             #
             # The only meaningful scenario in which this could happen (multiple fstab
@@ -102,16 +102,18 @@ class SnapFstab:
             # multiple paths as part of the same plug.
             #
             # In this case, for a cheap comparison (rather than implementing some recursive
-            # LCS just for this, convert all possible endpoint sources into a list of unique
-            # characters, as well as the endpoint name, and build a dict of entries with
-            # a value that's the length of the intersection, the pick the first one.
-            character_matches = {
-                e: len(set(endpoint_name) & set(e.endpoint_source)) for e in entries
-            }
-            sorted_matches = {
-                k: v for k, v in sorted(character_matches.items(), key=lambda x: x[1])
-            }
-            entries = [next(iter(sorted_matches.keys()))]
+            # LCS just for this), convert all possible endpoint sources into a list of unique
+            # characters, as well as the endpoint name, and build a sequence of entries with
+            # a value that's the length of the intersection, the pick the first one i.e. the one
+            # with the largest intersection.
+            ordered_entries = sorted(
+                entries,
+                # descending order
+                reverse=True,
+                # size of the character-level similarity of the two strings
+                key=lambda e: len(set(endpoint_name) & set(e.endpoint_source)),
+            )
+            return ordered_entries[0]
 
         if len(entries) > 1 or not entries:
             logger.debug(
@@ -461,6 +463,10 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             except snap.SnapError as e:
                 logger.error(f"error connecting plug {plug} to grafana-agent:logs")
                 logger.error(e.message)
+
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        return "${SNAP_DATA}"
 
 
 if __name__ == "__main__":

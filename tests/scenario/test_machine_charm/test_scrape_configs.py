@@ -10,7 +10,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
-from scenario import Model, Relation, State
+from charms.grafana_agent.v0.cos_agent import CosAgentProviderUnitData
+from scenario import Model, PeerRelation, Relation, State, SubordinateRelation
 
 import machine_charm
 
@@ -38,26 +39,15 @@ def test_snap_endpoints():
         },
     )
 
-    cos_relation = Relation(
-        "cos-agent",
-        remote_app_name="principal",
-        remote_app_data={
-            "config": json.dumps(
-                {
-                    "metrics": {
-                        "scrape_jobs": [],
-                        "alert_rules": [],
-                    },
-                    "logs": {
-                        "targets": ["foo:bar", "oh:snap", "shameless-plug"],
-                        "alert_rules": [],
-                    },
-                    "dashboards": {
-                        "dashboards": [],
-                    },
-                }
-            )
-        },
+    data = CosAgentProviderUnitData(
+        dashboards=[],
+        metrics_alert_rules={},
+        log_alert_rules={},
+        metrics_scrape_jobs=[],
+        log_slots=["foo:bar", "oh:snap", "shameless-plug"],
+    )
+    cos_relation = SubordinateRelation(
+        "cos-agent", primary_app_name="principal", remote_unit_data={data.KEY: data.json()}
     )
 
     vroot = tempfile.TemporaryDirectory()
@@ -72,7 +62,7 @@ def test_snap_endpoints():
         with patch("machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
             with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
                 State(
-                    relations=[cos_relation, loki_relation],
+                    relations=[cos_relation, loki_relation, PeerRelation("peers")],
                     model=Model(name="my-model", uuid=my_uuid),
                 ).trigger(
                     event=cos_relation.changed_event,
@@ -90,7 +80,7 @@ def test_snap_endpoints():
                 "relabel_configs": [
                     {
                         "regex": "(.*)",
-                        "replacement": f"juju_my-model_{my_uuid}_local_self-monitoring",
+                        "replacement": f"juju_my-model_{my_uuid}_grafana-agent_self-monitoring",
                         "target_label": "job",
                     },
                     {
@@ -114,12 +104,12 @@ def test_snap_endpoints():
                         "target_label": "juju_model_uuid",
                     },
                     {
-                        "replacement": "local",
+                        "replacement": "grafana-agent",
                         "source_labels": ["__address__"],
                         "target_label": "juju_application",
                     },
                     {
-                        "replacement": "local/0",
+                        "replacement": "grafana-agent/0",
                         "source_labels": ["__address__"],
                         "target_label": "juju_unit",
                     },
@@ -130,7 +120,7 @@ def test_snap_endpoints():
                 "relabel_configs": [
                     {
                         "regex": "(.*)",
-                        "replacement": f"juju_my-model_{my_uuid}_local_node-exporter",
+                        "replacement": f"juju_my-model_{my_uuid}_grafana-agent_node-exporter",
                         "target_label": "job",
                     },
                     {
@@ -220,28 +210,36 @@ def test_snap_endpoints():
                         },
                         {
                             "job_name": "foo",
-                            "static_configs": {
-                                "labels": {
-                                    "__path__": "/snap/grafana-agent/current/shared-logs/bar",
-                                    "job": "foo",
-                                },
-                                "targets": ["localhost"],
-                            },
+                            "static_configs": [
+                                {
+                                    "labels": {
+                                        "__path__": "/snap/grafana-agent/current/shared-logs/**/*",
+                                        "job": "foo",
+                                        "juju_model": "my-model",
+                                        "juju_model_uuid": my_uuid,
+                                    },
+                                    "targets": ["localhost"],
+                                }
+                            ],
                         },
                         {
                             "job_name": "oh",
-                            "static_configs": {
-                                "labels": {
-                                    "__path__": "/snap/grafana-agent/current/shared-logs/snap",
-                                    "job": "oh",
-                                },
-                                "targets": ["localhost"],
-                            },
+                            "static_configs": [
+                                {
+                                    "labels": {
+                                        "__path__": "/snap/grafana-agent/current/shared-logs/**/*",
+                                        "job": "oh",
+                                        "juju_model": "my-model",
+                                        "juju_model_uuid": my_uuid,
+                                    },
+                                    "targets": ["localhost"],
+                                }
+                            ],
                         },
                     ],
                 },
             ],
-            "positions_directory": "/tmp/grafana-agent-positions",
+            "positions_directory": "${SNAP_DATA}/grafana-agent-positions",
         },
         "metrics": {
             "configs": [{"name": "agent_scraper", "remote_write": [], "scrape_configs": []}],
