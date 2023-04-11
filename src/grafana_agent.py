@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
+from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
+    GrafanaCloudConfigRequirer,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
@@ -111,6 +114,14 @@ class GrafanaAgentCharm(CharmBase):
             relation_name="grafana-dashboards-provider",
             dashboards_path=self.dashboard_paths.dest,
         )
+
+        self._cloud = GrafanaCloudConfigRequirer(self)
+
+        self.framework.observe(
+            self._cloud.on.cloud_config_available, self._on_cloud_config_available
+        )
+        self.framework.observe(self._cloud.on.cloud_config_revoked, self._on_cloud_config_revoked)
+
         self.framework.observe(
             self._grafana_dashboards_provider.on.dashboard_status_changed,
             self._on_dashboard_status_changed,
@@ -133,19 +144,12 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
         # Register status observers
-        for incoming, outgoing in self.mandatory_relation_pairs:
-            self.framework.observe(
-                self.on[incoming].relation_joined, self._on_mandatory_relation_event
-            )
-            self.framework.observe(
-                self.on[incoming].relation_broken, self._on_mandatory_relation_event
-            )
-            self.framework.observe(
-                self.on[outgoing].relation_joined, self._on_mandatory_relation_event
-            )
-            self.framework.observe(
-                self.on[outgoing].relation_broken, self._on_mandatory_relation_event
-            )
+        for incoming, outgoings in self.mandatory_relation_pairs:
+            self.framework.observe(self.on[incoming].relation_joined, self._update_status)
+            self.framework.observe(self.on[incoming].relation_broken, self._update_status)
+            for outgoing in outgoings:
+                self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
+                self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
 
     def _on_mandatory_relation_event(self, _event=None):
         """Event handler for any mandatory relation event."""
@@ -173,6 +177,14 @@ class GrafanaAgentCharm(CharmBase):
         """Rebuild the config."""
         self._update_config()
         self._update_status()
+
+    def _on_cloud_config_available(self, _) -> None:
+        logger.info("cloud config available")
+        self._update_config()
+
+    def _on_cloud_config_revoked(self, _) -> None:
+        logger.info("cloud config revoked")
+        self._update_config()
 
     # Abstract Methods
     def agent_version_output(self) -> str:
@@ -336,16 +348,23 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         # Make sure every incoming relation has a matching outgoing relation
-        for incoming, outgoing in self.mandatory_relation_pairs:
-            if self.model.relations.get(incoming):
-                if not len(self.model.relations.get(outgoing, [])):
-                    logger.warning(
-                        "An incoming '%s' relation does not yet have a matching outgoing '%s' relation",
-                        incoming,
-                        outgoing,
-                    )
-                    self.unit.status = BlockedStatus(f"Missing relation: '{outgoing}'")
-                    return
+        for incoming, outgoings in self.mandatory_relation_pairs:
+            if not self.model.relations.get(incoming):
+                continue
+
+            has_outgoing = False
+            for outgoing in outgoings:
+                if len(self.model.relations.get(outgoing, [])):
+                    has_outgoing = True
+
+            if not has_outgoing:
+                logger.warning(
+                    "An incoming '%s' relation does not yet have a matching outgoing [%s] relation",
+                    incoming,
+                    '|'.join(outgoings),
+                )
+                self.unit.status = BlockedStatus(f"Missing relation: [{'|'.join(outgoings)}]")
+                return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
@@ -396,7 +415,31 @@ class GrafanaAgentCharm(CharmBase):
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
         prometheus_endpoints = self._remote_write.endpoints
+
+        if self._cloud.prometheus_ready:
+            prometheus_endpoints.append(
+                {
+                    "url": self._cloud.prometheus_url,
+                    "basic_auth": {
+                        "username": self._cloud.credentials.username,
+                        "password": self._cloud.credentials.password,
+                    },
+                }
+            )
+
         loki_endpoints = self._loki_consumer.loki_endpoints
+
+        if self._cloud.loki_ready:
+            loki_endpoints.append(
+                {
+                    "url": self._cloud.loki_url,
+                    "basic_auth": {
+                        "username": self._cloud.credentials.username,
+                        "password": self._cloud.credentials.password,
+                    },
+                }
+            )
+
         for endpoint in prometheus_endpoints + loki_endpoints:
             endpoint["tls_config"] = {
                 "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")

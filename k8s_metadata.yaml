@@ -45,6 +45,9 @@ requires:
     interface: loki_push_api
   grafana-dashboards-consumer:
     interface: grafana_dashboard
+  grafana-cloud-config:
+    interface: grafana_cloud_config
+    limit: 1
 
 provides:
   logging-provider:
