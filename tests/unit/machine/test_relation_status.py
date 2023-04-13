@@ -5,10 +5,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from charm import GrafanaAgentMachineCharm as GrafanaAgentCharm
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
-
-from charm import GrafanaAgentMachineCharm as GrafanaAgentCharm
 
 
 class TestRelationStatus(unittest.TestCase):
