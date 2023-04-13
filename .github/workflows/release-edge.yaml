@@ -1,6 +1,7 @@
 name: Release to Edge
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - main

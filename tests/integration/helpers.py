@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import grp
 import json
 import logging
 import urllib.error
@@ -274,3 +275,13 @@ async def get_prometheus_active_targets(
     prometheus = Prometheus(host=host)
     targets = await prometheus.active_targets()
     return targets
+
+
+def uk8s_group() -> str:
+    try:
+        # Classically confined microk8s
+        uk8s_group = grp.getgrnam("microk8s").gr_name
+    except KeyError:
+        # Strictly confined microk8s
+        uk8s_group = "snap_microk8s"
+    return uk8s_group
