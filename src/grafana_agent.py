@@ -330,7 +330,7 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self):
+    def _update_status(self, *_):
         """Determine the charm status based on relation health and grafana-agent service readiness.
 
         This is a centralized status setter. Status should only be calculated here, or, if you need
@@ -361,7 +361,7 @@ class GrafanaAgentCharm(CharmBase):
                 logger.warning(
                     "An incoming '%s' relation does not yet have a matching outgoing [%s] relation",
                     incoming,
-                    '|'.join(outgoings),
+                    "|".join(outgoings),
                 )
                 self.unit.status = BlockedStatus(f"Missing relation: [{'|'.join(outgoings)}]")
                 return
