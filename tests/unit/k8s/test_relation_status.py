@@ -45,7 +45,7 @@ class TestRelationStatus(unittest.TestCase):
                 # WHEN an incoming relation is added
                 rel_id = self.harness.add_relation(incoming, "grafana-agent")
                 self.harness.add_relation_unit(rel_id, "grafana-agent/0")
-                self.harness.update_relation_data(rel_id, "grafana-agent/0", {"dummy": "value"})
+                self.harness.update_relation_data(rel_id, "grafana-agent/0", {"sample": "value"})
 
                 # THEN the charm goes into blocked status
                 self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)

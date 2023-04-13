@@ -463,7 +463,7 @@ class COSAgentRequirer(Object):
             return
         principal_unit = event.unit
 
-        # Sanity check
+        # Coherence check
         units = cos_agent_relation.units
         if len(units) > 1:
             # should never happen
