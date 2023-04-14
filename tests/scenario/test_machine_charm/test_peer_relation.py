@@ -15,7 +15,7 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
 )
 from ops.charm import CharmBase
 from ops.framework import Framework
-from scenario import PeerRelation, Relation, State, SubordinateRelation
+from scenario import PeerRelation, State, SubordinateRelation
 
 
 def encode_as_dashboard(dct: dict):

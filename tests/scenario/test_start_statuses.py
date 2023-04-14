@@ -11,7 +11,7 @@ import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, Relation, State, SubordinateRelation
+from scenario import Container, ExecOutput, State, SubordinateRelation
 
 import k8s_charm
 import machine_charm
