@@ -101,7 +101,7 @@ def test_cos_agent_e2e(vroot):
             cos_agent,
         ]
     ).trigger(
-        cos_agent.changed_event(remote_unit=1),
+        cos_agent.changed_event(remote_unit_id=1),
         charm_type=MyPrincipal,
         meta=MyPrincipal.META,
         charm_root=vroot,
@@ -115,7 +115,7 @@ def test_cos_agent_e2e(vroot):
         remote_unit_data=state_out.relations[0].local_unit_data,
     )
     state_out1 = State(relations=[cos_agent1, peer]).trigger(
-        cos_agent1.changed_event(remote_unit=0),
+        cos_agent1.changed_event(remote_unit_id=0),
         charm_type=GrafanaAgentMachineCharm,
         charm_root=vroot,
     )
@@ -132,7 +132,7 @@ def test_cos_agent_e2e(vroot):
         remote_unit_data=state_out.relations[0].local_unit_data,
     )
     state_out2 = State(leader=True, relations=[cos_agent2, peer_out, prometheus]).trigger(
-        peer_out.changed_event(remote_unit=0),
+        peer_out.changed_event(remote_unit_id=0),
         charm_type=GrafanaAgentMachineCharm,
         charm_root=vroot,
     )

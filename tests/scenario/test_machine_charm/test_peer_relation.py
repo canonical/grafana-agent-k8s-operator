@@ -55,7 +55,7 @@ class MyRequirerCharm(CharmBase):
     META = {
         "name": "test",
         "requires": {
-            "cos-agent": {"interface": "cos_agent"},
+            "cos-agent": {"interface": "cos_agent", "scope": "container"},
             "send-remote-write": {"interface": "prometheus_remote_write"},
         },
         "peers": {"peers": {"interface": "grafana_agent_replica"}},
@@ -115,7 +115,7 @@ def test_no_dashboards_peer_cosagent():
     state.trigger(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
-        event=cos_agent.changed_event(remote_unit=0),
+        event=cos_agent.changed_event(remote_unit_id=0),
         post_event=post_event,
     )
 
@@ -149,7 +149,7 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
     state_out = state.trigger(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
-        event=cos_agent.changed_event(remote_unit=0),
+        event=cos_agent.changed_event(remote_unit_id=0),
         post_event=post_event,
     )
 
@@ -170,11 +170,11 @@ def test_cosagent_to_peer_data_flow_relation(leader):
         dashboards=[encode_as_dashboard(raw_dashboard_1)],
     )
 
-    cos_agent_1 = Relation(
+    cos_agent_1 = SubordinateRelation(
         endpoint="cos-agent",
         interface="cos_agent",
-        remote_app_name="primary",
-        remote_units_data={0: {data_1.KEY: data_1.json()}},
+        primary_app_name="primary",
+        remote_unit_data={data_1.KEY: data_1.json()},
     )
 
     raw_dashboard_2 = {"title": "other_title", "foo": "other bar (would that be a pub?)"}
@@ -244,7 +244,7 @@ def test_cosagent_to_peer_data_flow_relation(leader):
         # now it's the 2nd relation that's reporting a change:
         # the charm should update peer data
         # and in post_event the dashboard should be there.
-        event=cos_agent_2.changed_event(remote_unit=0),
+        event=cos_agent_2.changed_event(remote_unit_id=0),
         pre_event=pre_event,
         post_event=post_event,
     )
@@ -358,7 +358,7 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         # our primary #0 has just updated its peer relation databag
-        event=cos_agent_2.changed_event(remote_unit=0),
+        event=cos_agent_2.changed_event(remote_unit_id=0),
         pre_event=pre_event,
         post_event=post_event,
     )

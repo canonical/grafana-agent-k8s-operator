@@ -11,7 +11,7 @@ import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, Relation, State
+from scenario import Container, ExecOutput, Relation, State, SubordinateRelation
 
 import k8s_charm
 import machine_charm
@@ -97,7 +97,7 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert not charm.is_ready
 
-    juju_info = Relation("juju-info")
+    juju_info = SubordinateRelation("juju-info")
     with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", False):
         out = State(relations=[juju_info]).trigger(
             juju_info.joined_event,
