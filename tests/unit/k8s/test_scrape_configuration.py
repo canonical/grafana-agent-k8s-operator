@@ -4,6 +4,7 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import patch
 
@@ -12,7 +13,7 @@ import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
 from helpers import FakeProcessVersionCheck
-from ops.model import ActiveStatus, Container, WaitingStatus
+from ops.model import ActiveStatus, Container
 from ops.testing import Harness
 
 from charm import (  # isort: skip <- needed because charm.py does not always exist
@@ -78,11 +79,14 @@ REWRITE_CONFIGS = [
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
-    @patch("grafana_agent.KubernetesServicePatch", lambda x, y: None)
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch("grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.DASHBOARDS_SRC_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.DASHBOARDS_DEST_PATH", tempfile.mkdtemp())
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )
@@ -111,14 +115,28 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             "prometheus/0",
-            {"remote_write": json.dumps({"url": "http://1.1.1.1:9090/api/v1/write"})},
+            {
+                "remote_write": json.dumps(
+                    {
+                        "url": "http://1.1.1.1:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    }
+                )
+            },
         )
 
         self.harness.add_relation_unit(rel_id, "prometheus/1")
         self.harness.update_relation_data(
             rel_id,
             "prometheus/1",
-            {"remote_write": json.dumps({"url": "http://1.1.1.2:9090/api/v1/write"})},
+            {
+                "remote_write": json.dumps(
+                    {
+                        "url": "http://1.1.1.2:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    }
+                )
+            },
         )
 
         expected_config: Dict[str, Any] = {
@@ -128,8 +146,14 @@ class TestScrapeConfiguration(unittest.TestCase):
                     "relabel_configs": REWRITE_CONFIGS,
                 },
                 "prometheus_remote_write": [
-                    {"url": "http://1.1.1.2:9090/api/v1/write"},
-                    {"url": "http://1.1.1.1:9090/api/v1/write"},
+                    {
+                        "url": "http://1.1.1.2:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    },
+                    {
+                        "url": "http://1.1.1.1:9090/api/v1/write",
+                        "tls_config": {"insecure_skip_verify": False},
+                    },
                 ],
             },
             "metrics": {
@@ -138,8 +162,14 @@ class TestScrapeConfiguration(unittest.TestCase):
                     {
                         "name": "agent_scraper",
                         "remote_write": [
-                            {"url": "http://1.1.1.2:9090/api/v1/write"},
-                            {"url": "http://1.1.1.1:9090/api/v1/write"},
+                            {
+                                "url": "http://1.1.1.2:9090/api/v1/write",
+                                "tls_config": {"insecure_skip_verify": False},
+                            },
+                            {
+                                "url": "http://1.1.1.1:9090/api/v1/write",
+                                "tls_config": {"insecure_skip_verify": False},
+                            },
                         ],
                         "scrape_configs": [],
                     }
@@ -149,29 +179,41 @@ class TestScrapeConfiguration(unittest.TestCase):
             "logs": {},
         }
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
 
-        self.assertEqual(DeepDiff(expected_config, config, ignore_order=True), {})
+        self.assertEqual(
+            DeepDiff(expected_config, self.harness.charm._generate_config(), ignore_order=True), {}
+        )
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
         # Test scale down
         self.harness.remove_relation_unit(rel_id, "prometheus/1")
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
 
         self.assertEqual(
             config["integrations"]["prometheus_remote_write"],
-            [{"url": "http://1.1.1.1:9090/api/v1/write"}],
+            [
+                {
+                    "url": "http://1.1.1.1:9090/api/v1/write",
+                    "tls_config": {"insecure_skip_verify": False},
+                }
+            ],
         )
         self.assertEqual(
             config["metrics"]["configs"][0]["remote_write"],
-            [{"url": "http://1.1.1.1:9090/api/v1/write"}],
+            [
+                {
+                    "url": "http://1.1.1.1:9090/api/v1/write",
+                    "tls_config": {"insecure_skip_verify": False},
+                }
+            ],
         )
 
         # Test scale to zero
         self.harness.remove_relation_unit(rel_id, "prometheus/0")
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
 
         self.assertEqual(config["integrations"]["prometheus_remote_write"], [])
         self.assertEqual(config["metrics"]["configs"][0]["remote_write"], [])
@@ -198,7 +240,7 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-        config = yaml.safe_load(agent_container.pull("/etc/agent/agent.yaml").read())
+        config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
         self.assertDictEqual(
             config["integrations"],
             {
@@ -210,12 +252,8 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-        self.assertEqual(
-            self.harness.model.unit.status, WaitingStatus("no related Prometheus remote-write")
-        )
-
     def test__cli_args(self):
-        expected = "-config.file=/etc/agent/agent.yaml"
+        expected = "-config.file=/etc/grafana-agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
     # Leaving this test here as we need to use it again when we figure out how to
@@ -237,33 +275,37 @@ class TestScrapeConfiguration(unittest.TestCase):
             self.harness.update_relation_data(rel_id, f"loki/{u}", {"endpoint": endpoint})
 
         expected = {
-            "logs": {
-                "configs": [
-                    {
-                        "name": "promtail",
-                        "clients": [
-                            {"url": "http://loki0:3100:/loki/api/v1/push"},
-                            {"url": "http://loki1:3100:/loki/api/v1/push"},
-                        ],
-                        "positions": {"filename": "/tmp/positions.yaml"},
-                        "scrape_configs": [
-                            {
-                                "job_name": "loki",
-                                "loki_push_api": {
-                                    "server": {
-                                        "http_listen_port": 3500,
-                                        "grpc_listen_port": 3600,
-                                    },
+            "configs": [
+                {
+                    "name": "push_api_server",
+                    "clients": [
+                        {
+                            "url": "http://loki0:3100:/loki/api/v1/push",
+                            "tls_config": {"insecure_skip_verify": False},
+                        },
+                        {
+                            "url": "http://loki1:3100:/loki/api/v1/push",
+                            "tls_config": {"insecure_skip_verify": False},
+                        },
+                    ],
+                    "scrape_configs": [
+                        {
+                            "job_name": "loki",
+                            "loki_push_api": {
+                                "server": {
+                                    "http_listen_port": 3500,
+                                    "grpc_listen_port": 3600,
                                 },
-                            }
-                        ],
-                    }
-                ]
-            }
+                            },
+                        }
+                    ],
+                },
+            ],
+            "positions_directory": "/run/grafana-agent-positions",
         }
         self.assertEqual(
-            DeepDiff(expected, self.harness.charm._loki_config(), ignore_order=True), {}
+            DeepDiff(expected, self.harness.charm._loki_config, ignore_order=True), {}
         )
 
         self.harness.remove_relation(rel_id)
-        self.assertEqual({"logs": {}}, self.harness.charm._loki_config())
+        self.assertEqual({}, self.harness.charm._loki_config)

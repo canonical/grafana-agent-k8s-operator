@@ -64,3 +64,10 @@ follow_imports = "silent"
 minversion = "6.0"
 log_cli_level = "INFO"
 asyncio_mode = "auto"
+
+[tool.pyright]
+pythonVersion = "3.8"
+pythonPlatform = "All"
+typeCheckingMode = "basic" # we'll work up to strict
+reportIncompatibleMethodOverride = false
+reportImportCycles = false

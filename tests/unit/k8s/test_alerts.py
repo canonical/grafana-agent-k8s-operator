@@ -28,12 +28,12 @@ PROMETHEUS_ALERT_RULES = {
                     "alert": "CPUOverUse",
                     "expr": 'process_cpu_seconds_total{juju_application="provider-tester",'
                     'juju_model="lma",'
-                    'juju_model_uuid="1c488e10-7b89-48e9-8c9b-b216b04eedb4"} > 0.12',
+                    'juju_model_uuid="81cafdbe-ccaa-4048-bd91-d3e5ece673ad"} > 0.12',
                     "for": "0m",
                     "labels": {
                         "severity": "Low",
                         "juju_model": "lma",
-                        "juju_model_uuid": "1c488e10-7b89-48e9-8c9b-b216b04eedb4",
+                        "juju_model_uuid": "81cafdbe-ccaa-4048-bd91-d3e5ece673ad",
                         "juju_application": "provider-tester",
                     },
                     "annotations": {
@@ -45,12 +45,12 @@ PROMETHEUS_ALERT_RULES = {
                 {
                     "alert": "PrometheusTargetMissing",
                     "expr": 'up{juju_application="provider-tester",juju_model="lma",'
-                    'juju_model_uuid="1c488e10-7b89-48e9-8c9b-b216b04eedb4"} == 0',
+                    'juju_model_uuid="81cafdbe-ccaa-4048-bd91-d3e5ece673ad"} == 0',
                     "for": "0m",
                     "labels": {
                         "severity": "critical",
                         "juju_model": "lma",
-                        "juju_model_uuid": "1c488e10-7b89-48e9-8c9b-b216b04eedb4",
+                        "juju_model_uuid": "81cafdbe-ccaa-4048-bd91-d3e5ece673ad",
                         "juju_application": "provider-tester",
                     },
                     "annotations": {
@@ -68,19 +68,19 @@ PROMETHEUS_ALERT_RULES = {
 LOKI_ALERT_RULES = {
     "groups": [
         {
-            "name": "lma_1c488e10-7b89-48e9-8c9b-b216b04eedb4_provider-tester_alerts",
+            "name": "lma_81cafdbe-ccaa-4048-bd91-d3e5ece673ad_provider-tester_alerts",
             "rules": [
                 {
                     "alert": "TooManyLogMessages",
                     "expr": 'count_over_time({job=".+",'
                     'juju_application="provider-tester",'
                     'juju_model="lma",'
-                    'juju_model_uuid="1c488e10-7b89-48e9-8c9b-b216b04eedb4"}[1m]) > 10',
+                    'juju_model_uuid="81cafdbe-ccaa-4048-bd91-d3e5ece673ad"}[1m]) > 10',
                     "for": "0m",
                     "labels": {
                         "severity": "Low",
                         "juju_model": "lma",
-                        "juju_model_uuid": "1c488e10-7b89-48e9-8c9b-b216b04eedb4",
+                        "juju_model_uuid": "81cafdbe-ccaa-4048-bd91-d3e5ece673ad",
                         "juju_application": "provider-tester",
                     },
                     "annotations": {
@@ -98,11 +98,14 @@ LOKI_ALERT_RULES = {
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertIngestion(unittest.TestCase):
-    @patch("grafana_agent.KubernetesServicePatch", lambda x, y: None)
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch("grafana_agent.GrafanaAgentCharm.charm_dir", pathlib.Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.DASHBOARDS_SRC_PATH", tempfile.mkdtemp())
+    @patch("grafana_agent.DASHBOARDS_DEST_PATH", tempfile.mkdtemp())
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )

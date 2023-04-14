@@ -1,1 +1,60 @@
-placeholder
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: grafana-agent
+
+description: |
+  Grafana Agent Subordinate Charm
+summary: |
+  Grafana Agent is a telemetry collector for sending metrics, logs,
+  and trace data to the opinionated Grafana observability stack.
+maintainers:
+    - Jose Massón <jose.masson@canonical.com>
+    - Ryan Barry <ryan.barry@canonical.com>
+    - Leon Mintz <leon.mintz@canonical.com>
+    - Pietro Pasotti <pietro.pasotti@canonical.com>
+    - Dylan Stephano-Shachter <dylan.stephano-shachter@canonical.com>
+    - Luca Bello <luca.bello@canonical.com>
+    - Simon Aronsson <simon.aronsson@canonical.com>
+
+#docs: https://discourse.charmhub.io/t/grafana-agent-k8s-docs-index/5605
+website: https://charmhub.io/grafana-agent
+#source: https://github.com/canonical/grafana-agent-k8s-operator
+#issues: https://github.com/canonical/grafana-agent-k8s-operator/issues
+
+subordinate: true
+series:
+  - jammy
+  - focal
+
+requires:
+  juju-info:
+    description: |
+      `juju-info` provides basic compatibility with all charms.
+      If all you want is /var/log logs and node_exporter metrics,
+      this relation will be enough.
+    interface: juju-info
+    scope: container
+  cos-agent:
+    description: |
+      `cos-agent` is a dedicated relation for the grafana agent machine
+      charm. It will allow you to set up custom scrape jobs, fetch files
+      from arbitrary locations, send alert rules, dashboards, etc.
+    interface: cos_agent
+    scope: container
+
+  send-remote-write:
+    interface: prometheus_remote_write
+  logging-consumer:
+    interface: loki_push_api
+  grafana-cloud-config:
+    interface: grafana_cloud_config
+    limit: 1
+
+provides:
+  grafana-dashboards-provider:
+    interface: grafana_dashboard
+
+peers:
+  peers:
+    interface: grafana_agent_replica
