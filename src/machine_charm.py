@@ -149,12 +149,12 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     service_name = "grafana-agent.grafana-agent"
 
-    # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined
-    # without a matching 'outgoing', the charm will block. Without an outgoing relation
-    # we may incur data loss.
     mandatory_relation_pairs = [
-        ("cos-agent", ["send-remote-write", "logging-consumer", "grafana-cloud-config"]),
-        ("juju-info", ["send-remote-write", "logging-consumer", "grafana-cloud-config"]),
+        ("cos-agent", ["send-remote-write", "grafana-cloud-config"]),
+        ("cos-agent", ["logging-consumer", "grafana-cloud-config"]),
+        ("cos-agent", ["grafana-dashboards-provider", "grafana-cloud-config"]),
+        ("juju-info", ["send-remote-write", "grafana-cloud-config"]),
+        ("juju-info", ["logging-consumer", "grafana-cloud-config"]),
     ]
 
     def __init__(self, *args):

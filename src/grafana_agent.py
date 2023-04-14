@@ -64,8 +64,12 @@ class GrafanaAgentCharm(CharmBase):
     _http_listen_port = 3500
     _grpc_listen_port = 3600
 
-    # Property to facilitate centralized status update
-    mandatory_relation_pairs: list  # overridden
+    # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
+    # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
+    # incur data loss.
+    # Property to facilitate centralized status update.
+    # 'outgoing' are OR-ed, 'incoming' are AND-ed.
+    mandatory_relation_pairs: List[Tuple[str, List[str]]]  # overridden
 
     def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
         """Forbid the usage of GrafanaAgentCharm directly."""
@@ -347,23 +351,23 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = self.status.update_config
             return
 
-        # Make sure every incoming relation has a matching outgoing relation
+        # Make sure every incoming relation has at least one matching outgoing relation
         for incoming, outgoings in self.mandatory_relation_pairs:
             if not self.model.relations.get(incoming):
                 continue
 
-            has_outgoing = False
-            for outgoing in outgoings:
-                if len(self.model.relations.get(outgoing, [])):
-                    has_outgoing = True
-
+            has_outgoing = any(
+                map(lambda outgoing: len(self.model.relations.get(outgoing, [])), outgoings)
+            )
             if not has_outgoing:
+                missing = "|".join(outgoings)
                 logger.warning(
-                    "An incoming '%s' relation does not yet have a matching outgoing [%s] relation",
+                    "An incoming '%s' relation does not yet have any "
+                    "matching outgoing relation(s): [%s]",
                     incoming,
-                    "|".join(outgoings),
+                    missing,
                 )
-                self.unit.status = BlockedStatus(f"Missing relation: [{'|'.join(outgoings)}]")
+                self.unit.status = BlockedStatus(f"Missing relation: [{missing}]")
                 return
 
         if not self.is_ready:
