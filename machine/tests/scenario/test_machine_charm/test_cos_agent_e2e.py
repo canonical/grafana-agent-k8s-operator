@@ -12,7 +12,7 @@ from ops.charm import CharmBase
 from ops.framework import Framework
 from scenario import PeerRelation, Relation, State, SubordinateRelation
 
-from machine_charm import GrafanaAgentMachineCharm
+from charm import GrafanaAgentMachineCharm
 
 
 @pytest.fixture

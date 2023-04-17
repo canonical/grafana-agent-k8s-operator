@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fs.tempfs import TempFS
 
-from machine_charm import SnapFstab
+from charm import SnapFstab
 
 
 class TestFstabParsing(unittest.TestCase):

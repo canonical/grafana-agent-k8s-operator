@@ -13,12 +13,12 @@ import yaml
 from charms.grafana_agent.v0.cos_agent import CosAgentProviderUnitData
 from scenario import Model, PeerRelation, Relation, State, SubordinateRelation
 
-import machine_charm
+import charm
 
 machine_meta = yaml.safe_load(
     (
-        Path(inspect.getfile(machine_charm.GrafanaAgentMachineCharm)).parent.parent
-        / "machine_metadata.yaml"
+        Path(inspect.getfile(charm.GrafanaAgentMachineCharm)).parent.parent
+        / "metadata.yaml"
     ).read_text()
 )
 
@@ -59,14 +59,14 @@ def test_snap_endpoints():
     my_uuid = str(uuid.uuid4())
 
     with patch("charms.operator_libs_linux.v1.snap.SnapCache"):
-        with patch("machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
-            with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
+        with patch("charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
+            with patch("charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
                 State(
                     relations=[cos_relation, loki_relation, PeerRelation("peers")],
                     model=Model(name="my-model", uuid=my_uuid),
                 ).trigger(
                     event=cos_relation.changed_event,
-                    charm_type=machine_charm.GrafanaAgentMachineCharm,
+                    charm_type=charm.GrafanaAgentMachineCharm,
                     meta=machine_meta,
                     charm_root=vroot.name,
                 )
