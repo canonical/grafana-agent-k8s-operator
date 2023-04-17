@@ -7,30 +7,16 @@ on:
       - main
 
 jobs:
-  render:
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
-      - name: Install dependencies
-        run: python3 -m pip install tox
-      - name: Render k8s Charm
-        run: tox -e render-k8s
-      - name: Pack Artifact
-        run: sudo apt-get update && sudo apt-get install tar && tar czvf artifact.tar.gz metadata.yaml src/charm.py
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: k8s_artifact
-          path: artifact.tar.gz
-
-  release:
+  # TODO remove the "artifact: k8s_artifact" arg from the reusable `release-charm` workflow
+  release-k8s:
+    # TODO: add conditional: only if common/ or k8s/ changed
     uses: canonical/observability/.github/workflows/release-charm.yaml@main
-    needs: render
     secrets: inherit
     with:
-      artifact: k8s_artifact
+      charm-path: "k8s"
+  release-machine:
+    # TODO: add conditional: only if common/ or machine/ changed
+    uses: canonical/observability/.github/workflows/release-charm.yaml@main
+    secrets: inherit
+    with:
+      charm-path: "machine"

@@ -1,4 +1,4 @@
-name: Promote K8s Charm
+name: Promote Machine Charm
 
 on:
   workflow_dispatch:
@@ -16,6 +16,6 @@ jobs:
     name: Promote
     uses: canonical/observability/.github/workflows/promote-charm.yaml@main
     with:
-      charm-path: "k8s"
+      charm-path: "machine"
       promotion: ${{ github.event.inputs.promotion }}
     secrets: inherit

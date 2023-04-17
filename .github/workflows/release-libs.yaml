@@ -9,3 +9,6 @@ jobs:
   release-libs:
     uses: canonical/observability/.github/workflows/release-libs.yaml@main
     secrets: inherit
+    with:
+      # Currently, only the machine charm has libraries
+      charm-path: "machine"

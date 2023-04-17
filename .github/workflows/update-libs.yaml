@@ -7,8 +7,15 @@ on:
     - cron: "0 0,4,8,12,16,20 * * *"
 
 jobs:
-  update-lib:
+  update-lib-k8s:
     name: Check libraries
     uses: canonical/observability/.github/workflows/update-libs.yaml@main
     secrets: inherit
-
+    with:
+      charm-path: "k8s"
+  update-lib-machine:
+    name: Check libraries
+    uses: canonical/observability/.github/workflows/update-libs.yaml@main
+    secrets: inherit
+    with:
+      charm-path: "machine"

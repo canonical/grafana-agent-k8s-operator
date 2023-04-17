@@ -6,7 +6,15 @@ on:
       - main
 
 jobs:
-  pull-request:
+  pull-request-k8s:
     name: PR
     uses: canonical/observability/.github/workflows/pull-request.yaml@main
     secrets: inherit
+    with:
+      charm-path: "k8s"
+  pull-request-machine:
+    name: PR
+    uses: canonical/observability/.github/workflows/pull-request.yaml@main
+    secrets: inherit
+    with:
+      charm-path: "machine"
