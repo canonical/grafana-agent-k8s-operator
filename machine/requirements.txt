@@ -1,0 +1,13 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# FIXME: Packing the charm with 2.2.0+139.gd011d92 will not include dependencies in PYDEPS key:
+# https://chat.charmhub.io/charmhub/pl/wngp665ycjnb78ar9ojrfhxjkr
+# That's why we are including cosl here until the bug in charmcraft is solved
+cosl
+ops
+pydantic
+requests
+kubernetes
+lightkube
+lightkube-models
