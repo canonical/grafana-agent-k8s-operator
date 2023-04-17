@@ -72,7 +72,6 @@ def test_install(charm_type, charm_meta, vroot):
 
 
 def test_start_not_ready(charm_type, charm_meta, vroot, placeholder_cfg_path):
-
     def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert not charm.is_ready
 

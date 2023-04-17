@@ -17,8 +17,7 @@ import charm
 
 machine_meta = yaml.safe_load(
     (
-        Path(inspect.getfile(charm.GrafanaAgentMachineCharm)).parent.parent
-        / "metadata.yaml"
+        Path(inspect.getfile(charm.GrafanaAgentMachineCharm)).parent.parent / "metadata.yaml"
     ).read_text()
 )
 
