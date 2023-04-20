@@ -421,9 +421,9 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         for endpoint in self._cos.snap_log_endpoints:
             fstab_entry = agent_fstab.entry(endpoint.owner, endpoint.name)
             target_path = (
-                f"{fstab_entry.target}/*"
+                f"{fstab_entry.target}/**"
                 if fstab_entry
-                else "/snap/grafana-agent/current/shared-logs/**/*"
+                else "/snap/grafana-agent/current/shared-logs/**"
             )
             job = {
                 "job_name": endpoint.owner,
@@ -440,6 +440,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                             },
                         },
                     }
+                ],
+                "pipeline_stages": [
+                    {
+                        "drop": {"source": "error", "value": "file is a directory"},
+                    },
                 ],
             }
 
