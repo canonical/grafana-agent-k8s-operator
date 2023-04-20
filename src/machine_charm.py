@@ -443,7 +443,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 ],
                 "pipeline_stages": [
                     {
-                        "drop": {"source": "error", "value": "file is a directory"},
+                        "drop": {
+                            "source": ["level", "msg"],
+                            "separator": "#",
+                            "expression": "failed to tail file#file is a directory",
+                        },
                     },
                 ],
             }
