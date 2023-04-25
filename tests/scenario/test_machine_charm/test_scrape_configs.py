@@ -213,12 +213,21 @@ def test_snap_endpoints():
                             "static_configs": [
                                 {
                                     "labels": {
-                                        "__path__": "/snap/grafana-agent/current/shared-logs/**/*",
+                                        "__path__": "/snap/grafana-agent/current/shared-logs/**",
                                         "job": "foo",
                                         "juju_model": "my-model",
                                         "juju_model_uuid": my_uuid,
                                     },
                                     "targets": ["localhost"],
+                                }
+                            ],
+                            "pipeline_stages": [
+                                {
+                                    "drop": {
+                                        "expression": "failed to tail file#file is a directory",
+                                        "separator": "#",
+                                        "source": ["level", "msg"],
+                                    }
                                 }
                             ],
                         },
@@ -227,12 +236,21 @@ def test_snap_endpoints():
                             "static_configs": [
                                 {
                                     "labels": {
-                                        "__path__": "/snap/grafana-agent/current/shared-logs/**/*",
+                                        "__path__": "/snap/grafana-agent/current/shared-logs/**",
                                         "job": "oh",
                                         "juju_model": "my-model",
                                         "juju_model_uuid": my_uuid,
                                     },
                                     "targets": ["localhost"],
+                                }
+                            ],
+                            "pipeline_stages": [
+                                {
+                                    "drop": {
+                                        "expression": "failed to tail file#file is a directory",
+                                        "separator": "#",
+                                        "source": ["level", "msg"],
+                                    }
                                 }
                             ],
                         },
