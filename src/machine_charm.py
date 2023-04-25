@@ -15,7 +15,7 @@ from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
 from charms.operator_libs_linux.v1 import snap  # type: ignore
 from grafana_agent import GrafanaAgentCharm
 from ops.main import main
-from ops.model import MaintenanceStatus, Relation, Unit
+from ops.model import BlockedStatus, MaintenanceStatus, Relation, Unit
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +168,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             self._cos.on.data_changed,  # pyright: ignore
             self._on_cos_data_changed,
         )
+        self.framework.observe(self._cos.on.validation_error, self._on_cos_validation_error)
         self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
-
         self.framework.observe(self.on.install, self.on_install)
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.stop, self._on_stop)
@@ -188,6 +188,16 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._update_metrics_alerts()
         self._update_loki_alerts()
         self._update_grafana_dashboards()
+
+    def _on_cos_validation_error(self, event):
+        msg_text = "Validation errors for cos-agent relation - check juju debug-log."
+        self.status.validation_error = BlockedStatus(msg_text)
+
+        messages = event.message.split("\n")
+        for msg in messages[1:]:
+            logger.error(msg)
+
+        self._update_status()
 
     def on_install(self, _event) -> None:
         """Install the Grafana Agent snap."""
