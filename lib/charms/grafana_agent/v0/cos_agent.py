@@ -387,10 +387,27 @@ class COSAgentDataChanged(EventBase):
     """Event emitted by `COSAgentRequirer` when relation data changes."""
 
 
+class COSAgentValidationError(EventBase):
+    """Event emitted by `COSAgentRequirer` when there is an error in the relation data."""
+
+    def __init__(self, handle, message: str = ""):
+        super().__init__(handle)
+        self.message = message
+
+    def snapshot(self) -> Dict:
+        """Save COSAgentValidationError source information."""
+        return {"message": self.message}
+
+    def restore(self, snapshot):
+        """Restore COSAgentValidationError source information."""
+        self.message = snapshot["message"]
+
+
 class COSAgentRequirerEvents(ObjectEvents):
     """`COSAgentRequirer` events."""
 
     data_changed = EventSource(COSAgentDataChanged)
+    validation_error = EventSource(COSAgentValidationError)
 
 
 class COSAgentRequirer(Object):
@@ -474,7 +491,14 @@ class COSAgentRequirer(Object):
 
         if not (raw := cos_agent_relation.data[principal_unit].get(CosAgentProviderUnitData.KEY)):
             return
-        provider_data = CosAgentProviderUnitData(**json.loads(raw))
+
+        try:
+            self.framework.breakpoint()
+            provider_data = CosAgentProviderUnitData(**json.loads(raw))
+        except pydantic.error_wrappers.ValidationError as e:
+            self.framework.breakpoint()
+            self.on.validation_error.emit(message=str(e))
+            return
 
         # Copy data from the principal relation to the peer relation, so the leader could
         # follow up.
