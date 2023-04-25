@@ -5,8 +5,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from charm import GrafanaAgentMachineCharm as GrafanaAgentCharm
 from ops.testing import Harness
+
+from charm import GrafanaAgentMachineCharm as GrafanaAgentCharm
 
 
 class TestUpdateStatus(unittest.TestCase):
