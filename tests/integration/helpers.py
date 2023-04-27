@@ -229,7 +229,9 @@ async def get_grafana_dashboards(ops_test: OpsTest, app_name: str, unit_num: int
     look through a query and fetch them.
 
     Args:
+        ops_test: pytest-operator plugin
         app_name: string name of Grafana application
+        unit_num: integer number of a Grafana juju unit
 
     Returns:
         a list of dashboards
