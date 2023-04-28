@@ -15,9 +15,8 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
-from ops.main import main
-
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
+from ops.main import main
 
 logger = logging.getLogger(__name__)
 

@@ -13,10 +13,9 @@ from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
 from charms.operator_libs_linux.v1 import snap  # type: ignore
+from grafana_agent import GrafanaAgentCharm
 from ops.main import main
 from ops.model import MaintenanceStatus, Relation, Unit
-
-from grafana_agent import GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
 
@@ -376,8 +375,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "juju_application": unit.app.name,
                 "juju_unit": unit.name,
             }
-        else:
-            return {}
+        return {}
 
     @property
     def _principal_labels(self) -> Dict[str, str]:

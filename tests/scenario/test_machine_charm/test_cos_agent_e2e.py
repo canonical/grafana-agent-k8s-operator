@@ -8,11 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from charms.grafana_agent.v0.cos_agent import CosAgentPeersUnitData, COSAgentProvider
+from machine_charm import GrafanaAgentMachineCharm
 from ops.charm import CharmBase
 from ops.framework import Framework
 from scenario import PeerRelation, Relation, State, SubordinateRelation
-
-from machine_charm import GrafanaAgentMachineCharm
 
 
 @pytest.fixture

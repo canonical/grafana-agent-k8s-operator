@@ -279,8 +279,7 @@ class GrafanaAgentCharm(CharmBase):
         """Recurse through wrappers until we find a real object, not a Callable."""
         if callable(maybe_func):
             return self._recurse_call_chain(maybe_func())
-        else:
-            return maybe_func
+        return maybe_func
 
     def update_alerts_rules(self, alerts_func: Any, reload_func: Callable, mapping: RulesMapping):
         """Copy alert rules from relations and save them to disk."""
@@ -357,7 +356,7 @@ class GrafanaAgentCharm(CharmBase):
                 continue
 
             has_outgoing = any(
-                map(lambda outgoing: len(self.model.relations.get(outgoing, [])), outgoings)
+                (len(self.model.relations.get(outgoing, [])) for outgoing in outgoings)
             )
             if not has_outgoing:
                 missing = "|".join(outgoings)
@@ -597,7 +596,7 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _instance_name(self) -> str:
         """Return the instance name as interpolated topology values."""
-        return "_".join([v for v in self._instance_topology.values()])
+        return "_".join(list(self._instance_topology.values()))
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.

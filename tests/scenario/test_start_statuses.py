@@ -7,14 +7,13 @@ from pathlib import Path
 from typing import Type
 from unittest.mock import patch
 
+import k8s_charm
+import machine_charm
 import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
 from scenario import Container, ExecOutput, State, SubordinateRelation
-
-import k8s_charm
-import machine_charm
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
 
