@@ -323,6 +323,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "scrape_configs": [
                     {
                         "job_name": "varlog",
+                        "pipeline_stages": [
+                            {
+                                "drop": {
+                                    "expression": ".*file is a directory.*",
+                                },
+                            },
+                        ],
                         "static_configs": [
                             {
                                 "targets": ["localhost"],
@@ -333,7 +340,17 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                             }
                         ],
                     },
-                    {"job_name": "syslog", "journal": {"labels": self._principal_labels}},
+                    {
+                        "job_name": "syslog",
+                        "journal": {"labels": self._principal_labels},
+                        "pipeline_stages": [
+                            {
+                                "drop": {
+                                    "expression": ".*file is a directory.*",
+                                },
+                            },
+                        ],
+                    },
                 ]
                 + self._snap_plugs_logging_configs,
             }
@@ -442,9 +459,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "pipeline_stages": [
                     {
                         "drop": {
-                            "source": ["level", "msg"],
-                            "separator": "#",
-                            "expression": "failed to tail file#file is a directory",
+                            "expression": ".*file is a directory.*",
                         },
                     },
                 ],
