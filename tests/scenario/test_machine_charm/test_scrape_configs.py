@@ -181,6 +181,9 @@ def test_snap_endpoints():
                     "scrape_configs": [
                         {
                             "job_name": "varlog",
+                            "pipeline_stages": [
+                                {"drop": {"expression": ".*file is a directory.*"}}
+                            ],
                             "static_configs": [
                                 {
                                     "labels": {
@@ -197,6 +200,9 @@ def test_snap_endpoints():
                         },
                         {
                             "job_name": "syslog",
+                            "pipeline_stages": [
+                                {"drop": {"expression": ".*file is a directory.*"}}
+                            ],
                             "journal": {
                                 "labels": {
                                     "instance": f"my-model_{my_uuid}_principal_principal/0",
@@ -209,6 +215,9 @@ def test_snap_endpoints():
                         },
                         {
                             "job_name": "foo",
+                            "pipeline_stages": [
+                                {"drop": {"expression": ".*file is a directory.*"}}
+                            ],
                             "static_configs": [
                                 {
                                     "labels": {
@@ -220,18 +229,12 @@ def test_snap_endpoints():
                                     "targets": ["localhost"],
                                 }
                             ],
-                            "pipeline_stages": [
-                                {
-                                    "drop": {
-                                        "expression": "failed to tail file#file is a directory",
-                                        "separator": "#",
-                                        "source": ["level", "msg"],
-                                    }
-                                }
-                            ],
                         },
                         {
                             "job_name": "oh",
+                            "pipeline_stages": [
+                                {"drop": {"expression": ".*file is a directory.*"}}
+                            ],
                             "static_configs": [
                                 {
                                     "labels": {
@@ -241,15 +244,6 @@ def test_snap_endpoints():
                                         "juju_model_uuid": my_uuid,
                                     },
                                     "targets": ["localhost"],
-                                }
-                            ],
-                            "pipeline_stages": [
-                                {
-                                    "drop": {
-                                        "expression": "failed to tail file#file is a directory",
-                                        "separator": "#",
-                                        "source": ["level", "msg"],
-                                    }
                                 }
                             ],
                         },
