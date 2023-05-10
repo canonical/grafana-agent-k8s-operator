@@ -12,9 +12,9 @@ groups:
     labels:
       severity: warning
     annotations:
-      summary: "[Prediction] Host filesystem '{{ $labels.mountpoint }}' is using {{ $value }}% of the total space (instance {{ $labels.instance }})"
+      summary: "[Prediction] Host filesystem '{{ $labels.mountpoint }}' is using {{ $value | printf \"%.0f\" }}% of the total space (instance {{ $labels.instance }})"
       description: >-
-        Host filesystem '{{ $labels.mountpoint }}' usage can potentially reach {{ $value }}% of the total space.
+        Host filesystem '{{ $labels.mountpoint }}' usage can potentially reach {{ $value | printf "%.0f" }}% of the total space.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
         The 6-hour-ahead prediction is made as a linear regression from the last 60 minutes of data.
@@ -24,9 +24,9 @@ groups:
     labels:
       severity: critical
     annotations:
-      summary: Host filesystem '{{ $labels.mountpoint }}' is using {{ $value }}% of the total space (instance {{ $labels.instance }})
+      summary: Host filesystem '{{ $labels.mountpoint }}' is using {{ $value | printf "%.0f" }}% of the total space (instance {{ $labels.instance }})
       description: >-
-        Host filesystem '{{ $labels.mountpoint }}' is using {{ $value }}% of the total space.
+        Host filesystem '{{ $labels.mountpoint }}' is using {{ $value | printf "%.0f" }}% of the total space.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
   - alert: HostReadonlyFilesystem
@@ -59,7 +59,7 @@ groups:
     annotations:
       summary: Host high disk '{{ $labels.device }}' read rate (instance {{ $labels.instance }})
       description: >-
-        Host disk '{{ $labels.device }}' is probably reading too much data (> 50 MB/s) for last 5m.
+        Host disk '{{ $labels.device }}' is probably reading too much data ({{ $value | printf "%.0f" }} > 50 MB/s) for last 5m.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
   - alert: HostHighDiskWriteRate
@@ -70,6 +70,6 @@ groups:
     annotations:
       summary: Host high disk '{{ $labels.device }}' write rate (instance {{ $labels.instance }})
       description: >-
-        Host disk '{{ $labels.device }}' is probably writing too much data (> 50 MB/s) for last 5m.
+        Host disk '{{ $labels.device }}' is probably writing too much data ({{ $value | printf "%.0f" }} > 50 MB/s) for last 5m.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
