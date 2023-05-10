@@ -25,9 +25,9 @@ groups:
     labels:
       severity: warning
     annotations:
-      summary: "[Prediction] Host memory usage will increase to 90% in the near future (instance {{ $labels.instance }})"
+      summary: '[Prediction] Host memory usage will increase to {{ $value | printf "%.0f" }}% in the near future (instance {{ $labels.instance }})'
       description: >-
-        Host can potentially reach 90% memory utilization and risk an OOM kill.
+        Host can potentially reach {{ $value | printf "%.0f" }}% memory utilization and risk an OOM kill.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
         The 5-minute-ahead prediction is made as a linear regression from the last 30 minutes of data.
@@ -37,9 +37,9 @@ groups:
     labels:
       severity: critical
     annotations:
-      summary: Host memory usage reached 95% load (instance {{ $labels.instance }})
+      summary: Host memory usage reached {{ $value | printf "%.0f" }}% load (instance {{ $labels.instance }})
       description: >-
-        Host memory usage reached 95%
+        Host memory usage reached {{ $value | printf "%.0f" }}%
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
   - alert: HostSwapFull
