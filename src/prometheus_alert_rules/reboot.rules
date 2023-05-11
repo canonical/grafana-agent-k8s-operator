@@ -1,0 +1,14 @@
+groups:
+- name: HostReboot
+  rules:
+  - alert: HostReboot
+    expr: changes(node_boot_time_seconds[1m]) > 0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host machine was reboot recently (instance {{ $labels.instance }})
+      description: >-
+        Host machine was reboot recently.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
