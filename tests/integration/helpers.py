@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import grp
 import json
 import logging
 import urllib.error
@@ -228,7 +229,9 @@ async def get_grafana_dashboards(ops_test: OpsTest, app_name: str, unit_num: int
     look through a query and fetch them.
 
     Args:
+        ops_test: pytest-operator plugin
         app_name: string name of Grafana application
+        unit_num: integer number of a Grafana juju unit
 
     Returns:
         a list of dashboards
@@ -274,3 +277,13 @@ async def get_prometheus_active_targets(
     prometheus = Prometheus(host=host)
     targets = await prometheus.active_targets()
     return targets
+
+
+def uk8s_group() -> str:
+    try:
+        # Classically confined microk8s
+        uk8s_group = grp.getgrnam("microk8s").gr_name
+    except KeyError:
+        # Strictly confined microk8s
+        uk8s_group = "snap_microk8s"
+    return uk8s_group

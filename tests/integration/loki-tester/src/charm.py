@@ -2,7 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""A Integration tester charm for Loki Operator."""
+"""An integration tester charm for Loki Operator."""
 
 import logging
 from multiprocessing import Queue
@@ -80,7 +80,7 @@ class LokiTesterCharm(CharmBase):
         for h in to_remove:
             logger.removeHandler(h)
 
-        # Add any missing loggers whichshould be there
+        # Add any missing loggers which should be there
         for h in to_add:
             logger.addHandler(h)
 

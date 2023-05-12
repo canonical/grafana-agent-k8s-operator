@@ -15,9 +15,8 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
-from ops.main import main
-
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
+from ops.main import main
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +25,12 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
+
+    mandatory_relation_pairs = [
+        ("metrics-endpoint", ["send-remote-write", "grafana-cloud-config"]),
+        ("grafana-dashboards-consumer", ["grafana-dashboards-provider", "grafana-cloud-config"]),
+        ("logging-provider", ["logging-consumer", "grafana-cloud-config"]),
+    ]
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -49,7 +54,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self._on_loki_push_api_alert_rules_changed,
         )
 
-        self.framework.observe(self.on.agent_pebble_ready, self._on_agent_pebble_ready)
+        self.framework.observe(self.on.agent_pebble_ready, self._on_agent_pebble_ready)  # type: ignore
 
     def _on_loki_push_api_alert_rules_changed(self, _event):
         """Refresh Loki alert rules."""
@@ -83,7 +88,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
-        return self._scrape.alerts()
+        return self._scrape.alerts
 
     def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""
@@ -137,6 +142,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def restart(self) -> None:
         """Restart grafana agent."""
         self._container.restart("agent")
+
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        return "/run"
 
 
 if __name__ == "__main__":

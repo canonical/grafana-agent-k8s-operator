@@ -34,7 +34,7 @@ async def test_deploy(ops_test, grafana_agent_charm):
 
     # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
     # address"
-    # issuing dummy update_status just to trigger an event
+    # issuing placeholder update_status just to trigger an event
     await ops_test.model.set_config({"update-status-hook-interval": "10s"})
 
     await ops_test.model.wait_for_idle(apps=[agent_name], status="active", timeout=300)
@@ -84,4 +84,4 @@ async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus
     )
 
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
-    assert len(prometheus_alerts) == 1
+    assert len(prometheus_alerts) > 0

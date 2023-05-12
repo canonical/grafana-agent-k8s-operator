@@ -2,37 +2,42 @@
 # See LICENSE file for licensing details.
 
 """Common logic for both k8s and machine charms for Grafana Agent."""
+import json
 import logging
 import os
 import pathlib
 import re
 import shutil
 from collections import namedtuple
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
+from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
+    GrafanaCloudConfigRequirer,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from ops.charm import CharmBase
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from requests.packages.urllib3.util import Retry  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "/etc/grafana-agent.yaml"
-LOKI_RULES_SRC_PATH = "./src/loki_alert_rules"
-LOKI_RULES_DEST_PATH = "./loki_alert_rules"
-METRICS_RULES_SRC_PATH = "./src/prometheus_alert_rules"
-METRICS_RULES_DEST_PATH = "./prometheus_alert_rules"
-DASHBOARDS_SRC_PATH = "./src/grafana_dashboards"
-DASHBOARDS_DEST_PATH = "./grafana_dashboards"  # placeholder until we figure out the plug
-REMOTE_WRITE_RELATION_NAME = "send-remote-write"
+# all these are relative to the charm root
+LOKI_RULES_SRC_PATH = "src/loki_alert_rules"
+LOKI_RULES_DEST_PATH = "loki_alert_rules"
+METRICS_RULES_SRC_PATH = "src/prometheus_alert_rules"
+METRICS_RULES_DEST_PATH = "prometheus_alert_rules"
+DASHBOARDS_SRC_PATH = "src/grafana_dashboards"
+DASHBOARDS_DEST_PATH = "grafana_dashboards"  # placeholder until we figure out the plug
 
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
@@ -45,13 +50,26 @@ class GrafanaAgentReloadError(Exception):
         super().__init__(self.message)
 
 
+@dataclass
+class CompoundStatus:
+    """'Dumb struct' for helping with centralized status setting."""
+
+    update_config: Optional[StatusBase] = None
+
+
 class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
-    _promtail_positions = "/run/promtail-positions.yaml"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
+
+    # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
+    # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
+    # incur data loss.
+    # Property to facilitate centralized status update.
+    # 'outgoing' are OR-ed, 'incoming' are AND-ed.
+    mandatory_relation_pairs: List[Tuple[str, List[str]]]  # overridden
 
     def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
         """Forbid the usage of GrafanaAgentCharm directly."""
@@ -62,21 +80,25 @@ class GrafanaAgentCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        # Property to facilitate centralized status update
+        self.status = CompoundStatus()
+
+        charm_root = self.charm_dir.absolute()
         self.loki_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
             # FIXED: this is already handled by re-using the *Rules classes
-            src=os.path.join(self.charm_dir, LOKI_RULES_SRC_PATH),
-            dest=os.path.join(self.charm_dir, LOKI_RULES_DEST_PATH),
+            src=charm_root.joinpath(*LOKI_RULES_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*LOKI_RULES_DEST_PATH.split("/")),
         )
         self.metrics_rules_paths = RulesMapping(
             # TODO how to inject topology only for this charm's own rules?
             # FIXED: this is already handled by re-using the *Rules classes
-            src=os.path.join(self.charm_dir, METRICS_RULES_SRC_PATH),
-            dest=os.path.join(self.charm_dir, METRICS_RULES_DEST_PATH),
+            src=charm_root.joinpath(*METRICS_RULES_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*METRICS_RULES_DEST_PATH.split("/")),
         )
         self.dashboard_paths = RulesMapping(
-            src=os.path.join(self.charm_dir, DASHBOARDS_SRC_PATH),
-            dest=os.path.join(self.charm_dir, DASHBOARDS_DEST_PATH),
+            src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
+            dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
@@ -96,6 +118,14 @@ class GrafanaAgentCharm(CharmBase):
             relation_name="grafana-dashboards-provider",
             dashboards_path=self.dashboard_paths.dest,
         )
+
+        self._cloud = GrafanaCloudConfigRequirer(self)
+
+        self.framework.observe(
+            self._cloud.on.cloud_config_available, self._on_cloud_config_available
+        )
+        self.framework.observe(self._cloud.on.cloud_config_revoked, self._on_cloud_config_revoked)
+
         self.framework.observe(
             self._grafana_dashboards_provider.on.dashboard_status_changed,
             self._on_dashboard_status_changed,
@@ -117,21 +147,47 @@ class GrafanaAgentCharm(CharmBase):
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
+        # Register status observers
+        for incoming, outgoings in self.mandatory_relation_pairs:
+            self.framework.observe(self.on[incoming].relation_joined, self._update_status)
+            self.framework.observe(self.on[incoming].relation_broken, self._update_status)
+            for outgoing in outgoings:
+                self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
+                self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+
+    def _on_mandatory_relation_event(self, _event=None):
+        """Event handler for any mandatory relation event."""
+        self._update_config()
+        self._update_status()
+
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
         self._update_metrics_alerts()
         self._update_loki_alerts()
+        self._update_config()
+        self._update_status()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
+        self._update_status()
 
     def _on_loki_push_api_endpoint_departed(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
+        self._update_status()
 
     def _on_config_changed(self, _event=None):
         """Rebuild the config."""
+        self._update_config()
+        self._update_status()
+
+    def _on_cloud_config_available(self, _) -> None:
+        logger.info("cloud config available")
+        self._update_config()
+
+    def _on_cloud_config_revoked(self, _) -> None:
+        logger.info("cloud config revoked")
         self._update_config()
 
     # Abstract Methods
@@ -192,6 +248,10 @@ class GrafanaAgentCharm(CharmBase):
         """Return a list of dashboards."""
         raise NotImplementedError("Please override the dashboards method")
 
+    def positions_dir(self) -> str:
+        """Return the positions directory."""
+        raise NotImplementedError("Please override the positions_dir method")
+
     # End: Abstract Methods
 
     def _update_metrics_alerts(self):
@@ -219,8 +279,7 @@ class GrafanaAgentCharm(CharmBase):
         """Recurse through wrappers until we find a real object, not a Callable."""
         if callable(maybe_func):
             return self._recurse_call_chain(maybe_func())
-        else:
-            return maybe_func
+        return maybe_func
 
     def update_alerts_rules(self, alerts_func: Any, reload_func: Callable, mapping: RulesMapping):
         """Copy alert rules from relations and save them to disk."""
@@ -250,12 +309,16 @@ class GrafanaAgentCharm(CharmBase):
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
         for dash in dashboards:
-            identifier = (
-                f'{dash.get("charm", "charm-name")}-{dash.get("relation_id", "rel_id")}',
-            )
-            file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(identifier))
-            file_handle.write_text(yaml.dump(dash["content"]))
-            logger.debug("updated dashboard file {}".format(file_handle.absolute()))
+            # Build dashboard custom filename
+            charm = dash.get("charm", "charm-name")
+            rel_id = dash.get("relation_id", "rel_id")
+            title = dash.get("title").replace(" ", "_").lower()
+            filename = f"juju_{title}-{charm}-{rel_id}.json"
+
+            with open(pathlib.Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
+                f.write(json.dumps(dash["content"]))
+                logger.debug("updated dashboard file %s", f.name)
+
         reload_func()
 
     def on_scrape_targets_changed(self, _event) -> None:
@@ -270,25 +333,51 @@ class GrafanaAgentCharm(CharmBase):
         self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self):
+    def _update_status(self, *_):
         """Determine the charm status based on relation health and grafana-agent service readiness.
 
-        Sets unit status to either Waiting or Active.
+        This is a centralized status setter. Status should only be calculated here, or, if you need
+        to temporarily change the status (e.g. during snap install), always call this method after
+        so the status is re-calculated (exceptions: on_install, on_remove).
+        TODO: Rework this when "compound status" is implemented
+         https://github.com/canonical/operator/issues/665
         """
-        if relations := self.model.relations.get("metrics-endpoint"):
-            if len(relations):
-                if not len(self.model.relations[REMOTE_WRITE_RELATION_NAME]):
-                    self.unit.status = WaitingStatus("no related Prometheus remote-write")
+        if not self.is_ready:
+            self.unit.status = WaitingStatus("waiting for agent to start")
+            return
+
+        if self.status.update_config:
+            self.unit.status = self.status.update_config
+            return
+
+        # Make sure every incoming relation has at least one matching outgoing relation
+        for incoming, outgoings in self.mandatory_relation_pairs:
+            if not self.model.relations.get(incoming):
+                continue
+
+            has_outgoing = any(
+                (len(self.model.relations.get(outgoing, [])) for outgoing in outgoings)
+            )
+            if not has_outgoing:
+                missing = "|".join(outgoings)
+                logger.warning(
+                    "An incoming '%s' relation does not yet have any "
+                    "matching outgoing relation(s): [%s]",
+                    incoming,
+                    missing,
+                )
+                self.unit.status = BlockedStatus(f"Missing relation: [{missing}]")
+                return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
+            return
 
         self.unit.status = ActiveStatus()
 
     def _update_config(self) -> None:
         if not self.is_ready:
             # Grafana-agent is not yet available so no need to update config
-            self.unit.status = WaitingStatus("waiting for agent to start")
             return
 
         config = self._generate_config()
@@ -302,8 +391,7 @@ class GrafanaAgentCharm(CharmBase):
             pass
 
         if config == old_config:
-            # Nothing changed, possibly new install. Set us active and move on.
-            self.unit.status = ActiveStatus()
+            # Nothing changed, possibly new installation. Move on.
             return
 
         try:
@@ -312,11 +400,12 @@ class GrafanaAgentCharm(CharmBase):
                 # FIXME: change this to self._reload_config when #19 is fixed
                 # Restart the service to pick up the new config
                 self.restart()
-                self.unit.status = ActiveStatus()
         except GrafanaAgentReloadError as e:
-            self.unit.status = BlockedStatus(str(e))
+            logger.error(str(e))
+            self.status.update_config = BlockedStatus(str(e))
         except APIError as e:
-            self.unit.status = WaitingStatus(str(e))
+            logger.warning(str(e))
+            self.status.update_config = WaitingStatus(str(e))
 
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
@@ -324,11 +413,36 @@ class GrafanaAgentCharm(CharmBase):
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False
         )  # noqa
+        self._update_status()
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
         prometheus_endpoints = self._remote_write.endpoints
+
+        if self._cloud.prometheus_ready:
+            prometheus_endpoints.append(
+                {
+                    "url": self._cloud.prometheus_url,
+                    "basic_auth": {
+                        "username": self._cloud.credentials.username,
+                        "password": self._cloud.credentials.password,
+                    },
+                }
+            )
+
         loki_endpoints = self._loki_consumer.loki_endpoints
+
+        if self._cloud.loki_ready:
+            loki_endpoints.append(
+                {
+                    "url": self._cloud.loki_url,
+                    "basic_auth": {
+                        "username": self._cloud.credentials.username,
+                        "password": self._cloud.credentials.password,
+                    },
+                }
+            )
+
         for endpoint in prometheus_endpoints + loki_endpoints:
             endpoint["tls_config"] = {
                 "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
@@ -431,7 +545,7 @@ class GrafanaAgentCharm(CharmBase):
         return conf
 
     @property
-    def _loki_config(self) -> Dict[str, List[Any]]:
+    def _loki_config(self) -> Dict[str, Union[Any, List[Any]]]:
         """Modifies the loki section of the config.
 
         Returns:
@@ -440,13 +554,11 @@ class GrafanaAgentCharm(CharmBase):
         _, loki_endpoints = self._enrich_endpoints()
 
         configs = []
-
         if self._loki_consumer.loki_endpoints:
             configs.append(
                 {
                     "name": "push_api_server",
                     "clients": loki_endpoints,
-                    "positions": {"filename": self._promtail_positions},
                     "scrape_configs": [
                         {
                             "job_name": "loki",
@@ -462,7 +574,14 @@ class GrafanaAgentCharm(CharmBase):
             )
 
         configs.extend(self._additional_log_configs)  # type: ignore
-        return {"configs": configs} if configs else {}
+        return (
+            {
+                "positions_directory": f"{self.positions_dir()}/grafana-agent-positions",
+                "configs": configs,
+            }
+            if configs
+            else {}
+        )
 
     @property
     def _instance_topology(self) -> Dict[str, str]:
@@ -477,7 +596,7 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _instance_name(self) -> str:
         """Return the instance name as interpolated topology values."""
-        return "_".join([v for v in self._instance_topology.values()])
+        return "_".join(list(self._instance_topology.values()))
 
     def _reload_config(self, attempts: int = 10) -> None:
         """Reload the config file.
@@ -489,7 +608,7 @@ class GrafanaAgentCharm(CharmBase):
             GrafanaAgentReloadError: if configuration could not be reloaded.
         """
         try:
-            self.unit.status = MaintenanceStatus("reloading agent configuration")
+            logger.debug("reloading agent configuration")
             url = "http://localhost/-/reload"
             errors = list(range(400, 452)) + list(range(500, 513))
             s = Session()

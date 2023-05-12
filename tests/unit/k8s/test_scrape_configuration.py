@@ -4,6 +4,7 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import patch
 
@@ -12,7 +13,7 @@ import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
 from helpers import FakeProcessVersionCheck
-from ops.model import ActiveStatus, Container, WaitingStatus
+from ops.model import ActiveStatus, Container
 from ops.testing import Harness
 
 from charm import (  # isort: skip <- needed because charm.py does not always exist
@@ -79,6 +80,7 @@ REWRITE_CONFIGS = [
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch("grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
@@ -250,10 +252,6 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-        self.assertEqual(
-            self.harness.model.unit.status, WaitingStatus("no related Prometheus remote-write")
-        )
-
     def test__cli_args(self):
         expected = "-config.file=/etc/grafana-agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
@@ -290,7 +288,6 @@ class TestScrapeConfiguration(unittest.TestCase):
                             "tls_config": {"insecure_skip_verify": False},
                         },
                     ],
-                    "positions": {"filename": "/run/promtail-positions.yaml"},
                     "scrape_configs": [
                         {
                             "job_name": "loki",
@@ -302,8 +299,9 @@ class TestScrapeConfiguration(unittest.TestCase):
                             },
                         }
                     ],
-                }
-            ]
+                },
+            ],
+            "positions_directory": "/run/grafana-agent-positions",
         }
         self.assertEqual(
             DeepDiff(expected, self.harness.charm._loki_config, ignore_order=True), {}
