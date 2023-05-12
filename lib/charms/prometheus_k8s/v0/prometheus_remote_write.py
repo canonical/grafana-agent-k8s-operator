@@ -45,7 +45,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 15
 
 
 logger = logging.getLogger(__name__)
@@ -407,7 +407,7 @@ def _validate_relation_by_interface_and_direction(
     if relation_name not in charm.meta.relations:
         raise RelationNotFoundError(relation_name)
 
-    relation = charm.meta.relations[relation_name]  # type: RelationMeta
+    relation: RelationMeta = charm.meta.relations[relation_name]
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
@@ -609,6 +609,7 @@ class PrometheusRemoteWriteConsumer(Object):
             charm: The charm object that instantiated this class.
             relation_name: Name of the relation with the `prometheus_remote_write` interface as
                 defined in metadata.yaml.
+            alert_rules_path: Path of the directory containing the alert rules.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -968,7 +969,10 @@ class PrometheusRemoteWriteProvider(Object):
 
             _, errmsg = self._tool.validate_alert_rules(alert_rules)
             if errmsg:
-                relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
+                if self._charm.unit.is_leader():
+                    data = json.loads(relation.data[self._charm.app].get("event", "{}"))
+                    data["errors"] = errmsg
+                    relation.data[self._charm.app]["event"] = json.dumps(data)
                 continue
 
             alerts[identifier] = alert_rules
