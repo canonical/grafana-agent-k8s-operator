@@ -189,7 +189,7 @@ if TYPE_CHECKING:
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["cosl", "pydantic"]
 
@@ -492,10 +492,8 @@ class COSAgentRequirer(Object):
             return
 
         try:
-            self.framework.breakpoint()
             provider_data = CosAgentProviderUnitData(**json.loads(raw))
-        except pydantic.error_wrappers.ValidationError as e:
-            self.framework.breakpoint()
+        except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
             self.on.validation_error.emit(message=str(e))
             return
 
@@ -560,7 +558,13 @@ class COSAgentRequirer(Object):
                 unit = next(iter(units))
                 raw = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
                 if raw:
-                    return CosAgentProviderUnitData(**json.loads(raw))
+                    try:
+                        return CosAgentProviderUnitData(**json.loads(raw))
+                    except (
+                        pydantic.error_wrappers.ValidationError,
+                        json.decoder.JSONDecodeError,
+                    ) as e:
+                        self.on.validation_error.emit(message=str(e))
 
         return None
 

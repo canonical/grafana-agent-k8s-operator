@@ -194,6 +194,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self.status.validation_error = BlockedStatus(msg_text)
 
         messages = event.message.split("\n")
+        logger.error("%s:", messages[0])
+
         for msg in messages[1:]:
             logger.error(msg)
 
