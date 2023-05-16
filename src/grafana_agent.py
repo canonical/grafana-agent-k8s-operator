@@ -123,27 +123,27 @@ class GrafanaAgentCharm(CharmBase):
         self._cloud = GrafanaCloudConfigRequirer(self)
 
         self.framework.observe(
-            self._cloud.on.cloud_config_available, self._on_cloud_config_available
+            self._cloud.on.cloud_config_available, self._on_cloud_config_available # type: ignore
         )
-        self.framework.observe(self._cloud.on.cloud_config_revoked, self._on_cloud_config_revoked)
+        self.framework.observe(self._cloud.on.cloud_config_revoked, self._on_cloud_config_revoked) # type: ignore
 
         self.framework.observe(
-            self._grafana_dashboards_provider.on.dashboard_status_changed,
+            self._grafana_dashboards_provider.on.dashboard_status_changed, # type: ignore
             self._on_dashboard_status_changed,
         )
 
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         self.framework.observe(
-            self._remote_write.on.endpoints_changed, self.on_remote_write_changed
+            self._remote_write.on.endpoints_changed, self.on_remote_write_changed # type: ignore
         )
 
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_joined,
+            self._loki_consumer.on.loki_push_api_endpoint_joined, # type: ignore
             self._on_loki_push_api_endpoint_joined,
         )
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_departed,
+            self._loki_consumer.on.loki_push_api_endpoint_departed, # type: ignore
             self._on_loki_push_api_endpoint_departed,
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -451,7 +451,7 @@ class GrafanaAgentCharm(CharmBase):
 
         for endpoint in prometheus_endpoints + loki_endpoints:
             endpoint["tls_config"] = {
-                "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
+                "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify", "")
             }
         return prometheus_endpoints, loki_endpoints
 
