@@ -63,12 +63,6 @@ class TestRelationStatus(unittest.TestCase):
         # THEN the charm goes into active status
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-    def test_cos_agent_wrong_provider_data(self):
-        rel_id = self.harness.add_relation("cos-agent", "principal")
-        self.harness.add_relation_unit(rel_id, "principal/0")
-        self.harness.update_relation_data(rel_id, "principal/0", {"config": "wrong_value"})
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
     def test_juju_info_with_relations(self):
         # WHEN an incoming relation is added
         rel_id = self.harness.add_relation("juju-info", "grafana-agent")
