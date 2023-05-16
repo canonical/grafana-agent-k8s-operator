@@ -97,7 +97,7 @@ def test_no_dashboards_peer():
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
     )
-    ctx.run(state=State(), event="update-status", post_event=post_event)
+    ctx.run(state=state, event="update-status", post_event=post_event)
 
 
 def test_no_dashboards_peer_cosagent():
