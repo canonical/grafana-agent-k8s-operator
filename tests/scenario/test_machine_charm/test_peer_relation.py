@@ -148,7 +148,9 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
     )
-    state_out = ctx.run(state=state, event=cos_agent.changed_event(remote_unit_id=0), post_event=post_event)
+    state_out = ctx.run(
+        state=state, event=cos_agent.changed_event(remote_unit_id=0), post_event=post_event
+    )
 
     peer_relation_out = next(filter(lambda r: r.endpoint == "peers", state_out.relations))
     peer_data = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
@@ -235,12 +237,16 @@ def test_cosagent_to_peer_data_flow_relation(leader):
         assert other_dash["title"] == "other_title"
         assert other_dash["content"] == raw_dashboard_2
 
-
     ctx = Context(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
     )
-    state_out = ctx.run(state=state, event=cos_agent_2.changed_event(remote_unit_id=0), pre_event=pre_event, post_event=post_event)
+    state_out = ctx.run(
+        state=state,
+        event=cos_agent_2.changed_event(remote_unit_id=0),
+        pre_event=pre_event,
+        post_event=post_event,
+    )
 
     peer_relation_out: PeerRelation = next(
         filter(lambda r: r.endpoint == "peers", state_out.relations)
@@ -347,12 +353,16 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
         assert dash["title"] == "title"
         assert dash["content"] == raw_dashboard_1
 
-
     ctx = Context(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
     )
-    state_out = ctx.run(state=state, event=cos_agent_2.changed_event(remote_unit_id=0), pre_event=pre_event, post_event=post_event)
+    state_out = ctx.run(
+        state=state,
+        event=cos_agent_2.changed_event(remote_unit_id=0),
+        pre_event=pre_event,
+        post_event=post_event,
+    )
 
     peer_relation_out: PeerRelation = next(
         filter(lambda r: r.endpoint == "peers", state_out.relations)
