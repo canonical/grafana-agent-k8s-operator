@@ -217,8 +217,12 @@ class GrafanaDashboard(str):
         return GrafanaDashboard(encoded)
 
     def _deserialize(self) -> Dict:
-        raw = lzma.decompress(base64.b64decode(self.encode("utf-8"))).decode()
-        return json.loads(raw)
+        try:
+            raw = lzma.decompress(base64.b64decode(self.encode("utf-8"))).decode()
+            return json.loads(raw)
+        except json.decoder.JSONDecodeError as e:
+            logger.error("Invalid Dashboard format: %s", e)
+            return {}
 
     def __repr__(self):
         """Return string representation of self."""
@@ -339,14 +343,22 @@ class COSAgentProvider(Object):
             # Add a guard to make sure it doesn't happen.
             if relation.data and self._charm.unit in relation.data:
                 # Subordinate relations can communicate only over unit data.
-                data = CosAgentProviderUnitData(
-                    metrics_alert_rules=self._metrics_alert_rules,
-                    log_alert_rules=self._log_alert_rules,
-                    dashboards=self._dashboards,
-                    metrics_scrape_jobs=self._scrape_jobs,
-                    log_slots=self._log_slots,
-                )
-                relation.data[self._charm.unit][data.KEY] = data.json()
+                try:
+                    data = CosAgentProviderUnitData(
+                        metrics_alert_rules=self._metrics_alert_rules,
+                        log_alert_rules=self._log_alert_rules,
+                        dashboards=self._dashboards,
+                        metrics_scrape_jobs=self._scrape_jobs,
+                        log_slots=self._log_slots,
+                    )
+                    relation.data[self._charm.unit][data.KEY] = data.json()
+                except (
+                    pydantic.error_wrappers.ValidationError,
+                    json.decoder.JSONDecodeError,
+                ) as e:
+                    logger.error("Invalid relation data provided: %s", e)
+                    relation.data[self._charm.unit][CosAgentProviderUnitData.KEY] = "{}"
+                    logger.debug("Relation data removed from unit data bag.")
 
     @property
     def _scrape_jobs(self) -> List[Dict]:
