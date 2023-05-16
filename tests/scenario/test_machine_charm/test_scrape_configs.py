@@ -70,7 +70,7 @@ def test_snap_endpoints():
                     meta=machine_meta,
                     charm_root=vroot.name,
                 )
-                out = ctx.run(state=state, event=cos_relation.changed_event)
+                ctx.run(state=state, event=cos_relation.changed_event)
 
     assert written_path == "/etc/grafana-agent.yaml"
     written_config = yaml.safe_load(written_text)
