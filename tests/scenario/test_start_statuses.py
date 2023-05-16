@@ -103,7 +103,9 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
             meta=charm_meta,
             charm_root=vroot,
         )
-        out = ctx.run(state=State(relations=[juju_info]), event=juju_info.joined_event, post_event=post_event)
+        out = ctx.run(
+            state=State(relations=[juju_info]), event=juju_info.joined_event, post_event=post_event
+        )
 
     assert out.status.unit == ("waiting", "waiting for agent to start")
 
