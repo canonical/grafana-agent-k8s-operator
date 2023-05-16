@@ -504,10 +504,7 @@ class COSAgentRequirer(Object):
         if not (raw := cos_agent_relation.data[principal_unit].get(CosAgentProviderUnitData.KEY)):
             return
 
-        try:
-            provider_data = CosAgentProviderUnitData(**json.loads(raw))
-        except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
-            self.on.validation_error.emit(message=str(e))
+        if not (provider_data := self._validated_provider_data(raw)):
             return
 
         # Copy data from the principal relation to the peer relation, so the leader could
@@ -527,6 +524,14 @@ class COSAgentRequirer(Object):
         # that goes into peer relation (in which case, if this is not a leader unit, we wouldn't
         # need to emit `on.data_changed`), so we're emitting `on.data_changed` either way.
         self.on.data_changed.emit()
+
+
+    def _validated_provider_data(self, raw):
+        try:
+            return CosAgentProviderUnitData(**json.loads(raw))
+        except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
+            self.on.validation_error.emit(message=str(e))
+            return
 
     def trigger_refresh(self, _):
         """Trigger a refresh of relation data."""
@@ -571,13 +576,9 @@ class COSAgentRequirer(Object):
                 unit = next(iter(units))
                 raw = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
                 if raw:
-                    try:
-                        return CosAgentProviderUnitData(**json.loads(raw))
-                    except (
-                        pydantic.error_wrappers.ValidationError,
-                        json.decoder.JSONDecodeError,
-                    ) as e:
-                        self.on.validation_error.emit(message=str(e))
+                    if not (provider_data := self._validated_provider_data(raw)):
+                        return
+                    return provider_data
 
         return None
 
