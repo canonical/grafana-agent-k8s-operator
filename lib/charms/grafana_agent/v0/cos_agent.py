@@ -525,7 +525,6 @@ class COSAgentRequirer(Object):
         # need to emit `on.data_changed`), so we're emitting `on.data_changed` either way.
         self.on.data_changed.emit()
 
-
     def _validated_provider_data(self, raw):
         try:
             return CosAgentProviderUnitData(**json.loads(raw))
@@ -568,19 +567,24 @@ class COSAgentRequirer(Object):
         Relies on the fact that, for subordinate relations, the only remote unit visible to
         *this unit* is the principal unit that this unit is attached to.
         """
-        if relations := self._principal_relations:
-            # Technically it's a list, but for subordinates there can only be one relation
-            principal_relation = next(iter(relations))
-            if units := principal_relation.units:
-                # Technically it's a list, but for subordinates there can only be one
-                unit = next(iter(units))
-                raw = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
-                if raw:
-                    if not (provider_data := self._validated_provider_data(raw)):
-                        return
-                    return provider_data
+        if not (relations := self._principal_relations):
+            return
 
-        return None
+        # Technically it's a list, but for subordinates there can only be one relation
+        principal_relation = next(iter(relations))
+
+        if not(units := principal_relation.units):
+            return
+
+        # Technically it's a list, but for subordinates there can only be one
+        unit = next(iter(units))
+        if not (raw := principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)):
+            return
+
+        if not (provider_data := self._validated_provider_data(raw)):
+            return
+
+        return provider_data
 
     def _gather_peer_data(self) -> List[CosAgentPeersUnitData]:
         """Collect data from the peers.
