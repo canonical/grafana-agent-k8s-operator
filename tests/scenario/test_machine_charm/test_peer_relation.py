@@ -102,7 +102,7 @@ def test_no_dashboards_peer():
 
 def test_no_dashboards_peer_cosagent():
     cos_agent = SubordinateRelation(
-        endpoint="cos-agent", interface="cos_agent", primary_app_name="primary"
+        endpoint="cos-agent", interface="cos_agent", remote_app_name="primary"
     )
     peer_relation = PeerRelation(endpoint="peers", interface="grafana_agent_replica")
 
@@ -134,7 +134,7 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
     cos_agent = SubordinateRelation(
         endpoint="cos-agent",
         interface="cos_agent",
-        primary_app_name="primary",
+        remote_app_name="primary",
         remote_unit_data={raw_data_1.KEY: raw_data_1.json()},
     )
     peer_relation = PeerRelation(endpoint="peers", interface="grafana_agent_replica")
@@ -172,7 +172,7 @@ def test_cosagent_to_peer_data_flow_relation(leader):
     cos_agent_1 = SubordinateRelation(
         endpoint="cos-agent",
         interface="cos_agent",
-        primary_app_name="primary",
+        remote_app_name="primary",
         remote_unit_data={data_1.KEY: data_1.json()},
     )
 
@@ -188,7 +188,7 @@ def test_cosagent_to_peer_data_flow_relation(leader):
     cos_agent_2 = SubordinateRelation(
         endpoint="cos-agent",
         interface="cos_agent",
-        primary_app_name="other_primary",
+        remote_app_name="other_primary",
         remote_unit_data={data_2.KEY: data_2.json()},
     )
 
@@ -292,7 +292,7 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
     cos_agent_2 = SubordinateRelation(
         endpoint="cos-agent",
         interface="cos_agent",
-        primary_app_name="other_primary",
+        remote_app_name="other_primary",
         remote_unit_data={data_2.KEY: data_2.json()},
     )
 
