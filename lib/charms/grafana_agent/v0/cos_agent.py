@@ -166,7 +166,7 @@ import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Union, cast
 
 import pydantic
 from cosl import JujuTopology
@@ -578,7 +578,7 @@ class COSAgentRequirer(Object):
         alert_rules = {}
 
         seen_apps: List[str] = []
-        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
+        for data in cast(CosAgentPeersUnitData, self._gather_peer_data()):
             if rules := data.metrics_alert_rules:
                 app_name = data.app_name
                 if app_name in seen_apps:
@@ -649,7 +649,7 @@ class COSAgentRequirer(Object):
         alert_rules = {}
         seen_apps: List[str] = []
 
-        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
+        for data in cast(CosAgentPeersUnitData, self._gather_peer_data()):
             if rules := data.log_alert_rules:
                 # This is only used for naming the file, so be as specific as we can be
                 app_name = data.app_name
@@ -681,7 +681,7 @@ class COSAgentRequirer(Object):
         dashboards: List[Dict[str, str]] = []
 
         seen_apps: List[str] = []
-        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
+        for data in cast(CosAgentPeersUnitData, self._gather_peer_data()):
             app_name = data.app_name
             if app_name in seen_apps:
                 continue  # dedup!
