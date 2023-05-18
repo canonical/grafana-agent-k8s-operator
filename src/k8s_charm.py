@@ -44,7 +44,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             ],
         )
         self._scrape = MetricsEndpointConsumer(self)
-        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed) # type: ignore
 
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
