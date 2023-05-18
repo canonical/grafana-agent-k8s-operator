@@ -27,6 +27,7 @@ from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util import Retry  # type: ignore
+from yaml.parser import ParserError
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +391,7 @@ class GrafanaAgentCharm(CharmBase):
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))
-        except (FileNotFoundError, PathError, yaml.parser.ParserError):
+        except (FileNotFoundError, PathError, ParserError):
             # File does not yet exist? Processing a deferred event?
             old_config = None
 
@@ -423,7 +424,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
-        prometheus_endpoints = self._remote_write.endpoints
+        prometheus_endpoints: List[Dict[str, Any]] = self._remote_write.endpoints
 
         if self._cloud.prometheus_ready:
             prometheus_endpoints.append(
