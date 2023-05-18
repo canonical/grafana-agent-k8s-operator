@@ -14,6 +14,25 @@ from ops.framework import Framework
 from scenario import Context, PeerRelation, Relation, State, SubordinateRelation
 
 
+class MyPrincipal(CharmBase):
+    META = {"name": "mock-principal", "provides": {"cos-agent": {"interface": "cos_agent_rel"}}}
+    metrics_endpoints = [{"path": "/metrics", "port": "8080"}]
+    metrics_rules_dir = "./src/alert_rules/prometheus"
+    logs_rules_dir = "./src/alert_rules/loki"
+    log_slots = ["charmed-kafka:logs"]
+
+    def __init__(self, framework: Framework):
+        super().__init__(framework)
+        self.gagent = COSAgentProvider(
+            self,
+            metrics_endpoints=self.metrics_endpoints,
+            metrics_rules_dir=self.metrics_rules_dir,
+            logs_rules_dir=self.logs_rules_dir,
+            log_slots=self.log_slots,
+            refresh_events=[self.on.cos_agent_relation_changed],
+        )
+
+
 @pytest.fixture
 def placeholder_cfg_path(tmp_path):
     return tmp_path / "foo.yaml"
@@ -76,8 +95,8 @@ def vroot(placeholder_cfg_path):
         os.chdir(old_cwd)
 
 
-@pytest.fixture
-def snap_is_installed(autouse=True):
+@pytest.fixture(autouse=True)
+def snap_is_installed():
     with patch(
         "machine_charm.GrafanaAgentMachineCharm._is_installed", new_callable=PropertyMock
     ) as mock_foo:
@@ -85,34 +104,28 @@ def snap_is_installed(autouse=True):
         yield
 
 
-def test_cos_agent_e2e(vroot, snap_is_installed):
-    class MyPrincipal(CharmBase):
-        META = {"name": "mock-principal", "provides": {"cos-agent": {"interface": "cos_agent"}}}
+@pytest.fixture(autouse=True)
+def ctx_gagent(vroot):
+    yield Context(
+        charm_type=GrafanaAgentMachineCharm,
+        charm_root=vroot,
+    )
 
-        def __init__(self, framework: Framework):
-            super().__init__(framework)
-            self.gagent = COSAgentProvider(
-                self,
-                metrics_endpoints=[
-                    {"path": "/metrics", "port": "8080"},
-                ],
-                metrics_rules_dir="./src/alert_rules/prometheus",
-                logs_rules_dir="./src/alert_rules/loki",
-                log_slots=["charmed-kafka:logs"],
-                refresh_events=[self.on.cos_agent_relation_changed],
-            )
 
-    # Step 1: gagent is deployed and ends in "unknown" state
-    # since it is not related to the principal charm.
-    cos_agent = Relation("cos-agent")
-    ctx = Context(
+@pytest.fixture(autouse=True)
+def ctx_principal(vroot):
+    yield Context(
         charm_type=MyPrincipal,
         meta=MyPrincipal.META,
         charm_root=vroot,
     )
 
-    state = State(relations=[cos_agent])
-    state_out = ctx.run(cos_agent.changed_event(remote_unit_id=1), state=state)
+
+def test_cos_agent_e2e(vroot, snap_is_installed, ctx_gagent, ctx_principal):
+    # Step 1: MyPrincipal charm is deployed and ends in "unknown" state
+    cos_agent_rel = Relation("cos-agent")
+    state = State(relations=[cos_agent_rel])
+    state_out = ctx_principal.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
     assert state_out.status.unit.name == "unknown"
 
     # Step 2: gagent is related to principal charm and ends in "blocked" status
@@ -121,100 +134,60 @@ def test_cos_agent_e2e(vroot, snap_is_installed):
     #  - logging-consumer
     #  - grafana-dashboards-provider
     peer = PeerRelation("peers")
-    cos_agent1 = SubordinateRelation(
+    cos_agent_sub_rel = SubordinateRelation(
         "cos-agent",
-        primary_app_name="mock-principal",
+        remote_app_name="mock-principal",
         remote_unit_data=state_out.relations[0].local_unit_data,
     )
 
-    ctx1 = Context(
-        charm_type=GrafanaAgentMachineCharm,
-        charm_root=vroot,
-    )
-    state1 = State(relations=[cos_agent1, peer])
-    state_out1 = ctx1.run(cos_agent1.changed_event(remote_unit_id=0), state=state1)
+    state1 = State(relations=[cos_agent_sub_rel, peer])
+    state_out1 = ctx_gagent.run(cos_agent_sub_rel.changed_event(remote_unit_id=0), state=state1)
     assert state_out1.status.unit.name == "blocked"
 
     peer_out = state_out1.relations[1]
     peer_out_data = json.loads(peer_out.local_unit_data[CosAgentPeersUnitData.KEY])
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
 
-    # Step 3: gagent is related to Prometheus through "send-remote-write" relation and ends
-    # in "blocked" status since there are missing relations:
-    #  - logging-consumer
-    #  - grafana-dashboards-provider
+    # Step 3: gagent is related to Grafana through "grafana-dashboards-provider" relation and ends
+    # in "active" status
     prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
-    cos_agent2 = SubordinateRelation(
+    loki = Relation("logging-consumer", remote_app_name="lok-k8s")
+    grafana = Relation("grafana-dashboards-provider", remote_app_name="grafana-k8s")
+    cos_agent_sub_rel_2 = SubordinateRelation(
         "cos-agent",
-        primary_app_name="mock-principal",
+        remote_app_name="mock-principal",
         remote_unit_data=state_out.relations[0].local_unit_data,
     )
-    ctx2 = Context(
-        charm_type=GrafanaAgentMachineCharm,
-        charm_root=vroot,
+
+    state2 = State(
+        leader=True, relations=[cos_agent_sub_rel_2, peer_out, prometheus, loki, grafana]
     )
-    state2 = State(leader=True, relations=[cos_agent2, peer_out, prometheus])
-    state_out2 = ctx2.run(peer_out.changed_event(remote_unit_id=0), state=state2)
+    state_out2 = ctx_gagent.run(peer_out.changed_event(remote_unit_id=0), state=state2)
     prom_relation_out = state_out2.relations[2]
     # the prometheus lib has put some data in local app data towards cos-lite.
     assert prom_relation_out.local_app_data["alert_rules"]
-
-    # Step 4: gagent is related to Loki through "logging-consumer" relation and ends
-    # in "blocked" status since there are missing relations:
-    #  - grafana-dashboards-provider
-    loki = Relation("logging-consumer", remote_app_name="lok-k8s")
-    state3 = State(leader=True, relations=[cos_agent2, peer_out, prometheus, loki])
-    state_out3 = ctx2.run(peer_out.changed_event(remote_unit_id=0), state=state3)
-    assert state_out3.status.unit.name == "blocked"
-
-    # Step 5: gagent is related to Grafana through "grafana-dashboards-provider" relation and ends
-    # in "active" status
-    grafana = Relation("grafana-dashboards-provider", remote_app_name="grafana-k8s")
-    state4 = State(leader=True, relations=[cos_agent2, peer_out, prometheus, loki, grafana])
-    state_out4 = ctx2.run(peer_out.changed_event(remote_unit_id=0), state=state4)
-    assert state_out4.status.unit.name == "active"
+    assert state_out2.status.unit.name == "active"
 
 
-def test_cos_agent_wrong_rel_data(vroot, snap_is_installed):
-    class MyPrincipal(CharmBase):
-        META = {"name": "mock-principal", "provides": {"cos-agent": {"interface": "cos_agent"}}}
-
-        def __init__(self, framework: Framework):
-            super().__init__(framework)
-            self.gagent = COSAgentProvider(
-                self,
-                log_slots="charmed-kafka:logs",  # Set wrong type, must be a list
-                refresh_events=[self.on.cos_agent_relation_changed],
-            )
-
-    # Step 1: gagent is deployed and ends in "unknown" state
-    # since it is not related to the principal charm.
-    cos_agent = Relation("cos-agent")
-    ctx = Context(
-        charm_type=MyPrincipal,
-        meta=MyPrincipal.META,
-        charm_root=vroot,
-    )
-
-    state = State(relations=[cos_agent])
-    state_out = ctx.run(cos_agent.changed_event(remote_unit_id=1), state=state)
+def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, ctx_gagent, ctx_principal):
+    # Step 1: MyPrincipal charm is deployed and ends in "unknown" state
+    MyPrincipal.log_slots = "charmed-kafka:logs"  # Set wrong type, must be a list
+    cos_agent_rel = Relation("cos-agent")
+    state = State(relations=[cos_agent_rel])
+    state_out = ctx_principal.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
     assert state_out.status.unit.name == "unknown"
 
     # Step 2: gagent is related to principal charm and ends in "blocked" status
     # since there are missing relations:
 
     peer = PeerRelation("peers")
-    cos_agent1 = SubordinateRelation(
+    cos_agent_sub_rel = SubordinateRelation(
         "cos-agent",
-        primary_app_name="mock-principal",
+        remote_app_name="mock-principal",
         remote_unit_data=state_out.relations[0].local_unit_data,
     )
 
-    ctx1 = Context(
-        charm_type=GrafanaAgentMachineCharm,
-        charm_root=vroot,
-    )
-    state1 = State(relations=[cos_agent1, peer])
-    state_out1 = ctx1.run(cos_agent1.changed_event(remote_unit_id=0), state=state1)
+    state1 = State(relations=[cos_agent_sub_rel, peer])
+    state_out1 = ctx_gagent.run(cos_agent_sub_rel.changed_event(remote_unit_id=0), state=state1)
     assert state_out1.status.unit.name == "blocked"
     assert "Validation errors" in state_out1.status.unit.message
