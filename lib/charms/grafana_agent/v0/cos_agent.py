@@ -356,8 +356,6 @@ class COSAgentProvider(Object):
                     json.decoder.JSONDecodeError,
                 ) as e:
                     logger.error("Invalid relation data provided: %s", e)
-                    relation.data[self._charm.unit][CosAgentProviderUnitData.KEY] = "{}"
-                    logger.debug("Relation data removed from unit data bag.")
 
     @property
     def _scrape_jobs(self) -> List[Dict]:
