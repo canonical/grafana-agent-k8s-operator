@@ -423,7 +423,10 @@ class GrafanaAgentCharm(CharmBase):
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
-        prometheus_endpoints = self._remote_write.endpoints
+        # FIXME: Remove local type when this issue:
+        # https://github.com/canonical/prometheus-k8s-operator/issues/485
+        # is fixed
+        prometheus_endpoints: List[Dict[str, Any]] = self._remote_write.endpoints
 
         if self._cloud.prometheus_ready:
             prometheus_endpoints.append(
