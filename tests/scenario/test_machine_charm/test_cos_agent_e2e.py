@@ -170,7 +170,7 @@ def test_cos_agent_e2e(vroot, snap_is_installed, ctx_gagent, ctx_principal):
     assert state_out2.status.unit.name == "active"
 
 
-def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, ctx_gagent, ctx_principal):
+def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, ctx_principal):
     # Step 1: MyPrincipal charm is deployed and ends in "unknown" state
     MyPrincipal.log_slots = "charmed-kafka:logs"  # Set wrong type, must be a list
     cos_agent_rel = Relation("cos-agent")
@@ -178,17 +178,10 @@ def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, ctx_gagent, ctx_prin
     state_out = ctx_principal.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
     assert state_out.status.unit.name == "unknown"
 
-    # Step 2: gagent is related to principal charm and ends in "blocked" status
-    # since there are missing relations:
+    found = False
+    for log in state_out.juju_log:
+        if "ERROR" in log[0] and "Invalid relation data provided:" in log[1]:
+            found = True
+            break
 
-    peer = PeerRelation("peers")
-    cos_agent_sub_rel = SubordinateRelation(
-        "cos-agent",
-        remote_app_name="mock-principal",
-        remote_unit_data=state_out.relations[0].local_unit_data,
-    )
-
-    state1 = State(relations=[cos_agent_sub_rel, peer])
-    state_out1 = ctx_gagent.run(cos_agent_sub_rel.changed_event(remote_unit_id=0), state=state1)
-    assert state_out1.status.unit.name == "blocked"
-    assert "Validation errors" in state_out1.status.unit.message
+    assert found is True
