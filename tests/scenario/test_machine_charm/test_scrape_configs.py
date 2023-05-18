@@ -47,7 +47,7 @@ def test_snap_endpoints():
         log_slots=["foo:bar", "oh:snap", "shameless-plug"],
     )
     cos_relation = SubordinateRelation(
-        "cos-agent", primary_app_name="principal", remote_unit_data={data.KEY: data.json()}
+        "cos-agent", remote_app_name="principal", remote_unit_data={data.KEY: data.json()}
     )
 
     vroot = tempfile.TemporaryDirectory()
@@ -158,7 +158,7 @@ def test_snap_endpoints():
                 {
                     "clients": [
                         {
-                            "tls_config": {"insecure_skip_verify": None},
+                            "tls_config": {"insecure_skip_verify": ""},
                             "url": "http://loki1:3100/loki/api/v1/push",
                         }
                     ],
@@ -175,7 +175,7 @@ def test_snap_endpoints():
                 {
                     "clients": [
                         {
-                            "tls_config": {"insecure_skip_verify": None},
+                            "tls_config": {"insecure_skip_verify": ""},
                             "url": "http://loki1:3100/loki/api/v1/push",
                         }
                     ],
