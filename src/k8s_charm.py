@@ -82,7 +82,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self.unit.set_workload_version(version)
         else:
             logger.debug(
-                "Cannot set workload version at this time: could not get Alertmanager version."
+                "Cannot set workload version at this time: could not get grafana-agent version."
             )
         self._update_status()
 
@@ -137,7 +137,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             path: file path to write to
             text: text to write to the file
         """
-        self._container.push(path, text)
+        self._container.push(path, text, make_dirs=True)
 
     def restart(self) -> None:
         """Restart grafana agent."""
