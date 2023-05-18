@@ -573,7 +573,7 @@ class COSAgentRequirer(Object):
         # Technically it's a list, but for subordinates there can only be one relation
         principal_relation = next(iter(relations))
 
-        if not(units := principal_relation.units):
+        if not (units := principal_relation.units):
             return
 
         # Technically it's a list, but for subordinates there can only be one
