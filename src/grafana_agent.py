@@ -22,11 +22,12 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from ops.charm import CharmBase
-from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util import Retry  # type: ignore
+from yaml.parser import ParserError
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,8 @@ class GrafanaAgentReloadError(Exception):
 class CompoundStatus:
     """'Dumb struct' for helping with centralized status setting."""
 
-    update_config: Optional[StatusBase] = None
+    # None = good; do not use ActiveStatus here.
+    update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
 
 
 class GrafanaAgentCharm(CharmBase):
@@ -386,31 +388,31 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         config = self._generate_config()
-        old_config = None
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))
-        except (FileNotFoundError, PathError):
-            # If the file does not yet exist, pebble_ready has not run yet,
-            # and we may be processing a deferred event
-            pass
+        except (FileNotFoundError, PathError, ParserError):
+            # File does not yet exist? Processing a deferred event?
+            old_config = None
 
         if config == old_config:
             # Nothing changed, possibly new installation. Move on.
+            self.status.update_config = None
             return
 
         try:
-            if config != old_config:
-                self.write_file(CONFIG_PATH, yaml.dump(config))
-                # FIXME: change this to self._reload_config when #19 is fixed
-                # Restart the service to pick up the new config
-                self.restart()
+            self.write_file(CONFIG_PATH, yaml.dump(config))
+            # FIXME: change this to self._reload_config when #19 is fixed
+            # Restart the service to pick up the new config
+            self.restart()
         except GrafanaAgentReloadError as e:
             logger.error(str(e))
             self.status.update_config = BlockedStatus(str(e))
         except APIError as e:
             logger.warning(str(e))
             self.status.update_config = WaitingStatus(str(e))
+
+        self.status.update_config = None
 
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
@@ -422,7 +424,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
-        prometheus_endpoints = self._remote_write.endpoints
+        prometheus_endpoints: List[Dict[str, Any]] = self._remote_write.endpoints
 
         if self._cloud.prometheus_ready:
             prometheus_endpoints.append(
