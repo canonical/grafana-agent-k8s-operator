@@ -157,7 +157,7 @@ def test_snap_endpoints():
                 {
                     "clients": [
                         {
-                            "tls_config": {"insecure_skip_verify": ""},
+                            "tls_config": {"insecure_skip_verify": None},
                             "url": "http://loki1:3100/loki/api/v1/push",
                         }
                     ],
@@ -174,7 +174,7 @@ def test_snap_endpoints():
                 {
                     "clients": [
                         {
-                            "tls_config": {"insecure_skip_verify": ""},
+                            "tls_config": {"insecure_skip_verify": None},
                             "url": "http://loki1:3100/loki/api/v1/push",
                         }
                     ],
