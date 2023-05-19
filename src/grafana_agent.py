@@ -57,7 +57,7 @@ class CompoundStatus:
 
     # None = good; do not use ActiveStatus here.
     update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
-    validation_error: Optional[StatusBase] = None
+    validation_error: Optional[BlockedStatus] = None
 
 
 class GrafanaAgentCharm(CharmBase):

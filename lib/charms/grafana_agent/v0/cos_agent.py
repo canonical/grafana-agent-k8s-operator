@@ -522,12 +522,12 @@ class COSAgentRequirer(Object):
         # need to emit `on.data_changed`), so we're emitting `on.data_changed` either way.
         self.on.data_changed.emit()  # pyright: ignore
 
-    def _validated_provider_data(self, raw):
+    def _validated_provider_data(self, raw) -> Optional[CosAgentProviderUnitData]:
         try:
             return CosAgentProviderUnitData(**json.loads(raw))
         except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
             self.on.validation_error.emit(message=str(e))
-            return
+            return None
 
     def trigger_refresh(self, _):
         """Trigger a refresh of relation data."""
@@ -565,21 +565,21 @@ class COSAgentRequirer(Object):
         *this unit* is the principal unit that this unit is attached to.
         """
         if not (relations := self._principal_relations):
-            return
+            return None
 
         # Technically it's a list, but for subordinates there can only be one relation
         principal_relation = next(iter(relations))
 
-        if not(units := principal_relation.units):
-            return
+        if not (units := principal_relation.units):
+            return None
 
         # Technically it's a list, but for subordinates there can only be one
         unit = next(iter(units))
         if not (raw := principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)):
-            return
+            return None
 
         if not (provider_data := self._validated_provider_data(raw)):
-            return
+            return None
 
         return provider_data
 
