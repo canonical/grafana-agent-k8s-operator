@@ -56,3 +56,14 @@ groups:
         Interface '{{ $labels.device }}' has encountered {{ $value | printf "%.4f" }}% transmit errors in the last two minutes on host {{ $labels.instance }}.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
+  - alert: HostNetworkBondDegraded
+    expr: (node_bonding_active - node_bonding_slaves) != 0
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host bond network is degraded (instance {{ $labels.instance }})
+      description: >-
+        Host bond `{{ $labels.master }}` network is degraded.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
