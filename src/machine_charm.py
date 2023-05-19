@@ -168,7 +168,9 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             self._cos.on.data_changed,  # pyright: ignore
             self._on_cos_data_changed,
         )
-        self.framework.observe(self._cos.on.validation_error, self._on_cos_validation_error)
+        self.framework.observe(
+            self._cos.on.validation_error, self._on_cos_validation_error  # pyright: ignore
+        )
         self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
         self.framework.observe(self.on.install, self.on_install)
         self.framework.observe(self.on.start, self._on_start)

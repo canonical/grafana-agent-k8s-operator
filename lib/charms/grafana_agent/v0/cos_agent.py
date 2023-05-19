@@ -526,7 +526,7 @@ class COSAgentRequirer(Object):
         try:
             return CosAgentProviderUnitData(**json.loads(raw))
         except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
-            self.on.validation_error.emit(message=str(e))
+            self.on.validation_error.emit(message=str(e))  # pyright: ignore
             return None
 
     def trigger_refresh(self, _):
