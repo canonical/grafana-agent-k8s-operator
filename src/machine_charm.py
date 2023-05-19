@@ -164,7 +164,10 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         # at all effects unused.
         self._cos = COSAgentRequirer(self)
         self.snap = snap.SnapCache()["grafana-agent"]
-        self.framework.observe(self._cos.on.data_changed, self._on_cos_data_changed)
+        self.framework.observe(
+            self._cos.on.data_changed,  # pyright: ignore
+            self._on_cos_data_changed,
+        )
         self.framework.observe(self.on["juju_info"].relation_joined, self._on_juju_info_joined)
 
         self.framework.observe(self.on.install, self.on_install)

@@ -185,7 +185,7 @@ if TYPE_CHECKING:
             port: int
 
     except ModuleNotFoundError:
-        _MetricsEndpointDict = dict
+        _MetricsEndpointDict = Dict  # pyright: ignore
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
@@ -307,12 +307,11 @@ class COSAgentProvider(Object):
             refresh_events: List of events on which to refresh relation data.
         """
         super().__init__(charm, relation_name)
-        metrics_endpoints = metrics_endpoints or [DEFAULT_METRICS_ENDPOINT]
         dashboard_dirs = dashboard_dirs or ["./src/grafana_dashboards"]
 
         self._charm = charm
         self._relation_name = relation_name
-        self._metrics_endpoints = metrics_endpoints
+        self._metrics_endpoints = metrics_endpoints or [DEFAULT_METRICS_ENDPOINT]
         self._metrics_rules = metrics_rules_dir
         self._logs_rules = logs_rules_dir
         self._recursive = recurse_rules_dirs
@@ -396,7 +395,7 @@ class COSAgentRequirerEvents(ObjectEvents):
 class COSAgentRequirer(Object):
     """Integration endpoint wrapper for the Requirer side of the cos_agent interface."""
 
-    on = COSAgentRequirerEvents()
+    on = COSAgentRequirerEvents()  # pyright: ignore
 
     def __init__(
         self,
@@ -426,7 +425,7 @@ class COSAgentRequirer(Object):
         )  # TODO: do we need this?
         self.framework.observe(events.relation_changed, self._on_relation_data_changed)
         for event in self._refresh_events:
-            self.framework.observe(event, self.trigger_refresh)
+            self.framework.observe(event, self.trigger_refresh)  # pyright: ignore
 
         # Peer relation events
         # A peer relation is needed as it is the only mechanism for exchanging data across
@@ -450,7 +449,7 @@ class COSAgentRequirer(Object):
         # Peer data is used for forwarding data from principal units to the grafana agent
         # subordinate leader, for updating the app data of the outgoing o11y relations.
         if self._charm.unit.is_leader():
-            self.on.data_changed.emit()
+            self.on.data_changed.emit()  # pyright: ignore
 
     def _on_relation_data_changed(self, event: RelationChangedEvent):
         # Peer data is the only means of communication between subordinate units.
@@ -492,12 +491,12 @@ class COSAgentRequirer(Object):
         # We can't easily tell if the data that was changed is limited to only the data
         # that goes into peer relation (in which case, if this is not a leader unit, we wouldn't
         # need to emit `on.data_changed`), so we're emitting `on.data_changed` either way.
-        self.on.data_changed.emit()
+        self.on.data_changed.emit()  # pyright: ignore
 
     def trigger_refresh(self, _):
         """Trigger a refresh of relation data."""
         # FIXME: Figure out what we should do here
-        self.on.data_changed.emit()
+        self.on.data_changed.emit()  # pyright: ignore
 
     @property
     def _principal_unit(self) -> Optional[Unit]:
@@ -578,7 +577,7 @@ class COSAgentRequirer(Object):
         alert_rules = {}
 
         seen_apps: List[str] = []
-        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
+        for data in self._gather_peer_data():
             if rules := data.metrics_alert_rules:
                 app_name = data.app_name
                 if app_name in seen_apps:
@@ -649,7 +648,7 @@ class COSAgentRequirer(Object):
         alert_rules = {}
         seen_apps: List[str] = []
 
-        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
+        for data in self._gather_peer_data():
             if rules := data.log_alert_rules:
                 # This is only used for naming the file, so be as specific as we can be
                 app_name = data.app_name
@@ -678,10 +677,10 @@ class COSAgentRequirer(Object):
 
         Dashboards are assumed not to vary across units of the same primary.
         """
-        dashboards: List[Dict[str, str]] = []
+        dashboards: List[Dict[str, Any]] = []
 
         seen_apps: List[str] = []
-        for data in self._gather_peer_data():  # type: CosAgentPeersUnitData
+        for data in self._gather_peer_data():
             app_name = data.app_name
             if app_name in seen_apps:
                 continue  # dedup!
