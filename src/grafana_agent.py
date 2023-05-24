@@ -57,6 +57,7 @@ class CompoundStatus:
 
     # None = good; do not use ActiveStatus here.
     update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
+    validation_error: Optional[BlockedStatus] = None
 
 
 class GrafanaAgentCharm(CharmBase):
@@ -355,6 +356,10 @@ class GrafanaAgentCharm(CharmBase):
 
         if self.status.update_config:
             self.unit.status = self.status.update_config
+            return
+
+        if self.status.validation_error:
+            self.unit.status = self.status.validation_error
             return
 
         # Make sure every incoming relation has at least one matching outgoing relation

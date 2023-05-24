@@ -189,7 +189,7 @@ if TYPE_CHECKING:
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["cosl", "pydantic"]
 
@@ -217,8 +217,12 @@ class GrafanaDashboard(str):
         return GrafanaDashboard(encoded)
 
     def _deserialize(self) -> Dict:
-        raw = lzma.decompress(base64.b64decode(self.encode("utf-8"))).decode()
-        return json.loads(raw)
+        try:
+            raw = lzma.decompress(base64.b64decode(self.encode("utf-8"))).decode()
+            return json.loads(raw)
+        except json.decoder.JSONDecodeError as e:
+            logger.error("Invalid Dashboard format: %s", e)
+            return {}
 
     def __repr__(self):
         """Return string representation of self."""
@@ -338,14 +342,20 @@ class COSAgentProvider(Object):
             # Add a guard to make sure it doesn't happen.
             if relation.data and self._charm.unit in relation.data:
                 # Subordinate relations can communicate only over unit data.
-                data = CosAgentProviderUnitData(
-                    metrics_alert_rules=self._metrics_alert_rules,
-                    log_alert_rules=self._log_alert_rules,
-                    dashboards=self._dashboards,
-                    metrics_scrape_jobs=self._scrape_jobs,
-                    log_slots=self._log_slots,
-                )
-                relation.data[self._charm.unit][data.KEY] = data.json()
+                try:
+                    data = CosAgentProviderUnitData(
+                        metrics_alert_rules=self._metrics_alert_rules,
+                        log_alert_rules=self._log_alert_rules,
+                        dashboards=self._dashboards,
+                        metrics_scrape_jobs=self._scrape_jobs,
+                        log_slots=self._log_slots,
+                    )
+                    relation.data[self._charm.unit][data.KEY] = data.json()
+                except (
+                    pydantic.error_wrappers.ValidationError,
+                    json.decoder.JSONDecodeError,
+                ) as e:
+                    logger.error("Invalid relation data provided: %s", e)
 
     @property
     def _scrape_jobs(self) -> List[Dict]:
@@ -386,10 +396,27 @@ class COSAgentDataChanged(EventBase):
     """Event emitted by `COSAgentRequirer` when relation data changes."""
 
 
+class COSAgentValidationError(EventBase):
+    """Event emitted by `COSAgentRequirer` when there is an error in the relation data."""
+
+    def __init__(self, handle, message: str = ""):
+        super().__init__(handle)
+        self.message = message
+
+    def snapshot(self) -> Dict:
+        """Save COSAgentValidationError source information."""
+        return {"message": self.message}
+
+    def restore(self, snapshot):
+        """Restore COSAgentValidationError source information."""
+        self.message = snapshot["message"]
+
+
 class COSAgentRequirerEvents(ObjectEvents):
     """`COSAgentRequirer` events."""
 
     data_changed = EventSource(COSAgentDataChanged)
+    validation_error = EventSource(COSAgentValidationError)
 
 
 class COSAgentRequirer(Object):
@@ -473,7 +500,9 @@ class COSAgentRequirer(Object):
 
         if not (raw := cos_agent_relation.data[principal_unit].get(CosAgentProviderUnitData.KEY)):
             return
-        provider_data = CosAgentProviderUnitData(**json.loads(raw))
+
+        if not (provider_data := self._validated_provider_data(raw)):
+            return
 
         # Copy data from the principal relation to the peer relation, so the leader could
         # follow up.
@@ -492,6 +521,13 @@ class COSAgentRequirer(Object):
         # that goes into peer relation (in which case, if this is not a leader unit, we wouldn't
         # need to emit `on.data_changed`), so we're emitting `on.data_changed` either way.
         self.on.data_changed.emit()  # pyright: ignore
+
+    def _validated_provider_data(self, raw) -> Optional[CosAgentProviderUnitData]:
+        try:
+            return CosAgentProviderUnitData(**json.loads(raw))
+        except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
+            self.on.validation_error.emit(message=str(e))  # pyright: ignore
+            return None
 
     def trigger_refresh(self, _):
         """Trigger a refresh of relation data."""
@@ -528,17 +564,24 @@ class COSAgentRequirer(Object):
         Relies on the fact that, for subordinate relations, the only remote unit visible to
         *this unit* is the principal unit that this unit is attached to.
         """
-        if relations := self._principal_relations:
-            # Technically it's a list, but for subordinates there can only be one relation
-            principal_relation = next(iter(relations))
-            if units := principal_relation.units:
-                # Technically it's a list, but for subordinates there can only be one
-                unit = next(iter(units))
-                raw = principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)
-                if raw:
-                    return CosAgentProviderUnitData(**json.loads(raw))
+        if not (relations := self._principal_relations):
+            return None
 
-        return None
+        # Technically it's a list, but for subordinates there can only be one relation
+        principal_relation = next(iter(relations))
+
+        if not (units := principal_relation.units):
+            return None
+
+        # Technically it's a list, but for subordinates there can only be one
+        unit = next(iter(units))
+        if not (raw := principal_relation.data[unit].get(CosAgentProviderUnitData.KEY)):
+            return None
+
+        if not (provider_data := self._validated_provider_data(raw)):
+            return None
+
+        return provider_data
 
     def _gather_peer_data(self) -> List[CosAgentPeersUnitData]:
         """Collect data from the peers.
