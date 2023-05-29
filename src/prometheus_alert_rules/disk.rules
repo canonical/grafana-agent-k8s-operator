@@ -30,7 +30,7 @@ groups:
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
   - alert: HostReadonlyFilesystem
-    expr: node_filesystem_readonly{mountpoint!~"/snap/.*|/sys/fs/cgroup/.*"} > 0  # TODO: make this configurable
+    expr: node_filesystem_readonly{mountpoint!~"/snap/.*|/sys/fs/cgroup/.*"} > 0
     for: 0m
     labels:
       severity: warning
