@@ -23,17 +23,6 @@ groups:
         Interface '{{ $labels.device }}' speed changed to {{ $value }}B/s on host {{ $labels.instance }}.
           VALUE = {{ $value }}
           LABELS = {{ $labels }}
-  - alert: HostInterfaceDown
-    expr: node_network_up{device!~"lo"} == 0
-    for: 2m
-    labels:
-      severity: warning
-    annotations:
-      summary: Interface '{{ $labels.device }}' is down (instance {{ $labels.instance }})
-      description: >-
-        Interface '{{ $labels.device }}' is down on host {{ $labels.instance }}.
-          VALUE = {{ $value }}
-          LABELS = {{ $labels }}
   - alert: HostNetworkReceiveErrors
     expr: rate(node_network_receive_errs_total[2m]) / rate(node_network_receive_packets_total[2m]) > 0.01
     for: 2m
