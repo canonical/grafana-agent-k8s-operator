@@ -148,7 +148,7 @@ def test_cos_agent_e2e(vroot, snap_is_installed, ctx_gagent, ctx_principal):
     peer_out_data = json.loads(peer_out.local_unit_data[CosAgentPeersUnitData.KEY])
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
 
-    # Step 3: gagent is related to Grafana through "grafana-dashboards-provider" relation and ends
+    # Step 3: gagent is related to Grafana, Prometheus, Loki and ends
     # in "active" status
     prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
     loki = Relation("logging-consumer", remote_app_name="lok-k8s")
