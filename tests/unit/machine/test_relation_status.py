@@ -69,7 +69,6 @@ class TestRelationStatus(unittest.TestCase):
         # THEN the charm goes into blocked status again
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
-
     def test_juju_info_with_relations(self):
         # WHEN an incoming relation is added
         rel_id = self.harness.add_relation("juju-info", "grafana-agent")
