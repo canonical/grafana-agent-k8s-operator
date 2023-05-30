@@ -367,9 +367,17 @@ class GrafanaAgentCharm(CharmBase):
             if not self.model.relations.get(incoming):
                 continue
 
-            has_outgoing = any(
-                (len(self.model.relations.get(outgoing, [])) for outgoing in outgoings)
-            )
+            # FIXME: This is a workaround since on relation-broken the relation that is
+            # going away is still present in `self.model.relations`
+            # See: https://github.com/canonical/operator/issues/888
+            #
+            # Once this issue is fixed, we can have:
+            #
+            # has_outgoing = any(
+            #     (len(self.model.relations.get(outgoing, [])) for outgoing in outgoings)
+            # )
+            has_outgoing = self._has_outgoing(outgoings)
+
             if not has_outgoing:
                 missing = "|".join(outgoings)
                 logger.warning(
@@ -386,6 +394,23 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         self.unit.status = ActiveStatus()
+
+    def _has_outgoing(self, outgoings) -> bool:
+        for outgoing in outgoings:
+            relation = self.model.relations.get(outgoing, [])
+
+            try:
+                units = relation[0].units
+            except IndexError:
+                units = None
+
+            if relation == []:
+                continue
+
+            if relation and units:
+                return True
+
+        return False
 
     def _update_config(self) -> None:
         if not self.is_ready:
@@ -425,7 +450,7 @@ class GrafanaAgentCharm(CharmBase):
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False
         )  # noqa
-        self._update_status()
+        self._update_status(_event)
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
