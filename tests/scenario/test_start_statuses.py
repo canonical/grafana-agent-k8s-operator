@@ -12,7 +12,7 @@ import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, State, SubordinateRelation, trigger
+from scenario import Container, Context, ExecOutput, State, SubordinateRelation
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
 
@@ -69,13 +69,12 @@ def charm_meta(substrate, charm_type) -> dict:
 
 
 def test_install(charm_type, charm_meta, substrate, vroot):
-    out = trigger(
-        state=State(),
-        event="install",
+    ctx = Context(
         charm_type=charm_type,
         meta=charm_meta,
         charm_root=vroot,
     )
+    out = ctx.run(state=State(), event="install")
 
     if substrate == "lxd":
         assert out.status.unit == ("maintenance", "Installing grafana-agent snap")
@@ -93,13 +92,13 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
 
     juju_info = SubordinateRelation("juju-info")
     with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", False):
-        out = trigger(
-            state=State(relations=[juju_info]),
-            event=juju_info.joined_event,
+        ctx = Context(
             charm_type=charm_type,
             meta=charm_meta,
             charm_root=vroot,
-            post_event=post_event,
+        )
+        out = ctx.run(
+            state=State(relations=[juju_info]), event=juju_info.joined_event, post_event=post_event
         )
 
     assert out.status.unit == ("waiting", "waiting for agent to start")
@@ -107,13 +106,12 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
 
 def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
     with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", True):
-        out = trigger(
-            state=State(),
-            event="start",
+        ctx = Context(
             charm_type=charm_type,
             meta=charm_meta,
             charm_root=vroot,
         )
+        out = ctx.run(state=State(), event="start")
 
     if substrate == "lxd":
         written_cfg = placeholder_cfg_path.read_text()
@@ -135,13 +133,12 @@ def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot
         exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
     )
 
-    out = trigger(
-        state=State(containers=[agent]),
-        event=agent.pebble_ready_event,
+    ctx = Context(
         charm_type=charm_type,
         meta=charm_meta,
         charm_root=vroot,
     )
+    out = ctx.run(state=State(containers=[agent]), event=agent.pebble_ready_event)
 
     assert out.status.unit == ("active", "")
     agent_out = out.get_container("agent")

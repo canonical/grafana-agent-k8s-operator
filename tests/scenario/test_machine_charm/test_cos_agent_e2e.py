@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from charms.grafana_agent.v0.cos_agent import (
@@ -80,6 +80,15 @@ def vroot(placeholder_cfg_path):
         os.chdir(old_cwd)
 
 
+@pytest.fixture(autouse=True)
+def snap_is_installed():
+    with patch(
+        "machine_charm.GrafanaAgentMachineCharm._is_installed", new_callable=PropertyMock
+    ) as mock_foo:
+        mock_foo.return_value = True
+        yield
+
+
 @pytest.fixture
 def provider_charm():
     class MyPrincipal(CharmBase):
@@ -89,6 +98,7 @@ def provider_charm():
                 "cos-agent": {"interface": "cos_agent", "scope": "container"},
             },
         }
+        _log_slots = ["charmed-kafka:logs"]
 
         def __init__(self, framework: Framework):
             super().__init__(framework)
@@ -99,7 +109,7 @@ def provider_charm():
                 ],
                 metrics_rules_dir="./src/alert_rules/prometheus",
                 logs_rules_dir="./src/alert_rules/loki",
-                log_slots=["charmed-kafka:logs"],
+                log_slots=self._log_slots,
                 refresh_events=[self.on.cos_agent_relation_changed],
             )
 
@@ -190,7 +200,7 @@ def test_subordinate_update(requirer_ctx):
 def test_principal_leader_update(requirer_ctx, emitted_events):
     # step 3: gagent leader is notified that one of the followers have touched their relation data
     prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
-    cos_agent2 = SubordinateRelation(
+    cos_agent_sub_rel_2 = SubordinateRelation(
         "cos-agent",
         remote_app_name="mock-principal",
         remote_unit_data={
@@ -223,7 +233,26 @@ def test_principal_leader_update(requirer_ctx, emitted_events):
 
     requirer_ctx.run(
         peer.changed_event(remote_unit_id=1),
-        State(leader=True, relations=[cos_agent2, peer, prometheus]),
+        State(leader=True, relations=[cos_agent_sub_rel_2, peer, prometheus]),
     )
 
     # todo: find out meaningful assertions
+
+
+def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, provider_ctx):
+    # Step 1: principal charm is deployed and ends in "unknown" state
+    provider_ctx.charm_spec.charm_type._log_slots = (
+        "charmed:frogs"  # Set wrong type, must be a list
+    )
+    cos_agent_rel = SubordinateRelation("cos-agent")
+    state = State(relations=[cos_agent_rel])
+    state_out = provider_ctx.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
+    assert state_out.status.unit.name == "unknown"
+
+    found = False
+    for log in state_out.juju_log:
+        if "ERROR" in log[0] and "Invalid relation data provided:" in log[1]:
+            found = True
+            break
+
+    assert found is True

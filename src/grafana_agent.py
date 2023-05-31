@@ -22,11 +22,12 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from ops.charm import CharmBase
-from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util import Retry  # type: ignore
+from yaml.parser import ParserError
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,9 @@ class GrafanaAgentReloadError(Exception):
 class CompoundStatus:
     """'Dumb struct' for helping with centralized status setting."""
 
-    update_config: Optional[StatusBase] = None
+    # None = good; do not use ActiveStatus here.
+    update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
+    validation_error: Optional[BlockedStatus] = None
 
 
 class GrafanaAgentCharm(CharmBase):
@@ -122,27 +125,32 @@ class GrafanaAgentCharm(CharmBase):
         self._cloud = GrafanaCloudConfigRequirer(self)
 
         self.framework.observe(
-            self._cloud.on.cloud_config_available, self._on_cloud_config_available
+            self._cloud.on.cloud_config_available,  # pyright: ignore
+            self._on_cloud_config_available,
         )
-        self.framework.observe(self._cloud.on.cloud_config_revoked, self._on_cloud_config_revoked)
+        self.framework.observe(
+            self._cloud.on.cloud_config_revoked,  # pyright: ignore
+            self._on_cloud_config_revoked,
+        )
 
         self.framework.observe(
-            self._grafana_dashboards_provider.on.dashboard_status_changed,
+            self._grafana_dashboards_provider.on.dashboard_status_changed,  # pyright: ignore
             self._on_dashboard_status_changed,
         )
 
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         self.framework.observe(
-            self._remote_write.on.endpoints_changed, self.on_remote_write_changed
+            self._remote_write.on.endpoints_changed,  # pyright: ignore
+            self.on_remote_write_changed,
         )
 
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_joined,
+            self._loki_consumer.on.loki_push_api_endpoint_joined,  # pyright: ignore
             self._on_loki_push_api_endpoint_joined,
         )
         self.framework.observe(
-            self._loki_consumer.on.loki_push_api_endpoint_departed,
+            self._loki_consumer.on.loki_push_api_endpoint_departed,  # pyright: ignore
             self._on_loki_push_api_endpoint_departed,
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -350,6 +358,10 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = self.status.update_config
             return
 
+        if self.status.validation_error:
+            self.unit.status = self.status.validation_error
+            return
+
         # Make sure every incoming relation has at least one matching outgoing relation
         for incoming, outgoings in self.mandatory_relation_pairs:
             if not self.model.relations.get(incoming):
@@ -381,31 +393,31 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         config = self._generate_config()
-        old_config = None
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))
-        except (FileNotFoundError, PathError):
-            # If the file does not yet exist, pebble_ready has not run yet,
-            # and we may be processing a deferred event
-            pass
+        except (FileNotFoundError, PathError, ParserError):
+            # File does not yet exist? Processing a deferred event?
+            old_config = None
 
         if config == old_config:
             # Nothing changed, possibly new installation. Move on.
+            self.status.update_config = None
             return
 
         try:
-            if config != old_config:
-                self.write_file(CONFIG_PATH, yaml.dump(config))
-                # FIXME: change this to self._reload_config when #19 is fixed
-                # Restart the service to pick up the new config
-                self.restart()
+            self.write_file(CONFIG_PATH, yaml.dump(config))
+            # FIXME: change this to self._reload_config when #19 is fixed
+            # Restart the service to pick up the new config
+            self.restart()
         except GrafanaAgentReloadError as e:
             logger.error(str(e))
             self.status.update_config = BlockedStatus(str(e))
         except APIError as e:
             logger.warning(str(e))
             self.status.update_config = WaitingStatus(str(e))
+
+        self.status.update_config = None
 
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
@@ -417,7 +429,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Add TLS information to Prometheus and Loki endpoints."""
-        prometheus_endpoints = self._remote_write.endpoints
+        prometheus_endpoints: List[Dict[str, Any]] = self._remote_write.endpoints
 
         if self._cloud.prometheus_ready:
             prometheus_endpoints.append(

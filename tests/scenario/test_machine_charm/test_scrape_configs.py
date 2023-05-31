@@ -13,7 +13,7 @@ import machine_charm
 import pytest
 import yaml
 from charms.grafana_agent.v0.cos_agent import CosAgentProviderUnitData
-from scenario import Model, PeerRelation, Relation, State, SubordinateRelation, trigger
+from scenario import Context, Model, PeerRelation, Relation, State, SubordinateRelation
 
 machine_meta = yaml.safe_load(
     (
@@ -67,16 +67,17 @@ def test_snap_endpoints(placeholder_cfg_path):
     with patch("charms.operator_libs_linux.v1.snap.SnapCache"), patch(
         "machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write
     ), patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
-        trigger(
-            state=State(
-                relations=[cos_relation, loki_relation, PeerRelation("peers")],
-                model=Model(name="my-model", uuid=my_uuid),
-            ),
-            event=cos_relation.changed_event,
+        state = State(
+            relations=[cos_relation, loki_relation, PeerRelation("peers")],
+            model=Model(name="my-model", uuid=my_uuid),
+        )
+
+        ctx = Context(
             charm_type=machine_charm.GrafanaAgentMachineCharm,
             meta=machine_meta,
             charm_root=vroot.name,
         )
+        ctx.run(state=state, event=cos_relation.changed_event)
 
     assert written_path == placeholder_cfg_path
     written_config = yaml.safe_load(written_text)

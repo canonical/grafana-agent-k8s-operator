@@ -1,0 +1,72 @@
+groups:
+- name: HostMemory
+  rules:
+  - record: node_memory_MemUsed_percentage
+    expr: |
+      100 * (1 - (
+        (
+          node_memory_MemFree_bytes
+          + node_memory_Cached_bytes
+          + node_memory_Buffers_bytes
+          + node_memory_SReclaimable_bytes
+        ) / node_memory_MemTotal_bytes
+      ))
+  - record: node_memory_SwapUsed_percentage
+    expr: |
+      100 * (1 - (
+        (
+          node_memory_SwapFree_bytes
+          + node_memory_SwapCached_bytes
+        ) / node_memory_SwapTotal_bytes
+      ))
+  - alert: HostMemoryFillsUp
+    expr: |
+      predict_linear(node_memory_MemUsed_percentage[30m], 5*60) >= 90
+      and
+      avg_over_time(node_memory_MemUsed_percentage[2m]) < 90
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: '[Prediction] Host memory usage will increase to {{ $value | printf "%.0f" }}% in the near future (instance {{ $labels.instance }})'
+      description: >-
+        Host can potentially reach {{ $value | printf "%.0f" }}% memory utilization and risk an OOM kill.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+        The 5-minute-ahead prediction is made as a linear regression from the last 30 minutes of data.
+  - alert: HostMemoryFull
+    expr: avg_over_time(node_memory_MemUsed_percentage[1m]) > 95
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Host memory usage reached {{ $value | printf "%.0f" }}% load (instance {{ $labels.instance }})
+      description: >-
+        Host memory usage reached {{ $value | printf "%.0f" }}%
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+  - alert: HostSwapFull
+    expr: |
+      avg_over_time(node_memory_MemUsed_percentage[1m]) > 90
+      and
+      avg_over_time(node_memory_SwapUsed_percentage[1m]) > 50
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: Host memory and swap usage reached 90% and 50% load (instance {{ $labels.instance }})
+      description: >-
+        Host memory and swap usage reached 90% and 50% load
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+  - alert: HostMemoryUnderMemoryPressure
+    expr: rate(node_vmstat_pgmajfault[1m]) > 1000
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host memory under memory pressure (instance {{ $labels.instance }})
+      description: >-
+        The node is under heavy memory pressure. High rate of major page faults.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}

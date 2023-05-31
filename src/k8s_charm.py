@@ -44,17 +44,23 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             ],
         )
         self._scrape = MetricsEndpointConsumer(self)
-        self.framework.observe(self._scrape.on.targets_changed, self.on_scrape_targets_changed)
+        self.framework.observe(
+            self._scrape.on.targets_changed,  # pyright: ignore
+            self.on_scrape_targets_changed,
+        )
 
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
         self.framework.observe(
-            self._loki_provider.on.loki_push_api_alert_rules_changed,
+            self._loki_provider.on.loki_push_api_alert_rules_changed,  # pyright: ignore
             self._on_loki_push_api_alert_rules_changed,
         )
 
-        self.framework.observe(self.on.agent_pebble_ready, self._on_agent_pebble_ready)  # type: ignore
+        self.framework.observe(
+            self.on.agent_pebble_ready,  # pyright: ignore
+            self._on_agent_pebble_ready,
+        )
 
     def _on_loki_push_api_alert_rules_changed(self, _event):
         """Refresh Loki alert rules."""
@@ -82,7 +88,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self.unit.set_workload_version(version)
         else:
             logger.debug(
-                "Cannot set workload version at this time: could not get Alertmanager version."
+                "Cannot set workload version at this time: could not get grafana-agent version."
             )
         self._update_status()
 
@@ -137,7 +143,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             path: file path to write to
             text: text to write to the file
         """
-        self._container.push(path, text)
+        self._container.push(path, text, make_dirs=True)
 
     def restart(self) -> None:
         """Restart grafana agent."""
