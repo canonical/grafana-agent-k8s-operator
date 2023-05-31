@@ -247,7 +247,7 @@ class CosAgentProviderUnitData(pydantic.BaseModel):
 
 
 class CosAgentPeersUnitData(pydantic.BaseModel):
-    """Unit databag model for `cluster` cos-agent machine charm peer relation."""
+    """Unit databag model for `peers` cos-agent machine charm peer relation."""
 
     # We need the principal unit name and relation metadata to be able to render identifiers
     # (e.g. topology) on the leader side, after all the data moves into peer data (the grafana

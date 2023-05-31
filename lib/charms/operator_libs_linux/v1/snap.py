@@ -828,7 +828,8 @@ class SnapCache(Mapping):
                 name=i["name"],
                 state=SnapState.Latest,
                 channel=i["channel"],
-                revision=int(i["revision"]),
+                # fixme: what does revision 'x1' mean?
+                revision=int(i["revision"].strip("x")),
                 confinement=i["confinement"],
                 apps=i.get("apps", None),
             )

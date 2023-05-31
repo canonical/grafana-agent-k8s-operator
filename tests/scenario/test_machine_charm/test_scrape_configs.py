@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import machine_charm
+import pytest
 import yaml
 from charms.grafana_agent.v0.cos_agent import CosAgentProviderUnitData
 from scenario import Model, PeerRelation, Relation, State, SubordinateRelation, trigger
@@ -22,7 +23,13 @@ machine_meta = yaml.safe_load(
 )
 
 
-def test_snap_endpoints():
+@pytest.fixture(autouse=True)
+def patch_all(placeholder_cfg_path):
+    with patch("grafana_agent.CONFIG_PATH", placeholder_cfg_path):
+        yield
+
+
+def test_snap_endpoints(placeholder_cfg_path):
     written_path, written_text = "", ""
 
     def mock_write(_, path, text):
@@ -46,7 +53,7 @@ def test_snap_endpoints():
         log_slots=["foo:bar", "oh:snap", "shameless-plug"],
     )
     cos_relation = SubordinateRelation(
-        "cos-agent", primary_app_name="principal", remote_unit_data={data.KEY: data.json()}
+        "cos-agent", remote_app_name="principal", remote_unit_data={data.KEY: data.json()}
     )
 
     vroot = tempfile.TemporaryDirectory()
@@ -57,20 +64,21 @@ def test_snap_endpoints():
 
     my_uuid = str(uuid.uuid4())
 
-    with patch("charms.operator_libs_linux.v1.snap.SnapCache"):
-        with patch("machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write):
-            with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
-                trigger(state=State(
-                    relations=[cos_relation, loki_relation, PeerRelation("peers")],
-                    model=Model(name="my-model", uuid=my_uuid),
-                ),
-                    event=cos_relation.changed_event,
-                    charm_type=machine_charm.GrafanaAgentMachineCharm,
-                    meta=machine_meta,
-                    charm_root=vroot.name,
-                )
+    with patch("charms.operator_libs_linux.v1.snap.SnapCache"), patch(
+        "machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write
+    ), patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
+        trigger(
+            state=State(
+                relations=[cos_relation, loki_relation, PeerRelation("peers")],
+                model=Model(name="my-model", uuid=my_uuid),
+            ),
+            event=cos_relation.changed_event,
+            charm_type=machine_charm.GrafanaAgentMachineCharm,
+            meta=machine_meta,
+            charm_root=vroot.name,
+        )
 
-    assert written_path == "/etc/grafana-agent.yaml"
+    assert written_path == placeholder_cfg_path
     written_config = yaml.safe_load(written_text)
     assert written_config == {
         "integrations": {

@@ -52,9 +52,10 @@ GRAFANA_DASH = """
 
 @pytest.fixture(autouse=True)
 def patch_all(placeholder_cfg_path):
-    with patch("subprocess.run", MagicMock()):
-        with patch("grafana_agent.CONFIG_PATH", placeholder_cfg_path):
-            yield
+    with patch("subprocess.run", MagicMock()), patch(
+        "grafana_agent.CONFIG_PATH", placeholder_cfg_path
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -168,7 +169,7 @@ def test_subordinate_update(requirer_ctx):
 
     cos_agent1 = SubordinateRelation(
         "cos-agent",
-        primary_app_name="mock-principal",
+        remote_app_name="mock-principal",
         remote_unit_data={"config": json.dumps(config)},
     )
     state_out1 = requirer_ctx.run(
@@ -191,7 +192,7 @@ def test_principal_leader_update(requirer_ctx, emitted_events):
     prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
     cos_agent2 = SubordinateRelation(
         "cos-agent",
-        primary_app_name="mock-principal",
+        remote_app_name="mock-principal",
         remote_unit_data={
             "config": '{"metrics_alert_rules": {}, "log_alert_rules": {}, '
             '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAi'
