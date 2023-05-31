@@ -399,13 +399,13 @@ class GrafanaAgentCharm(CharmBase):
         for outgoing in outgoings:
             relation = self.model.relations.get(outgoing, [])
 
+            if relation == []:
+                continue
+
             try:
                 units = relation[0].units
             except IndexError:
                 units = None
-
-            if relation == []:
-                continue
 
             if relation and units:
                 return True
