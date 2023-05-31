@@ -15,7 +15,7 @@ from charms.prometheus_k8s.v0.prometheus_remote_write import (
 )
 from ops.charm import CharmBase
 from ops.framework import Framework
-from scenario import PeerRelation, State, SubordinateRelation
+from scenario import PeerRelation, State, SubordinateRelation, trigger
 
 
 def encode_as_dashboard(dct: dict):
@@ -77,12 +77,12 @@ def test_no_dashboards():
     def post_event(charm: MyRequirerCharm):
         assert not charm.cosagent.dashboards
 
-    state.trigger(
-        charm_type=MyRequirerCharm,
-        meta=MyRequirerCharm.META,
-        event="update-status",
-        post_event=post_event,
-    )
+    trigger(state=state,
+            charm_type=MyRequirerCharm,
+            meta=MyRequirerCharm.META,
+            event="update-status",
+            post_event=post_event,
+            )
 
 
 def test_no_dashboards_peer():
@@ -93,7 +93,7 @@ def test_no_dashboards_peer():
     def post_event(charm: MyRequirerCharm):
         assert not charm.cosagent.dashboards
 
-    state.trigger(
+    trigger(state=state,
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         event="update-status",
@@ -112,7 +112,7 @@ def test_no_dashboards_peer_cosagent():
     def post_event(charm: MyRequirerCharm):
         assert not charm.cosagent.dashboards
 
-    state.trigger(
+    trigger(state=state,
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         event=cos_agent.changed_event(remote_unit_id=0),
@@ -146,7 +146,7 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
     def post_event(charm: MyRequirerCharm):
         assert charm.cosagent.dashboards
 
-    state_out = state.trigger(
+    state_out = trigger(state=state,
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         event=cos_agent.changed_event(remote_unit_id=0),
@@ -238,13 +238,14 @@ def test_cosagent_to_peer_data_flow_relation(leader):
         assert other_dash["title"] == "other_title"
         assert other_dash["content"] == raw_dashboard_2
 
-    state_out = state.trigger(
+    state_out = trigger(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         # now it's the 2nd relation that's reporting a change:
         # the charm should update peer data
         # and in post_event the dashboard should be there.
         event=cos_agent_2.changed_event(remote_unit_id=0),
+        state=state,
         pre_event=pre_event,
         post_event=post_event,
     )
@@ -354,11 +355,12 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
         assert dash["title"] == "title"
         assert dash["content"] == raw_dashboard_1
 
-    state_out = state.trigger(
+    state_out = trigger(
         charm_type=MyRequirerCharm,
         meta=MyRequirerCharm.META,
         # our primary #0 has just updated its peer relation databag
         event=cos_agent_2.changed_event(remote_unit_id=0),
+        state=state,
         pre_event=pre_event,
         post_event=post_event,
     )

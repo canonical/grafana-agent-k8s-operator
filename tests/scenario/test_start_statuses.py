@@ -2,18 +2,18 @@
 # See LICENSE file for licensing details.
 import dataclasses
 import inspect
-import shutil
 from pathlib import Path
 from typing import Type
 from unittest.mock import patch
 
-import k8s_charm
-import machine_charm
 import pytest
 import yaml
 from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, State, SubordinateRelation
+from scenario import Container, ExecOutput, State, SubordinateRelation, trigger
+
+import k8s_charm
+import machine_charm
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
 
@@ -58,12 +58,6 @@ def patch_all(substrate, placeholder_cfg_path):
 
 
 @pytest.fixture
-def vroot(tmp_path) -> Path:
-    shutil.copytree(CHARM_ROOT / "src", tmp_path / "src")
-    return tmp_path
-
-
-@pytest.fixture
 def charm_meta(substrate, charm_type) -> dict:
     fname = {"lxd": "machine_metadata", "k8s": "k8s_metadata"}[substrate]
 
@@ -75,12 +69,12 @@ def charm_meta(substrate, charm_type) -> dict:
 
 
 def test_install(charm_type, charm_meta, substrate, vroot):
-    out = State().trigger(
-        "install",
-        charm_type=charm_type,
-        meta=charm_meta,
-        charm_root=vroot,
-    )
+    out = trigger(state=State(),
+                  event="install",
+                  charm_type=charm_type,
+                  meta=charm_meta,
+                  charm_root=vroot,
+                  )
 
     if substrate == "lxd":
         assert out.status.unit == ("maintenance", "Installing grafana-agent snap")
@@ -98,8 +92,8 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
 
     juju_info = SubordinateRelation("juju-info")
     with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", False):
-        out = State(relations=[juju_info]).trigger(
-            juju_info.joined_event,
+        out = trigger(state=State(relations=[juju_info]),
+            event=juju_info.joined_event,
             charm_type=charm_type,
             meta=charm_meta,
             charm_root=vroot,
@@ -111,12 +105,12 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
 
 def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
     with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", True):
-        out = State().trigger(
-            "start",
-            charm_type=charm_type,
-            meta=charm_meta,
-            charm_root=vroot,
-        )
+        out = trigger(state=State(),
+                      event="start",
+                      charm_type=charm_type,
+                      meta=charm_meta,
+                      charm_root=vroot,
+                      )
 
     if substrate == "lxd":
         written_cfg = placeholder_cfg_path.read_text()
@@ -138,8 +132,8 @@ def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot
         exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
     )
 
-    out = State(containers=[agent]).trigger(
-        agent.pebble_ready_event,
+    out = trigger(state=State(containers=[agent]),
+        event=agent.pebble_ready_event,
         charm_type=charm_type,
         meta=charm_meta,
         charm_root=vroot,

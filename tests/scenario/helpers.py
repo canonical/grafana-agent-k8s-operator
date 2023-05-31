@@ -3,10 +3,9 @@
 import inspect
 from pathlib import Path
 
-import yaml
-
 import k8s_charm
 import machine_charm
+import yaml
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
 

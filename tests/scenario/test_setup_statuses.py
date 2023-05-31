@@ -7,12 +7,12 @@ from unittest.mock import patch
 import pytest
 from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, State
+from scenario import Container, ExecOutput, State, trigger
 
 import grafana_agent
 import k8s_charm
 import machine_charm
-from tests.scenario.helpers import CHARM_ROOT, get_charm_meta
+from tests.scenario.helpers import get_charm_meta
 
 
 @pytest.fixture(params=["k8s", "lxd"])
@@ -53,13 +53,13 @@ def patch_all(substrate, mock_cfg_path):
             yield
 
 
-def test_install(charm_type, substrate):
-    out = State().trigger(
-        "install",
-        charm_type=charm_type,
-        meta=get_charm_meta(charm_type),
-        copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
-    )
+def test_install(charm_type, substrate, vroot):
+    out = trigger(state=State(),
+                  event="install",
+                  charm_type=charm_type,
+                  meta=get_charm_meta(charm_type),
+                  charm_root=vroot,
+                  )
 
     if substrate == "lxd":
         assert out.status.unit == ("maintenance", "Installing grafana-agent snap")
@@ -68,13 +68,13 @@ def test_install(charm_type, substrate):
         assert out.status.unit == ("unknown", "")
 
 
-def test_start(charm_type, substrate):
-    out = State().trigger(
-        "start",
-        charm_type=charm_type,
-        meta=get_charm_meta(charm_type),
-        copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
-    )
+def test_start(charm_type, substrate, vroot):
+    out = trigger(state=State(),
+                  event="start",
+                  charm_type=charm_type,
+                  meta=get_charm_meta(charm_type),
+                  charm_root=vroot
+                  )
 
     if substrate == "lxd":
         written_cfg = grafana_agent.CONFIG_PATH.read_text()
@@ -86,7 +86,7 @@ def test_start(charm_type, substrate):
         assert out.status.unit == ("unknown", "")
 
 
-def test_k8s_charm_start_with_container(charm_type, substrate):
+def test_k8s_charm_start_with_container(charm_type, substrate, vroot):
     if substrate == "lxd":
         pytest.skip("k8s-only test")
 
@@ -96,12 +96,12 @@ def test_k8s_charm_start_with_container(charm_type, substrate):
         exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
     )
 
-    out = State(containers=[agent]).trigger(
-        agent.pebble_ready_event,
-        charm_type=charm_type,
-        meta=get_charm_meta(charm_type),
-        copy_to_charm_root={"/src/": CHARM_ROOT / "src"},
-    )
+    out = trigger(state=State(containers=[agent]),
+                  event=agent.pebble_ready_event,
+                  charm_type=charm_type,
+                  meta=get_charm_meta(charm_type),
+                  charm_root=vroot
+                  )
 
     assert out.status.unit == ("active", "")
     agent_out = out.get_container("agent")

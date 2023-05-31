@@ -7,11 +7,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from charms.grafana_agent.v0.cos_agent import CosAgentPeersUnitData, COSAgentProvider
-from machine_charm import GrafanaAgentMachineCharm
+from charms.grafana_agent.v0.cos_agent import (
+    CosAgentPeersUnitData,
+    COSAgentProvider,
+    COSAgentRequirer,
+)
 from ops.charm import CharmBase
 from ops.framework import Framework
-from scenario import PeerRelation, Relation, State, SubordinateRelation
+from scenario import Context, PeerRelation, Relation, State, SubordinateRelation
 
 
 @pytest.fixture
@@ -76,9 +79,15 @@ def vroot(placeholder_cfg_path):
         os.chdir(old_cwd)
 
 
-def test_cos_agent_e2e(vroot):
+@pytest.fixture
+def provider_charm():
     class MyPrincipal(CharmBase):
-        META = {"name": "mock-principal", "provides": {"cos-agent": {"interface": "cos_agent"}}}
+        META = {
+            "name": "mock-principal",
+            "provides": {
+                "cos-agent": {"interface": "cos_agent", "scope": "container"},
+            },
+        }
 
         def __init__(self, framework: Framework):
             super().__init__(framework)
@@ -93,50 +102,127 @@ def test_cos_agent_e2e(vroot):
                 refresh_events=[self.on.cos_agent_relation_changed],
             )
 
-    cos_agent = Relation("cos-agent")
+    return MyPrincipal
 
-    state_out = State(
-        relations=[
-            cos_agent,
-        ]
-    ).trigger(
-        cos_agent.changed_event(remote_unit_id=1),
-        charm_type=MyPrincipal,
-        meta=MyPrincipal.META,
-        charm_root=vroot,
+
+@pytest.fixture
+def requirer_charm():
+    class MySubordinate(CharmBase):
+        META = {
+            "name": "mock-subordinate",
+            "requires": {
+                "cos-agent": {"interface": "cos_agent", "scope": "container"},
+            },
+            "peers": {"peers": {"interface": "grafana_agent_replica"}},
+        }
+
+        def __init__(self, framework: Framework):
+            super().__init__(framework)
+            self.gagent = COSAgentRequirer(
+                self,
+                refresh_events=[self.on.cos_agent_relation_changed],
+            )
+
+    return MySubordinate
+
+
+@pytest.fixture
+def provider_ctx(provider_charm, vroot):
+    return Context(charm_type=provider_charm, meta=provider_charm.META, charm_root=vroot)
+
+
+@pytest.fixture
+def requirer_ctx(requirer_charm, vroot):
+    return Context(charm_type=requirer_charm, meta=requirer_charm.META, charm_root=vroot)
+
+
+def test_cos_agent_changed_no_remote_data(provider_ctx):
+    cos_agent = SubordinateRelation("cos-agent")
+    state_out = provider_ctx.run(
+        cos_agent.changed_event(remote_unit_id=1), State(relations=[cos_agent])
     )
 
+    config = json.loads(state_out.relations[0].local_unit_data[CosAgentPeersUnitData.KEY])
+    assert config["metrics_alert_rules"] == {}
+    assert config["log_alert_rules"] == {}
+    assert len(config["dashboards"]) == 1
+    assert len(config["metrics_scrape_jobs"]) == 1
+    assert config["log_slots"] == ["charmed-kafka:logs"]
+
+
+def test_subordinate_update(requirer_ctx):
     # step 2: gagent is notified that the principal has touched its relation data
     peer = PeerRelation("peers")
+    config = {
+        "metrics_alert_rules": {},
+        "log_alert_rules": {},
+        "dashboards": [
+            "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAi"
+            "Zm9vIiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"
+        ],
+        "metrics_scrape_jobs": [
+            {"job_name": "mock-principal_0", "path": "/metrics", "port": "8080"}
+        ],
+        "log_slots": ["charmed-kafka:logs"],
+    }
+
     cos_agent1 = SubordinateRelation(
         "cos-agent",
         primary_app_name="mock-principal",
-        remote_unit_data=state_out.relations[0].local_unit_data,
+        remote_unit_data={"config": json.dumps(config)},
     )
-    state_out1 = State(relations=[cos_agent1, peer]).trigger(
-        cos_agent1.changed_event(remote_unit_id=0),
-        charm_type=GrafanaAgentMachineCharm,
-        charm_root=vroot,
+    state_out1 = requirer_ctx.run(
+        cos_agent1.changed_event(remote_unit_id=0), State(relations=[cos_agent1, peer])
     )
-
-    peer_out = state_out1.relations[1]
+    peer_out = state_out1.get_relations("peers")[0]
     peer_out_data = json.loads(peer_out.local_unit_data[CosAgentPeersUnitData.KEY])
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
+    assert peer_out_data["principal_relation_id"] == str(cos_agent1.relation_id)
+    assert peer_out_data["principal_relation_name"] == cos_agent1.endpoint
 
-    # step 3: gagent leader is notified that the principal has touched its relation data
+    # passthrough as-is
+    assert peer_out_data["metrics_alert_rules"] == config["metrics_alert_rules"]
+    assert peer_out_data["log_alert_rules"] == config["log_alert_rules"]
+    assert peer_out_data["dashboards"] == config["dashboards"]
+
+
+def test_principal_leader_update(requirer_ctx, emitted_events):
+    # step 3: gagent leader is notified that one of the followers have touched their relation data
     prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
     cos_agent2 = SubordinateRelation(
         "cos-agent",
         primary_app_name="mock-principal",
-        remote_unit_data=state_out.relations[0].local_unit_data,
+        remote_unit_data={
+            "config": '{"metrics_alert_rules": {}, "log_alert_rules": {}, '
+            '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAi'
+            'Zm9vIiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"], '
+            '"metrics_scrape_jobs": '
+            '[{"job_name": "mock-principal_0", "path": "/metrics", "port": "8080"}], '
+            '"log_slots": ["charmed-kafka:logs"]}'
+        },
     )
-    state_out2 = State(leader=True, relations=[cos_agent2, peer_out, prometheus]).trigger(
-        peer_out.changed_event(remote_unit_id=0),
-        charm_type=GrafanaAgentMachineCharm,
-        charm_root=vroot,
+    peer = PeerRelation(
+        endpoint="peers",
+        interface="",
+        relation_id=2,
+        local_app_data={},
+        local_unit_data={},
+        peers_data={
+            0: {
+                "config": '{"principal_unit_name": "mock-principal/0", '
+                '"principal_relation_id": "3", '
+                '"principal_relation_name": "cos-agent", '
+                '"metrics_alert_rules": {}, '
+                '"log_alert_rules": {}, '
+                '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAiZm9v'
+                'IiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"]}'
+            }
+        },
     )
 
-    prom_relation_out = state_out2.relations[2]
+    requirer_ctx.run(
+        peer.changed_event(remote_unit_id=1),
+        State(leader=True, relations=[cos_agent2, peer, prometheus]),
+    )
 
-    # the prometheus lib has put some data in local app data towards cos-lite.
-    assert prom_relation_out.local_app_data["alert_rules"]
+    # todo: find out meaningful assertions
