@@ -4,10 +4,9 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import grafana_agent
 import machine_charm
 import pytest
-from charms.grafana_agent.v0.cos_machine import COSMachineProvider
+from charms.grafana_agent.v0.cos_agent import GrafanaDashboard
 from scenario import PeerRelation, State, SubordinateRelation
 from scenario import trigger as _trigger
 
@@ -32,9 +31,9 @@ def mock_cfg_path(tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def patch_all(mock_cfg_path):
-    grafana_agent.CONFIG_PATH = mock_cfg_path
-    yield
+def patch_all(placeholder_cfg_path):
+    with patch("grafana_agent.CONFIG_PATH", placeholder_cfg_path):
+        yield
 
 
 @patch("machine_charm.subprocess.run")
@@ -113,9 +112,7 @@ def test_cos_machine_relation(mock_run, vroot):
                 "principal_relation_name": "peers",
                 "metrics_alert_rules": {},
                 "log_alert_rules": {},
-                "dashboards": [
-                    COSMachineProvider._encode_dashboard_content('{"very long": "dashboard"}')
-                ],
+                "dashboards": [GrafanaDashboard._serialize('{"very long": "dashboard"}')],
             }
         )
     }
@@ -176,9 +173,7 @@ def test_both_relations(mock_run, vroot):
                 "principal_relation_name": "peers",
                 "metrics_alert_rules": {},
                 "log_alert_rules": {},
-                "dashboards": [
-                    COSMachineProvider._encode_dashboard_content('{"very long": "dashboard"}')
-                ],
+                "dashboards": [GrafanaDashboard._serialize('{"very long": "dashboard"}')],
             }
         )
     }
