@@ -317,6 +317,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         return {
             "node_exporter": {
                 "enabled": True,
+                "enable_collectors": [
+                  "logind",
+                  "systemd",
+                  "mountstats",
+                  "processes",
+                  "sysctl",
+                ],
                 "relabel_configs": [
                     # Align the "job" name with those of prometheus_scrape
                     {
