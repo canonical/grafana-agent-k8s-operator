@@ -2,7 +2,6 @@
 # See LICENSE file for licensing details.
 import dataclasses
 import inspect
-import shutil
 from pathlib import Path
 from typing import Type
 from unittest.mock import patch
@@ -48,19 +47,14 @@ def _subp_run_mock(*a, **kw):
 @pytest.fixture(autouse=True)
 def patch_all(substrate, placeholder_cfg_path):
     if substrate == "lxd":
-        with patch("subprocess.run", _subp_run_mock):
-            with patch("grafana_agent.CONFIG_PATH", placeholder_cfg_path):
-                yield
+        with patch("subprocess.run", _subp_run_mock), patch(
+            "grafana_agent.CONFIG_PATH", placeholder_cfg_path
+        ):
+            yield
 
     else:
         with patch("k8s_charm.KubernetesServicePatch", lambda x, y: None):
             yield
-
-
-@pytest.fixture
-def vroot(tmp_path) -> Path:
-    shutil.copytree(CHARM_ROOT / "src", tmp_path / "src")
-    return tmp_path
 
 
 @pytest.fixture

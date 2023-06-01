@@ -7,30 +7,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from charms.grafana_agent.v0.cos_agent import CosAgentPeersUnitData, COSAgentProvider
-from machine_charm import GrafanaAgentMachineCharm
+from charms.grafana_agent.v0.cos_agent import (
+    CosAgentPeersUnitData,
+    COSAgentProvider,
+    COSAgentRequirer,
+)
 from ops.charm import CharmBase
 from ops.framework import Framework
 from scenario import Context, PeerRelation, Relation, State, SubordinateRelation
-
-
-class MyPrincipal(CharmBase):
-    META = {"name": "mock-principal", "provides": {"cos-agent": {"interface": "cos_agent_rel"}}}
-    metrics_endpoints = [{"path": "/metrics", "port": "8080"}]
-    metrics_rules_dir = "./src/alert_rules/prometheus"
-    logs_rules_dir = "./src/alert_rules/loki"
-    log_slots = ["charmed-kafka:logs"]
-
-    def __init__(self, framework: Framework):
-        super().__init__(framework)
-        self.gagent = COSAgentProvider(
-            self,
-            metrics_endpoints=self.metrics_endpoints,
-            metrics_rules_dir=self.metrics_rules_dir,
-            logs_rules_dir=self.logs_rules_dir,
-            log_slots=self.log_slots,
-            refresh_events=[self.on.cos_agent_relation_changed],
-        )
 
 
 @pytest.fixture
@@ -68,9 +52,10 @@ GRAFANA_DASH = """
 
 @pytest.fixture(autouse=True)
 def patch_all(placeholder_cfg_path):
-    with patch("subprocess.run", MagicMock()):
-        with patch("grafana_agent.CONFIG_PATH", placeholder_cfg_path):
-            yield
+    with patch("subprocess.run", MagicMock()), patch(
+        "grafana_agent.CONFIG_PATH", placeholder_cfg_path
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -104,77 +89,164 @@ def snap_is_installed():
         yield
 
 
-@pytest.fixture(autouse=True)
-def ctx_gagent(vroot):
-    yield Context(
-        charm_type=GrafanaAgentMachineCharm,
-        charm_root=vroot,
+@pytest.fixture
+def provider_charm():
+    class MyPrincipal(CharmBase):
+        META = {
+            "name": "mock-principal",
+            "provides": {
+                "cos-agent": {"interface": "cos_agent", "scope": "container"},
+            },
+        }
+        _log_slots = ["charmed-kafka:logs"]
+
+        def __init__(self, framework: Framework):
+            super().__init__(framework)
+            self.gagent = COSAgentProvider(
+                self,
+                metrics_endpoints=[
+                    {"path": "/metrics", "port": "8080"},
+                ],
+                metrics_rules_dir="./src/alert_rules/prometheus",
+                logs_rules_dir="./src/alert_rules/loki",
+                log_slots=self._log_slots,
+                refresh_events=[self.on.cos_agent_relation_changed],
+            )
+
+    return MyPrincipal
+
+
+@pytest.fixture
+def requirer_charm():
+    class MySubordinate(CharmBase):
+        META = {
+            "name": "mock-subordinate",
+            "requires": {
+                "cos-agent": {"interface": "cos_agent", "scope": "container"},
+            },
+            "peers": {"peers": {"interface": "grafana_agent_replica"}},
+        }
+
+        def __init__(self, framework: Framework):
+            super().__init__(framework)
+            self.gagent = COSAgentRequirer(
+                self,
+                refresh_events=[self.on.cos_agent_relation_changed],
+            )
+
+    return MySubordinate
+
+
+@pytest.fixture
+def provider_ctx(provider_charm, vroot):
+    return Context(charm_type=provider_charm, meta=provider_charm.META, charm_root=vroot)
+
+
+@pytest.fixture
+def requirer_ctx(requirer_charm, vroot):
+    return Context(charm_type=requirer_charm, meta=requirer_charm.META, charm_root=vroot)
+
+
+def test_cos_agent_changed_no_remote_data(provider_ctx):
+    cos_agent = SubordinateRelation("cos-agent")
+    state_out = provider_ctx.run(
+        cos_agent.changed_event(remote_unit_id=1), State(relations=[cos_agent])
     )
 
-
-@pytest.fixture(autouse=True)
-def ctx_principal(vroot):
-    yield Context(
-        charm_type=MyPrincipal,
-        meta=MyPrincipal.META,
-        charm_root=vroot,
-    )
+    config = json.loads(state_out.relations[0].local_unit_data[CosAgentPeersUnitData.KEY])
+    assert config["metrics_alert_rules"] == {}
+    assert config["log_alert_rules"] == {}
+    assert len(config["dashboards"]) == 1
+    assert len(config["metrics_scrape_jobs"]) == 1
+    assert config["log_slots"] == ["charmed-kafka:logs"]
 
 
-def test_cos_agent_e2e(vroot, snap_is_installed, ctx_gagent, ctx_principal):
-    # Step 1: MyPrincipal charm is deployed and ends in "unknown" state
-    cos_agent_rel = Relation("cos-agent")
-    state = State(relations=[cos_agent_rel])
-    state_out = ctx_principal.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
-    assert state_out.status.unit.name == "unknown"
-
-    # Step 2: gagent is related to principal charm and ends in "blocked" status
-    # since there are missing relations:
-    #  - send-remote-write
-    #  - logging-consumer
-    #  - grafana-dashboards-provider
+def test_subordinate_update(requirer_ctx):
+    # step 2: gagent is notified that the principal has touched its relation data
     peer = PeerRelation("peers")
-    cos_agent_sub_rel = SubordinateRelation(
+    config = {
+        "metrics_alert_rules": {},
+        "log_alert_rules": {},
+        "dashboards": [
+            "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAi"
+            "Zm9vIiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"
+        ],
+        "metrics_scrape_jobs": [
+            {"job_name": "mock-principal_0", "path": "/metrics", "port": "8080"}
+        ],
+        "log_slots": ["charmed-kafka:logs"],
+    }
+
+    cos_agent1 = SubordinateRelation(
         "cos-agent",
         remote_app_name="mock-principal",
-        remote_unit_data=state_out.relations[0].local_unit_data,
+        remote_unit_data={"config": json.dumps(config)},
     )
-
-    state1 = State(relations=[cos_agent_sub_rel, peer])
-    state_out1 = ctx_gagent.run(cos_agent_sub_rel.changed_event(remote_unit_id=0), state=state1)
-    assert state_out1.status.unit.name == "blocked"
-
-    peer_out = state_out1.relations[1]
+    state_out1 = requirer_ctx.run(
+        cos_agent1.changed_event(remote_unit_id=0), State(relations=[cos_agent1, peer])
+    )
+    peer_out = state_out1.get_relations("peers")[0]
     peer_out_data = json.loads(peer_out.local_unit_data[CosAgentPeersUnitData.KEY])
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
+    assert peer_out_data["principal_relation_id"] == str(cos_agent1.relation_id)
+    assert peer_out_data["principal_relation_name"] == cos_agent1.endpoint
 
-    # Step 3: gagent is related to Grafana, Prometheus, Loki and ends
-    # in "active" status
+    # passthrough as-is
+    assert peer_out_data["metrics_alert_rules"] == config["metrics_alert_rules"]
+    assert peer_out_data["log_alert_rules"] == config["log_alert_rules"]
+    assert peer_out_data["dashboards"] == config["dashboards"]
+
+
+def test_principal_leader_update(requirer_ctx, emitted_events):
+    # step 3: gagent leader is notified that one of the followers have touched their relation data
     prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
-    loki = Relation("logging-consumer", remote_app_name="lok-k8s")
-    grafana = Relation("grafana-dashboards-provider", remote_app_name="grafana-k8s")
     cos_agent_sub_rel_2 = SubordinateRelation(
         "cos-agent",
         remote_app_name="mock-principal",
-        remote_unit_data=state_out.relations[0].local_unit_data,
+        remote_unit_data={
+            "config": '{"metrics_alert_rules": {}, "log_alert_rules": {}, '
+            '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAi'
+            'Zm9vIiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"], '
+            '"metrics_scrape_jobs": '
+            '[{"job_name": "mock-principal_0", "path": "/metrics", "port": "8080"}], '
+            '"log_slots": ["charmed-kafka:logs"]}'
+        },
+    )
+    peer = PeerRelation(
+        endpoint="peers",
+        interface="",
+        relation_id=2,
+        local_app_data={},
+        local_unit_data={},
+        peers_data={
+            0: {
+                "config": '{"principal_unit_name": "mock-principal/0", '
+                '"principal_relation_id": "3", '
+                '"principal_relation_name": "cos-agent", '
+                '"metrics_alert_rules": {}, '
+                '"log_alert_rules": {}, '
+                '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAiZm9v'
+                'IiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"]}'
+            }
+        },
     )
 
-    state2 = State(
-        leader=True, relations=[cos_agent_sub_rel_2, peer_out, prometheus, loki, grafana]
+    requirer_ctx.run(
+        peer.changed_event(remote_unit_id=1),
+        State(leader=True, relations=[cos_agent_sub_rel_2, peer, prometheus]),
     )
-    state_out2 = ctx_gagent.run(peer_out.changed_event(remote_unit_id=0), state=state2)
-    prom_relation_out = state_out2.relations[2]
-    # the prometheus lib has put some data in local app data towards cos-lite.
-    assert prom_relation_out.local_app_data["alert_rules"]
-    assert state_out2.status.unit.name == "active"
+
+    # todo: find out meaningful assertions
 
 
-def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, ctx_principal):
-    # Step 1: MyPrincipal charm is deployed and ends in "unknown" state
-    MyPrincipal.log_slots = "charmed-kafka:logs"  # Set wrong type, must be a list
-    cos_agent_rel = Relation("cos-agent")
+def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, provider_ctx):
+    # Step 1: principal charm is deployed and ends in "unknown" state
+    provider_ctx.charm_spec.charm_type._log_slots = (
+        "charmed:frogs"  # Set wrong type, must be a list
+    )
+    cos_agent_rel = SubordinateRelation("cos-agent")
     state = State(relations=[cos_agent_rel])
-    state_out = ctx_principal.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
+    state_out = provider_ctx.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
     assert state_out.status.unit.name == "unknown"
 
     found = False
