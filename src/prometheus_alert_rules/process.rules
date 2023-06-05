@@ -10,7 +10,7 @@ groups:
       severity: info
     annotations:
       summary: Too many processes on the host machine (instance {{ $labels.instance }})
-      description: There are too many processes on the host machine, and it's reaching 80% of the maximum processes.\n  VALUE = {{ $value | printf "%.2f" }}\n  LABELS = {{ $labels }}
+      description: There are too many processes on the host machine. The current process count is 80% or more of the  max.\n  VALUE = {{ $value | printf "%.2f" }}\n  LABELS = {{ $labels }}
 
   # Alert for processes kept increasing
   - alert: ProcessesIncresingWarning
