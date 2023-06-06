@@ -6,7 +6,7 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
 LIBID = "e6f580481c1b4388aa4d2cdf412a47fa"
 LIBAPI = 0
-LIBPATCH = 2
+LIBPATCH = 3
 
 DEFAULT_RELATION_NAME = "grafana-cloud-config"
 
@@ -39,7 +39,7 @@ class GrafanaCloudConfigEvents(ObjectEvents):
 
 class GrafanaCloudConfigRequirer(Object):
 
-    on = GrafanaCloudConfigEvents()
+    on = GrafanaCloudConfigEvents()  # pyright: ignore
 
     def __init__(self, charm, relation_name = DEFAULT_RELATION_NAME):
         super().__init__(charm, relation_name)
@@ -64,13 +64,13 @@ class GrafanaCloudConfigRequirer(Object):
             ]):
                 return
 
-        self.on.cloud_config_available.emit()
+        self.on.cloud_config_available.emit()  # pyright: ignore
 
     def _on_relation_broken(self, event):
         if not self._charm.unit.is_leader():
             return
 
-        self.on.cloud_config_revoked.emit()
+        self.on.cloud_config_revoked.emit()  # pyright: ignore
     
     def _is_not_empty(self, s):
         return bool(s and not s.isspace())
