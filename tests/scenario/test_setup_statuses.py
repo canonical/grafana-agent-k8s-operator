@@ -8,7 +8,7 @@ import grafana_agent
 import k8s_charm
 import machine_charm
 import pytest
-from ops import ActiveStatus, UnknownStatus, WaitingStatus, pebble
+from ops import BlockedStatus, UnknownStatus, WaitingStatus, pebble
 from ops.testing import CharmType
 from scenario import Container, ExecOutput, State, trigger
 
@@ -105,6 +105,6 @@ def test_k8s_charm_start_with_container(charm_type, substrate, vroot):
         charm_root=vroot,
     )
 
-    assert out.status.unit == ActiveStatus("")
+    assert out.status.unit == BlockedStatus("Missing incoming ('requires') relation")
     agent_out = out.get_container("agent")
     assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE

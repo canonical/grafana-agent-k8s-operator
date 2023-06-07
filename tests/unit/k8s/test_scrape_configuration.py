@@ -109,6 +109,10 @@ class TestScrapeConfiguration(unittest.TestCase):
 
         agent_container = self.harness.charm.unit.get_container("agent")
 
+        # Add incoming relation
+        rel_incoming_id = self.harness.add_relation("metrics-endpoint", "agent")
+        self.harness.add_relation_unit(rel_incoming_id, "agent/0")
+
         rel_id = self.harness.add_relation("send-remote-write", "prometheus")
 
         self.harness.add_relation_unit(rel_id, "prometheus/0")

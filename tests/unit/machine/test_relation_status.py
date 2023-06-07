@@ -36,13 +36,13 @@ class TestRelationStatus(unittest.TestCase):
     def test_no_relations(self):
         # GIVEN no relations joined (see SetUp)
         # WHEN the charm starts (see SetUp)
-        # THEN status is "active"
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # THEN status is "blocked"
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
         # AND WHEN "update-status" fires
         self.harness.charm.on.update_status.emit()
-        # THEN status is still "active"
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # THEN status is still "blocked"
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
     def test_cos_agent_with_relations(self):
         # WHEN an incoming relation is added
@@ -52,22 +52,19 @@ class TestRelationStatus(unittest.TestCase):
         # THEN the charm goes into blocked status
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
-        # AND WHEN all the necessary outgoing relations are added
+        # AND WHEN at least one of the necessary outgoing relations is added
         for outgoing in ["send-remote-write", "logging-consumer", "grafana-dashboards-provider"]:
-            # Before the relation is added, the charm is still in blocked status
-            self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
             rel_id = self.harness.add_relation(outgoing, "grafana-agent")
             self.harness.add_relation_unit(rel_id, "grafana-agent/0")
 
-        # THEN the charm goes into active status
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+            # THEN the charm goes into active status when one mandatory relation is added
+            self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-        # AND WHEN we remove one mandatory relation
+        # AND WHEN we remove one of the mandatory relations
         self.harness.remove_relation(rel_id)
 
-        # THEN the charm goes into blocked status again
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        # THEN the charm keeps into active status
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test_juju_info_with_relations(self):
         # WHEN an incoming relation is added
@@ -79,9 +76,6 @@ class TestRelationStatus(unittest.TestCase):
 
         # AND WHEN all the necessary outgoing relations are added
         for outgoing in ["send-remote-write", "logging-consumer"]:
-            # Before the relation is added, the charm is still in blocked status
-            self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
             rel_id = self.harness.add_relation(outgoing, "grafana-agent")
             self.harness.add_relation_unit(rel_id, "grafana-agent/0")
 

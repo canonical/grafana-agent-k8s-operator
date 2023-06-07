@@ -117,10 +117,10 @@ def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
         written_cfg = placeholder_cfg_path.read_text()
         assert written_cfg  # check nonempty
 
-        assert out.status.unit == ("active", "")
+        assert out.status.unit.name == "blocked"
 
     else:
-        assert out.status.unit == ("unknown", "")
+        assert out.status.unit.name == "unknown"
 
 
 def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot):
@@ -140,6 +140,6 @@ def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot
     )
     out = ctx.run(state=State(containers=[agent]), event=agent.pebble_ready_event)
 
-    assert out.status.unit == ("active", "")
+    assert out.status.unit.name == "blocked"
     agent_out = out.get_container("agent")
     assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE
