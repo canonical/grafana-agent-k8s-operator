@@ -27,9 +27,12 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
 
     mandatory_relation_pairs = [
-        ("metrics-endpoint", ["send-remote-write", "grafana-cloud-config"]),
-        ("grafana-dashboards-consumer", ["grafana-dashboards-provider", "grafana-cloud-config"]),
-        ("logging-provider", ["logging-consumer", "grafana-cloud-config"]),
+        ("metrics-endpoint", (["send-remote-write"], ["grafana-cloud-config"])),
+        (
+            "grafana-dashboards-consumer",
+            (["grafana-dashboards-provider"], ["grafana-cloud-config"]),
+        ),
+        ("logging-provider", (["logging-consumer"], ["grafana-cloud-config"])),
     ]
 
     def __init__(self, *args):
