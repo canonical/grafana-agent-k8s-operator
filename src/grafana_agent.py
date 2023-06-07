@@ -72,7 +72,7 @@ class GrafanaAgentCharm(CharmBase):
     # incur data loss.
     # Property to facilitate centralized status update.
     # 'outgoing' are OR-ed, 'incoming' are AND-ed.
-    mandatory_relation_pairs: List[Tuple[str, List[str]]]  # overridden
+    mandatory_relation_pairs: List[Tuple[Any, Any]]  # overridden
 
     def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
         """Forbid the usage of GrafanaAgentCharm directly."""
@@ -159,9 +159,10 @@ class GrafanaAgentCharm(CharmBase):
         for incoming, outgoings in self.mandatory_relation_pairs:
             self.framework.observe(self.on[incoming].relation_joined, self._update_status)
             self.framework.observe(self.on[incoming].relation_broken, self._update_status)
-            for outgoing in outgoings:
-                self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
-                self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+            for outgoing_list in outgoings:
+                for outgoing in outgoing_list:
+                    self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
+                    self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
 
     def _on_mandatory_relation_event(self, _event=None):
         """Event handler for any mandatory relation event."""
@@ -362,55 +363,70 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = self.status.validation_error
             return
 
+        has_incoming = False
+        outgoing_rels = {"has": False, "message": ""}
+
         # Make sure every incoming relation has at least one matching outgoing relation
         for incoming, outgoings in self.mandatory_relation_pairs:
             if not self.model.relations.get(incoming):
                 continue
 
-            # FIXME: This is a workaround since on relation-broken the relation that is
-            # going away is still present in `self.model.relations`
-            # See: https://github.com/canonical/operator/issues/888
-            #
-            # Once this issue is fixed, we can have:
-            #
-            # has_outgoing = any(
-            #     (len(self.model.relations.get(outgoing, [])) for outgoing in outgoings)
-            # )
-            has_outgoing = self._has_outgoing(outgoings)
+            has_incoming = True
+            outgoing_rels = self._has_outgoings(outgoings)
 
-            if not has_outgoing:
-                missing = "|".join(outgoings)
-                logger.warning(
-                    "An incoming '%s' relation does not yet have any "
-                    "matching outgoing relation(s): [%s]",
-                    incoming,
-                    missing,
-                )
-                self.unit.status = BlockedStatus(f"Missing relation: [{missing}]")
-                return
+        if not has_incoming:
+            self.unit.status = BlockedStatus("Missing incoming ('requires') relation")
+            return
+
+        if not outgoing_rels["has"]:
+            self.unit.status = BlockedStatus(f"{outgoing_rels['message']}")
+            return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
             return
 
-        self.unit.status = ActiveStatus()
+        self.unit.status = ActiveStatus(f"{outgoing_rels['message']}")
 
-    def _has_outgoing(self, outgoings) -> bool:
-        for outgoing in outgoings:
-            relation = self.model.relations.get(outgoing, [])
+    def _has_outgoings(self, outgoings: tuple) -> Dict[str, Any]:
+        missing_rels = set()
+        active_rels = set()
 
-            if relation == []:
-                continue
+        for outgoing_list in outgoings:
+            for outgoing in outgoing_list:
+                relation = self.model.relations.get(outgoing, False)
 
-            try:
-                units = relation[0].units
-            except IndexError:
-                units = None
+                if not relation:
+                    missing_rels.add(outgoing)
+                    continue
 
-            if relation and units:
-                return True
+                try:
+                    units = relation[0].units  # pyright: ignore
+                except IndexError:
+                    missing_rels.add(outgoing)
+                    units = None
 
-        return False
+                if not units:
+                    missing_rels.add(outgoing)
+
+                if relation and units:
+                    active_rels.add(outgoing)
+
+        return {"has": bool(active_rels), "message": self._status_message(missing_rels)}
+
+    def _status_message(self, missing_relations: set) -> str:
+        if not missing_relations:
+            return ""
+
+        # The grafana-cloud-config relation is  established
+        if "grafana-cloud-config" not in missing_relations:
+            return ""
+
+        # The other 3 relations (logs, metrics, dashboards) are established
+        if len(missing_relations) == 1 and "grafana-cloud-config" in missing_relations:
+            return ""
+
+        return ", ".join([f"{x}: off" for x in missing_relations])
 
     def _update_config(self) -> None:
         if not self.is_ready:
