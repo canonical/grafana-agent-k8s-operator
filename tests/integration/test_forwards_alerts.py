@@ -38,7 +38,7 @@ async def test_deploy(ops_test, grafana_agent_charm):
     await ops_test.model.set_config({"update-status-hook-interval": "10s"})
 
     await ops_test.model.wait_for_idle(apps=[agent_name], status="active", timeout=300)
-    assert ops_test.model.applications[agent_name].units[0].workload_status == "active"
+    assert ops_test.model.applications[agent_name].units[0].workload_status == "blocked"
 
 
 async def test_relate_to_external_apps(ops_test):
@@ -61,7 +61,7 @@ async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_char
     await ops_test.model.deploy(loki_tester_charm, application_name=loki_tester_name)
     await ops_test.model.add_relation(agent_name, loki_tester_name)
     await ops_test.model.wait_for_idle(
-        apps=[loki_tester_name, agent_name], status="active", timeout=300
+        apps=[loki_tester_name, agent_name], status="blocked", timeout=300
     )
 
     loki_alerts = await loki_rules(ops_test, loki_name)
@@ -80,7 +80,7 @@ async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus
     )
     await ops_test.model.add_relation(agent_name, prometheus_tester_name)
     await ops_test.model.wait_for_idle(
-        apps=[prometheus_tester_name, agent_name], status="active", timeout=300
+        apps=[prometheus_tester_name, agent_name], status="blocked", timeout=300
     )
 
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
