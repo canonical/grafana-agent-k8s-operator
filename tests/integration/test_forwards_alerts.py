@@ -37,7 +37,7 @@ async def test_deploy(ops_test, grafana_agent_charm):
     # issuing placeholder update_status just to trigger an event
     await ops_test.model.set_config({"update-status-hook-interval": "10s"})
 
-    await ops_test.model.wait_for_idle(apps=[agent_name], status="active", timeout=300)
+    await ops_test.model.wait_for_idle(apps=[agent_name], status="blocked", timeout=300)
     assert ops_test.model.applications[agent_name].units[0].workload_status == "blocked"
 
 

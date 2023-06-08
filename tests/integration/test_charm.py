@@ -24,7 +24,7 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
     await ops_test.model.deploy(grafana_agent_charm, resources=resources, application_name="agent")
 
     await ops_test.model.wait_for_idle(
-        apps=["agent"], status="active", timeout=300, idle_period=30
+        apps=["agent"], status="blocked", timeout=300, idle_period=30
     )
     assert ops_test.model.applications["agent"].units[0].workload_status == "blocked"
 
