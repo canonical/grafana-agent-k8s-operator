@@ -1,0 +1,32 @@
+---
+groups:
+  - name: nvme
+    rules:
+      - record: available_file_size_percentage
+        expr: |
+          100 *  (node_filesystem_avail_bytes / node_filesystem_size_bytes)
+      - alert: FileSystemPercentUsedWarn
+        expr: |
+          avg_over_time(available_file_size_percentage[5m]) < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Available disk on {{ $labels.mountpoint }} is too low
+          description: Available disk percentage on mountpoint({{ $labels.mountpoint }}) {{ $value }} is < 20%
+      - alert: FileSystemPercentUsedCrit
+        expr: |
+          avg_over_time(available_file_size_percentage[5m]) < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Available disk on {{ $labels.mountpoint }} is too low
+          description: Available disk percentage on mountpoint({{ $labels.mountpoint }}) {{ $value }} is < 10%
+      - alert: NvmeHwmonTempAlarm
+        expr: node_hwmon_temp_alarm != 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Chip {{ $labels.chip }} throw a temperature alarm {{ $value }}
