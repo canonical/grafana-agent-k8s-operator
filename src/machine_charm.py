@@ -325,7 +325,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                     "sysctl",
                 ],
                 "sysctl_include": [
-                    "net.ipv4.neigh.default.gc_thresh3"
+                    "net.ipv4.neigh.default.gc_thresh3",
                 ],
                 "relabel_configs": [
                     # Align the "job" name with those of prometheus_scrape
