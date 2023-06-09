@@ -1,0 +1,16 @@
+---
+groups:
+  - name: hwmon
+    rules:
+      - alert: HwmonTempAlarm
+        expr: node_hwmon_temp_alarm != 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Chip {{ $labels.chip }} is throwing a temperature alarm on {{ $labels.instance }}
+          description: >-
+            Chip {{ $labels.chip }} is throwing a temperature alarm on {{ $labels.instance }}
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+
