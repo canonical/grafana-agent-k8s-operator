@@ -10,7 +10,7 @@ import re
 import shutil
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
 from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
@@ -72,7 +72,7 @@ class GrafanaAgentCharm(CharmBase):
     # incur data loss.
     # Property to facilitate centralized status update.
     # 'outgoing' are OR-ed, 'incoming' are AND-ed.
-    mandatory_relation_pairs: List[Tuple[Any, Any]]  # overridden
+    mandatory_relation_pairs: Dict[str, List[Set[str]]]  # overridden
 
     def __new__(cls, *args: Any, **kwargs: Dict[Any, Any]):
         """Forbid the usage of GrafanaAgentCharm directly."""
@@ -156,7 +156,7 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
         # Register status observers
-        for incoming, outgoings in self.mandatory_relation_pairs:
+        for incoming, outgoings in self.mandatory_relation_pairs.items():
             self.framework.observe(self.on[incoming].relation_joined, self._update_status)
             self.framework.observe(self.on[incoming].relation_broken, self._update_status)
             for outgoing_list in outgoings:
@@ -367,7 +367,7 @@ class GrafanaAgentCharm(CharmBase):
         outgoing_rels = {"has": False, "message": ""}
 
         # Make sure every incoming relation has at least one matching outgoing relation
-        for incoming, outgoings in self.mandatory_relation_pairs:
+        for incoming, outgoings in self.mandatory_relation_pairs.items():
             if not self.model.relations.get(incoming):
                 continue
 
@@ -388,7 +388,7 @@ class GrafanaAgentCharm(CharmBase):
 
         self.unit.status = ActiveStatus(f"{outgoing_rels['message']}")
 
-    def _has_outgoings(self, outgoings: tuple) -> Dict[str, Any]:
+    def _has_outgoings(self, outgoings: List[Set[str]]) -> Dict[str, Any]:
         missing_rels = set()
         active_rels = set()
 
