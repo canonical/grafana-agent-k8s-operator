@@ -1,0 +1,50 @@
+groups:
+- name: mdadm
+  rules:
+    - alert: RaidDisksFailed  
+      expr: node_md_disks{state="failed"} > 0
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: "{{ $value }} disks failed on device {{ $labels.device }}.(instance {{ $labels.instance }})"
+        description: >-
+          Disks failed on raid device {{ $labels.device }}.
+            VALUE = {{ $value }}
+            LABELS = {{ $labels }}
+
+    - alert: RaidDisksSpare
+      expr: node_md_disks{state="spare"} > 0
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $value }} disks marked as spare on device {{ $labels.device }}.(instance {{ $labels.instance }})"
+        description: >-
+          Disks marked as spare on raid device {{ $labels.device }}.
+            VALUE = {{ $value }}
+            LABELS = {{ $labels }}
+
+    - alert: RaidDeviceInactive
+      expr: node_md_state{state="inactive"} > 0
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: RAID device {{ $labels.device }} in inactive state.(instance {{ $labels.instance }})
+        description: >-
+          RAID device {{ $labels.device }} in inactive state.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+
+    - alert: RaidDeviceRecovering
+      expr: node_md_state{state="recovering"} > 0
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: RAID device {{ $labels.device }} in recovering state.(instance {{ $labels.instance }})
+        description: >-
+          RAID device {{ $labels.device }} in recovering state.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
