@@ -148,13 +148,16 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     service_name = "grafana-agent.grafana-agent"
 
-    mandatory_relation_pairs = [
-        ("cos-agent", ["send-remote-write", "grafana-cloud-config"]),
-        ("cos-agent", ["logging-consumer", "grafana-cloud-config"]),
-        ("cos-agent", ["grafana-dashboards-provider", "grafana-cloud-config"]),
-        ("juju-info", ["send-remote-write", "grafana-cloud-config"]),
-        ("juju-info", ["logging-consumer", "grafana-cloud-config"]),
-    ]
+    mandatory_relation_pairs = {
+        "cos-agent": [  # must be paired with:
+            {"grafana-cloud-config"},  # or
+            {"send-remote-write", "logging-consumer", "grafana-dashboards-provider"},
+        ],
+        "juju-info": [  # must be paired with:
+            {"grafana-cloud-config"},  # or
+            {"send-remote-write", "logging-consumer"},
+        ],
+    }
 
     def __init__(self, *args):
         super().__init__(*args)

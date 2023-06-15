@@ -26,11 +26,20 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
 
-    mandatory_relation_pairs = [
-        ("metrics-endpoint", ["send-remote-write", "grafana-cloud-config"]),
-        ("grafana-dashboards-consumer", ["grafana-dashboards-provider", "grafana-cloud-config"]),
-        ("logging-provider", ["logging-consumer", "grafana-cloud-config"]),
-    ]
+    mandatory_relation_pairs = {
+        "metrics-endpoint": [  # must be paired with:
+            {"send-remote-write"},  # or
+            {"grafana-cloud-config"},
+        ],
+        "logging-provider": [  # must be paired with:
+            {"logging-consumer"},  # or
+            {"grafana-cloud-config"},
+        ],
+        "grafana-dashboards-consumer": [  # must be paired with:
+            {"grafana-dashboards-provider"},  # or
+            {"grafana-cloud-config"},
+        ],
+    }
 
     def __init__(self, *args):
         super().__init__(*args)

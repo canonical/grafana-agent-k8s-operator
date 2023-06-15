@@ -24,12 +24,16 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
     await ops_test.model.deploy(grafana_agent_charm, resources=resources, application_name="agent")
 
     await ops_test.model.wait_for_idle(
-        apps=["agent"], status="active", timeout=300, idle_period=30
+        apps=["agent"], status="blocked", timeout=300, idle_period=30
     )
-    assert ops_test.model.applications["agent"].units[0].workload_status == "active"
+    assert ops_test.model.applications["agent"].units[0].workload_status == "blocked"
 
 
 async def test_relates_to_loki(ops_test):
     await ops_test.model.deploy("loki-k8s", channel="edge", application_name="loki", trust=True)
     await ops_test.model.add_relation("loki", "agent:logging-consumer")
-    await ops_test.model.wait_for_idle(apps=["loki", "agent"], status="active", timeout=1000)
+
+    await ops_test.model.wait_for_idle(
+        apps=["agent"], status="blocked", timeout=300  # Missing incoming ('requires') relation
+    )
+    await ops_test.model.wait_for_idle(apps=["loki"], status="active", timeout=300)

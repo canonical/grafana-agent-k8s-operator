@@ -25,7 +25,7 @@ async def test_deploy_from_local_path(ops_test, grafana_agent_charm):
     await ops_test.model.deploy(
         grafana_agent_charm, application_name=app_name, resources=resources
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
 
 
 @pytest.mark.xfail

@@ -27,13 +27,13 @@ class TestRelationStatus(unittest.TestCase):
     def test_no_relations(self):
         # GIVEN no relations joined (see SetUp)
         # WHEN the charm starts (see SetUp)
-        # THEN status is "active"
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # THEN status is "blocked"
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
         # AND WHEN "update-status" fires
         self.harness.charm.on.update_status.emit()
-        # THEN status is still "active"
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # THEN status is still "blocked"
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
     def test_with_relations(self):
         for incoming, outgoing in [
@@ -43,16 +43,21 @@ class TestRelationStatus(unittest.TestCase):
         ]:
             with self.subTest(incoming=incoming, outgoing=outgoing):
                 # WHEN an incoming relation is added
-                rel_id = self.harness.add_relation(incoming, "grafana-agent")
-                self.harness.add_relation_unit(rel_id, "grafana-agent/0")
-                self.harness.update_relation_data(rel_id, "grafana-agent/0", {"sample": "value"})
+                rel_incoming_id = self.harness.add_relation(incoming, "grafana-agent")
+                self.harness.add_relation_unit(rel_incoming_id, "grafana-agent/0")
+                self.harness.update_relation_data(
+                    rel_incoming_id, "grafana-agent/0", {"sample": "value"}
+                )
 
                 # THEN the charm goes into blocked status
                 self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
                 # AND WHEN an appropriate outgoing relation is added
-                rel_id = self.harness.add_relation(outgoing, "grafana-agent")
-                self.harness.add_relation_unit(rel_id, "grafana-agent/0")
+                rel_outgoing_id = self.harness.add_relation(outgoing, "grafana-agent")
+                self.harness.add_relation_unit(rel_outgoing_id, "grafana-agent/0")
 
                 # THEN the charm goes into active status
                 self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+                # Remove incoming relation.
+                self.harness.remove_relation(rel_incoming_id)
