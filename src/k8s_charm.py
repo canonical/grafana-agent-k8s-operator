@@ -17,6 +17,7 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
+from ops.pebble import Layer
 
 logger = logging.getLogger(__name__)
 
@@ -78,18 +79,20 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def _on_agent_pebble_ready(self, _event) -> None:
         self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
 
-        pebble_layer = {
-            "summary": "agent layer",
-            "description": "pebble config layer for Grafana Agent",
-            "services": {
-                "agent": {
-                    "override": "replace",
-                    "summary": "agent",
-                    "command": f"/bin/agent {self._cli_args()}",
-                    "startup": "enabled",
+        pebble_layer = Layer(
+            {
+                "summary": "agent layer",
+                "description": "pebble config layer for Grafana Agent",
+                "services": {
+                    "agent": {
+                        "override": "replace",
+                        "summary": "agent",
+                        "command": f"/bin/agent {self._cli_args()}",
+                        "startup": "enabled",
+                    },
                 },
-            },
-        }
+            }
+        )
         self._container.add_layer(self._name, pebble_layer, combine=True)
         self._container.autostart()
 

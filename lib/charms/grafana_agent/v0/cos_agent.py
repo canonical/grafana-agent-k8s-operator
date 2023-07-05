@@ -189,9 +189,9 @@ if TYPE_CHECKING:
 
 LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
-LIBPATCH = 4
+LIBPATCH = 5
 
-PYDEPS = ["cosl", "pydantic"]
+PYDEPS = ["cosl", "pydantic<2"]
 
 DEFAULT_RELATION_NAME = "cos-agent"
 DEFAULT_PEER_RELATION_NAME = "peers"
@@ -352,7 +352,7 @@ class COSAgentProvider(Object):
                     )
                     relation.data[self._charm.unit][data.KEY] = data.json()
                 except (
-                    pydantic.error_wrappers.ValidationError,
+                    pydantic.ValidationError,
                     json.decoder.JSONDecodeError,
                 ) as e:
                     logger.error("Invalid relation data provided: %s", e)
@@ -525,7 +525,7 @@ class COSAgentRequirer(Object):
     def _validated_provider_data(self, raw) -> Optional[CosAgentProviderUnitData]:
         try:
             return CosAgentProviderUnitData(**json.loads(raw))
-        except (pydantic.error_wrappers.ValidationError, json.decoder.JSONDecodeError) as e:
+        except (pydantic.ValidationError, json.decoder.JSONDecodeError) as e:
             self.on.validation_error.emit(message=str(e))  # pyright: ignore
             return None
 
