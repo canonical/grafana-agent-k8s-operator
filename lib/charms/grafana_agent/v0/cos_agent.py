@@ -285,6 +285,7 @@ class CosAgentProviderUnitData(pydantic.BaseModel):
     metrics_alert_rules: dict
     log_alert_rules: dict
     dashboards: List[GrafanaDashboard]
+    subordinate: bool
 
     # The following entries may vary across units of the same principal app.
     # this data does not need to be forwarded to the gagent leader
@@ -401,6 +402,7 @@ class COSAgentProvider(Object):
                         dashboards=self._dashboards,
                         metrics_scrape_jobs=self._scrape_jobs,
                         log_slots=self._log_slots,
+                        subordinate=self.charm.meta.subordinate,
                     )
                     relation.data[self._charm.unit][data.KEY] = data.json()
                 except (
@@ -491,6 +493,12 @@ class COSAgentRequirerEvents(ObjectEvents):
 
     data_changed = EventSource(COSAgentDataChanged)
     validation_error = EventSource(COSAgentValidationError)
+
+
+class MultiplePrincipalsError(Exception):
+    """Custom exceptionfor when there are multiple principal applications."""
+
+    pass
 
 
 class COSAgentRequirer(Object):
@@ -628,7 +636,16 @@ class COSAgentRequirer(Object):
     @property
     def _principal_relations(self):
         # Technically it's a list, but for subordinates there can only be one.
-        return self._charm.model.relations[self._relation_name]
+        relations = []
+        for relation in self._charm.model.relations[self._relation_name]:
+            if not relation.data[next(iter(relation.units))]["config"]["subordinate"]:
+                relations.append(relation)
+        if len(relations) > 1:
+            logger.error(
+                "Multiple applications claiming to be principal. Update the cos-agent library in the client application charms."
+            )
+            raise MultiplePrincipalsError("Multiple principal applications.")
+        return relations
 
     @property
     def _principal_unit_data(self) -> Optional[CosAgentProviderUnitData]:

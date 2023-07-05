@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
+from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
     GrafanaCloudConfigRequirer,
 )
@@ -433,7 +434,11 @@ class GrafanaAgentCharm(CharmBase):
             # Grafana-agent is not yet available so no need to update config
             return
 
-        config = self._generate_config()
+        try:
+            config = self._generate_config()
+        except MultiplePrincipalsError as e:
+            self.status.update_config = BlockedStatus(str(e))
+            return
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))

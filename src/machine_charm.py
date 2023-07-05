@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
+from charms.grafana_agent.v0.cos_agent import COSAgentRequirer, MultiplePrincipalsError
 from charms.operator_libs_linux.v1 import snap  # type: ignore
 from grafana_agent import GrafanaAgentCharm
 from ops.main import main
@@ -185,14 +185,21 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._update_config()
         self._update_status()
 
-    def _on_cos_data_changed(self, _event):
+    def _on_cos_data_changed(self, event):
         """Trigger renewals of all data if there is a change."""
-        self._connect_logging_snap_endpoints()
-        self._update_config()
-        self._update_status()
-        self._update_metrics_alerts()
-        self._update_loki_alerts()
-        self._update_grafana_dashboards()
+        try:
+            self._connect_logging_snap_endpoints()
+            self._update_config()
+            self._update_status()
+            self._update_metrics_alerts()
+            self._update_loki_alerts()
+            self._update_grafana_dashboards()
+        except MultiplePrincipalsError:
+            logger.error(
+                "Multiple applications claiming to be principle. Update the cos-agent library in the client application charms."
+            )
+            self.unit.status = BlockedStatus("Multiple Principal Applications")
+            event.defer()
 
     def _on_cos_validation_error(self, event):
         msg_text = "Validation errors for cos-agent relation - check juju debug-log."
@@ -399,6 +406,17 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         # (otherwise, the subordinate won't even execute). However, for the sake of juju maybe not
         # showing us the relation until after the first few install/start/config-changed, we err on
         # the safe side and type this as Optional.
+        all_relations = self.model.relations["cos-agent"] + self.Model.relations["juju-info"]
+        principal_relations = []
+        for relation in all_relations:
+            if (
+                relation.data(next(iter(relation.units)))
+                .get("config", {})
+                .get("subordinate", None)
+            ):
+                principal_relations.append(relation)
+        if len(principal_relations) > 1:
+            raise MultiplePrincipalsError("Multiple Principle Applications")
         return self.model.get_relation("cos-agent") or self.model.get_relation("juju-info")
 
     @property
