@@ -171,7 +171,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Unio
 import pydantic
 from cosl import JujuTopology
 from cosl.rules import AlertRules
-from ops.charm import RelationChangedEvent, RelationEvent
+from ops.charm import RelationChangedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation, Unit
 from ops.testing import CharmType
@@ -331,10 +331,7 @@ class COSAgentProvider(Object):
 
     def _on_refresh(self, event):
         """Trigger the class to update relation data."""
-        if isinstance(event, RelationEvent):
-            relations = [event.relation]
-        else:
-            relations = self._charm.model.relations[self._relation_name]
+        relations = self._charm.model.relations[self._relation_name]
 
         for relation in relations:
             # Before a principal is related to the grafana-agent subordinate, we'd get
