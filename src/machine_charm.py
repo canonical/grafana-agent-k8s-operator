@@ -255,7 +255,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         for job in jobs:
             static_configs = job.get("static_configs", [])
             for static_config in static_configs:
-                static_config["labels"] = self._principal_labels
+                static_config["labels"] = {
+                    # Be sure to keep labels from static_config
+                    **static_config.get("labels", {}),
+                    **self._principal_labels,
+                }
         return jobs
 
     def logs_rules(self) -> Dict[str, Any]:
