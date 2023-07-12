@@ -321,7 +321,7 @@ class GrafanaAgentCharm(CharmBase):
             # Build dashboard custom filename
             charm = dash.get("charm", "charm-name")
             rel_id = dash.get("relation_id", "rel_id")
-            title = dash.get("title").replace(" ", "_").lower()
+            title = dash.get("title").replace(" ", "_").replace("/", "_").lower()
             filename = f"juju_{title}-{charm}-{rel_id}.json"
 
             with open(pathlib.Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
