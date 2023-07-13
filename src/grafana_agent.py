@@ -20,6 +20,7 @@ from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.mutual_tls_interface.v0.mutual_tls import MutualTLSRequires
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -109,6 +110,7 @@ class GrafanaAgentCharm(CharmBase):
             src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
             dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
+        self.cert_transfer = MutualTLSRequires(self, "cert-transfer")
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
@@ -168,6 +170,11 @@ class GrafanaAgentCharm(CharmBase):
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
+        self.framework.observe(
+            self.cert_transfer.on.certificate_available,  # pyright: ignore
+            self._on_cert_transfer_available,
+        )
+
         # Register status observers
         for incoming, outgoings in self.mandatory_relation_pairs.items():
             self.framework.observe(self.on[incoming].relation_joined, self._update_status)
@@ -217,6 +224,12 @@ class GrafanaAgentCharm(CharmBase):
     def _on_cloud_config_revoked(self, _) -> None:
         logger.info("cloud config revoked")
         self._update_config()
+
+    def _on_cert_transfer_available(self, event):
+        # TODO: trust the certificate instead of printing it
+        print(event.certificate)
+        print(event.ca)
+        print(event.chain)
 
     # Abstract Methods
     def agent_version_output(self) -> str:
