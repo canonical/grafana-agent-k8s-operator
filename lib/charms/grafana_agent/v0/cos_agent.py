@@ -29,7 +29,7 @@ The constructor of `COSAgentProvider` has only one required and eight optional p
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: Optional[List[_MetricsEndpointDict]] = None,
+        metrics_endpoints: Optional[Union[List[_MetricsEndpointDict], Callable]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
@@ -191,7 +191,7 @@ import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Union, Callable
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Optional, Set, Union
 
 import pydantic
 from cosl import JujuTopology
@@ -313,7 +313,7 @@ class COSAgentProvider(Object):
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: Optional[List["_MetricsEndpointDict"]] = None,
+        metrics_endpoints: Optional[Union[List["_MetricsEndpointDict"], Callable]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
@@ -327,8 +327,8 @@ class COSAgentProvider(Object):
             charm: The `CharmBase` instance that is instantiating this object.
             relation_name: The name of the relation to communicate over.
             metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
-                A callable that returns the list may be passed in case the endpoints need to be
-                generated dynamically.
+                Alternatively, a callable that returns the list may be passed in case the endpoints
+                need to be generated dynamically.
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
             recurse_rules_dirs: Whether to recurse into rule paths.
@@ -389,7 +389,7 @@ class COSAgentProvider(Object):
         """Return a prometheus_scrape-like data structure for jobs."""
         job_name_prefix = self._charm.app.name
 
-        if isinstance(self._metrics_endpoints, Callable):
+        if callable(self._metrics_endpoints):
             endpoints = self._metrics_endpoints()
         else:
             endpoints = self._metrics_endpoints
