@@ -311,6 +311,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         with open(path, "w") as f:
             f.write(text)
 
+    def stop(self) -> None:
+        """Stop grafana agent."""
+        try:
+            self.snap.stop()
+        except snap.SnapError as e:
+            raise GrafanaAgentServiceError("Failed to restart grafana-agent") from e
+
     def restart(self) -> None:
         """Restart grafana agent."""
         try:

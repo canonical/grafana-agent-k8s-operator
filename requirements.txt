@@ -11,3 +11,5 @@ requests
 kubernetes
 lightkube
 lightkube-models
+cryptography
+jsonschema

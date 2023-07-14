@@ -37,6 +37,9 @@ resources:
     description: OCI image for Grafana Agent
 
 requires:
+  certificates:
+    interface: tls-certificates
+    limit: 1
   send-remote-write:
     interface: prometheus_remote_write
   metrics-endpoint:
@@ -54,6 +57,10 @@ provides:
     interface: loki_push_api
   grafana-dashboards-provider:
     interface: grafana_dashboard
+
+peers:
+  peers:
+    interface: grafana_agent_replica
 
 storage:
   data:

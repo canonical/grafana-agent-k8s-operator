@@ -76,10 +76,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Refresh Loki alert rules."""
         self._update_loki_alerts()
 
-    def _on_agent_pebble_ready(self, _event) -> None:
-        self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
-
-        pebble_layer = Layer(
+    def _layer(self):
+        """Generate the pebble layer."""
+        return Layer(
             {
                 "summary": "agent layer",
                 "description": "pebble config layer for Grafana Agent",
@@ -93,7 +92,11 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 },
             },
         )
-        self._container.add_layer(self._name, pebble_layer, combine=True)  # pyright: ignore
+
+    def _on_agent_pebble_ready(self, _event) -> None:
+        self._container.push(CONFIG_PATH, yaml.dump(self._generate_config()), make_dirs=True)
+
+        self._container.add_layer(self._name, self._layer(), combine=True)
         self._container.autostart()
 
         if (version := self._agent_version) is not None:
@@ -157,8 +160,14 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """
         self._container.push(path, text, make_dirs=True)
 
+    def stop(self) -> None:
+        """Stop grafana agent."""
+        self._container.stop("agent")
+
     def restart(self) -> None:
         """Restart grafana agent."""
+        self._container.add_layer(self._name, self._layer(), combine=True)
+        self._container.autostart()
         self._container.restart("agent")
 
     def positions_dir(self) -> str:
