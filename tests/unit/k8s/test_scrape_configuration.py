@@ -265,7 +265,9 @@ class TestScrapeConfiguration(unittest.TestCase):
     def test__cli_args_with_tls(self):
         rel_id = self.harness.add_relation("certificates", "certs")
         self.harness.add_relation_unit(rel_id, "certs/0")
-        expected = "-config.file=/etc/grafana-agent.yaml -server.http.enable-tls -server.grpc.enable-tls"
+        expected = (
+            "-config.file=/etc/grafana-agent.yaml -server.http.enable-tls -server.grpc.enable-tls"
+        )
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
     # Leaving this test here as we need to use it again when we figure out how to
