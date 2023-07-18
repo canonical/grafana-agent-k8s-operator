@@ -29,7 +29,7 @@ The constructor of `COSAgentProvider` has only one required and eight optional p
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: Optional[List[_MetricsEndpointDict]] = None,
+        metrics_endpoints: Optional[Union[List[_MetricsEndpointDict], Callable]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
@@ -104,6 +104,31 @@ class TelemetryProviderCharm(CharmBase):
         )
 ```
 
+### Example 3 - Dynamic metrics endpoints generation:
+
+Pass a function to the `metrics_endpoints` to decouple the generation of the endpoints
+from the instantiation of the COSAgentProvider object.
+
+```python
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
+...
+
+class TelemetryProviderCharm(CharmBase):
+    def generate_metrics_endpoints(self):
+        return [
+            {"path": "/metrics", "port": 9000},
+            {"path": "/metrics", "port": 9001},
+            {"path": "/metrics", "port": 9002},
+        ]
+
+    def __init__(self, *args):
+        ...
+        self._grafana_agent = COSAgentProvider(
+            self,
+            metrics_endpoints=self.generate_metrics_endpoints,
+        )
+```
+
 ## COSAgentConsumer Library Usage
 
 This object may be used by any Charmed Operator which gathers telemetry data by
@@ -166,7 +191,7 @@ import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Optional, Set, Union
 
 import pydantic
 from cosl import JujuTopology
@@ -288,7 +313,7 @@ class COSAgentProvider(Object):
         self,
         charm: CharmType,
         relation_name: str = DEFAULT_RELATION_NAME,
-        metrics_endpoints: Optional[List["_MetricsEndpointDict"]] = None,
+        metrics_endpoints: Optional[Union[List["_MetricsEndpointDict"], Callable]] = None,
         metrics_rules_dir: str = "./src/prometheus_alert_rules",
         logs_rules_dir: str = "./src/loki_alert_rules",
         recurse_rules_dirs: bool = False,
@@ -302,6 +327,8 @@ class COSAgentProvider(Object):
             charm: The `CharmBase` instance that is instantiating this object.
             relation_name: The name of the relation to communicate over.
             metrics_endpoints: List of endpoints in the form [{"path": path, "port": port}, ...].
+                Alternatively, a callable that returns the list may be passed in case the endpoints
+                need to be generated dynamically.
             metrics_rules_dir: Directory where the metrics rules are stored.
             logs_rules_dir: Directory where the logs rules are stored.
             recurse_rules_dirs: Whether to recurse into rule paths.
@@ -358,9 +385,15 @@ class COSAgentProvider(Object):
     def _scrape_jobs(self) -> List[Dict]:
         """Return a prometheus_scrape-like data structure for jobs."""
         job_name_prefix = self._charm.app.name
+
+        if callable(self._metrics_endpoints):
+            endpoints = self._metrics_endpoints()
+        else:
+            endpoints = self._metrics_endpoints
+
         return [
             {"job_name": f"{job_name_prefix}_{key}", **endpoint}
-            for key, endpoint in enumerate(self._metrics_endpoints)
+            for key, endpoint in enumerate(endpoints)
         ]
 
     @property
