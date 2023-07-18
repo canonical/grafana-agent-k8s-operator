@@ -22,10 +22,12 @@ async def test_deploy_from_edge_and_upgrade_from_local_path(ops_test, grafana_ag
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
 
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    # We do not wait for status="active" because when the charm is deployed in isolation it would
+    # go into: [idle] blocked: Missing incoming ('requires') relation
+    await ops_test.model.wait_for_idle(apps=[app_name], timeout=1000)
 
     logger.info("upgrade deployed charm with local charm %s", grafana_agent_charm)
     await ops_test.model.applications[app_name].refresh(
         path=grafana_agent_charm, resources=resources
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[app_name], timeout=1000)
