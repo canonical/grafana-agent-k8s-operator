@@ -71,6 +71,7 @@ class GrafanaAgentCharm(CharmBase):
     # TODO Change to a more suitable location once the snap gets access (#216).
     _cert_path = "/tmp/agent/grafana-agent.pem"
     _key_path = "/tmp/agent/grafana-agent.key"
+    _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
@@ -179,6 +180,7 @@ class GrafanaAgentCharm(CharmBase):
     def _on_cert_changed(self, _event):
         """Event handler for cert change."""
         self._update_config()
+        self._update_ca()
         self._update_status()
 
     def _on_mandatory_relation_event(self, _event=None):
@@ -243,6 +245,14 @@ class GrafanaAgentCharm(CharmBase):
         """
         raise NotImplementedError("Please override the write_file method")
 
+    def delete_file(self, path: Union[str, pathlib.Path]):
+        """Delete a file.
+
+        Args:
+            path: file to be deleted
+        """
+        raise NotImplementedError("Please override the delete_file method")
+
     def stop(self) -> None:
         """Stop grafana agent."""
         raise NotImplementedError("Please override the stop method")
@@ -281,6 +291,14 @@ class GrafanaAgentCharm(CharmBase):
     def positions_dir(self) -> str:
         """Return the positions directory."""
         raise NotImplementedError("Please override the positions_dir method")
+
+    def run(self, cmd: List[str]):
+        """Run cmd on the workload.
+
+        Args:
+            cmd: Command to be run.
+        """
+        raise NotImplementedError("Please override the run method")
 
     # End: Abstract Methods
 
@@ -456,12 +474,13 @@ class GrafanaAgentCharm(CharmBase):
 
         # Write TLS files.
         if self.cert.enabled:
-            if not (self.cert.cert and self.cert.key):
+            if not (self.cert.cert and self.cert.key and self.cert.ca):
                 self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
                 self.stop()
                 return
             self.write_file(self._cert_path, self.cert.cert)
             self.write_file(self._key_path, self.cert.key)
+            self.write_file(self._ca_path, self.cert.ca)
 
         try:
             config = self._generate_config()
@@ -757,3 +776,16 @@ class GrafanaAgentCharm(CharmBase):
         if result is None:
             return result
         return result.group(1)
+
+    def _update_ca(self) -> None:
+        """Updates the CA cert on disk from cert_manager."""
+        if (not self.cert.enabled) or (not self.cert.ca):
+            try:
+                self.read_file(self._ca_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
+                self.delete_file(self._ca_path)
+        else:
+            self.write_file(self._ca_path, self.cert.ca)
+        self.run(["update-ca-certificates", "--fresh"])

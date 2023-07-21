@@ -160,6 +160,14 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """
         self._container.push(path, text, make_dirs=True)
 
+    def delete_file(self, path: Union[str, pathlib.Path]):
+        """Delete a file.
+
+        Args:
+            path: file to be deleted
+        """
+        self._container.remove_path(path)
+
     def stop(self) -> None:
         """Stop grafana agent."""
         self._container.stop("agent")
@@ -173,6 +181,14 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def positions_dir(self) -> str:
         """Return the positions directory."""
         return "/run"
+
+    def run(self, cmd: List[str]):
+        """Run cmd on the workload.
+
+        Args:
+            cmd: Command to be run.
+        """
+        self._container.exec(cmd)
 
 
 if __name__ == "__main__":
