@@ -402,7 +402,7 @@ class COSAgentProvider(Object):
                         dashboards=self._dashboards,
                         metrics_scrape_jobs=self._scrape_jobs,
                         log_slots=self._log_slots,
-                        subordinate=self.charm.meta.subordinate,
+                        subordinate=self._charm.meta.subordinate,
                     )
                     relation.data[self._charm.unit][data.KEY] = data.json()
                 except (
