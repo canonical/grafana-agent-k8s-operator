@@ -722,7 +722,9 @@ class COSAgentRequirer(Object):
         scrape_jobs = []
         if data := self._principal_unit_data:
             for job in data.metrics_scrape_jobs:
-                # This is to ensure backwards compatibility with old clients
+                # In #220, relation schema changed from a simplified dict to the standard
+                # `scrape_configs`.
+                # This is to ensure backwards compatibility with Providers older than v0.5.
                 if "path" in job and "port" in job and "job_name" in job:
                     job = {
                         "job_name": job["job_name"],
