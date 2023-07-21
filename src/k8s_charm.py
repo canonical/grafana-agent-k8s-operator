@@ -91,9 +91,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                         "startup": "enabled",
                     },
                 },
-            }
-        )
-        self._container.add_layer(self._name, pebble_layer, combine=True)
+            },
+        }
+        self._container.add_layer(self._name, pebble_layer, combine=True)  # pyright: ignore
         self._container.autostart()
 
         if (version := self._agent_version) is not None:

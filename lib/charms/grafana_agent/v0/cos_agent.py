@@ -693,6 +693,8 @@ class COSAgentRequirer(Object):
                 if not unit_name.startswith(CosAgentPeersUnitData.KEY):
                     continue
                 raw = relation.data[unit].get(unit_name)
+                if raw is None:
+                    continue
                 data = CosAgentPeersUnitData(**json.loads(raw))
                 # Have we already seen this principal app?
                 if (app_name := data.app_name) in app_names:
