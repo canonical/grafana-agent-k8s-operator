@@ -472,7 +472,7 @@ class GrafanaAgentCharm(CharmBase):
             # Grafana-agent is not yet available so no need to update config
             return
 
-        # Write TLS files.
+        # Write TLS files
         if self.cert.enabled:
             if not (self.cert.cert and self.cert.key and self.cert.ca):
                 self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
@@ -481,6 +481,10 @@ class GrafanaAgentCharm(CharmBase):
             self.write_file(self._cert_path, self.cert.cert)
             self.write_file(self._key_path, self.cert.key)
             self.write_file(self._ca_path, self.cert.ca)
+        else:
+            self.delete_file(self._cert_path)
+            self.delete_file(self._key_path)
+            self.delete_file(self._ca_path)
 
         try:
             config = self._generate_config()
