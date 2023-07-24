@@ -76,7 +76,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Refresh Loki alert rules."""
         self._update_loki_alerts()
 
-    def _layer(self):
+    def _layer(self) -> Layer:
         """Generate the pebble layer."""
         return Layer(
             {

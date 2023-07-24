@@ -40,6 +40,10 @@ requires:
   certificates:
     interface: tls-certificates
     limit: 1
+    description: |
+      Certificate for the grafana agent server (API endpoint is served on :12345 by default)
+      to use to authenticate to clients, and the CA certificate of the signing CA.
+      We currently assume that the same CA signs all scrape targets.
   send-remote-write:
     interface: prometheus_remote_write
   metrics-endpoint:
