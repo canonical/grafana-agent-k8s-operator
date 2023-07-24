@@ -258,11 +258,11 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-    def test__cli_args(self):
+    def test_cli_args(self):
         expected = "-config.file=/etc/grafana-agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
-    def test__cli_args_with_tls(self):
+    def test_cli_args_with_tls(self):
         rel_id = self.harness.add_relation("certificates", "certs")
         self.harness.add_relation_unit(rel_id, "certs/0")
         expected = (
