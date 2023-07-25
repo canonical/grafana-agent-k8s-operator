@@ -238,7 +238,7 @@ LIBID = "dc15fa84cef84ce58155fb84f6c6213a"
 LIBAPI = 0
 LIBPATCH = 5
 
-PYDEPS = ["cosl", "pydantic<2"]
+PYDEPS = ["cosl", "pydantic < 2"]
 
 DEFAULT_RELATION_NAME = "cos-agent"
 DEFAULT_PEER_RELATION_NAME = "peers"
