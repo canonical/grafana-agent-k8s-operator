@@ -416,7 +416,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         for relation in self._agent_relations:
             if not relation.units:
                 continue
-            if json.loads(relation.data[next(iter(relation.units))].get("config", "{}")).get(
+            if relation.name == "juju-info" or json.loads(relation.data[next(iter(relation.units))].get("config", "{}")).get(
                 "subordinate", None
             ):
                 principal_relations.append(relation)
