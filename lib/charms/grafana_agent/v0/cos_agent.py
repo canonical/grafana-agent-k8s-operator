@@ -598,7 +598,7 @@ class COSAgentRequirer(Object):
             dashboards=provider_data.dashboards,
         )
         self.peer_relation.data[self._charm.unit][
-            f"{CosAgentPeersUnitData}-{event.unit.name}"
+            f"{CosAgentPeersUnitData.KEY}-{event.unit.name}"
         ] = data.json()
 
         # We can't easily tell if the data that was changed is limited to only the data
