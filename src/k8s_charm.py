@@ -92,7 +92,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                     },
                 },
             },
-        }
+        )
         self._container.add_layer(self._name, pebble_layer, combine=True)  # pyright: ignore
         self._container.autostart()
 
