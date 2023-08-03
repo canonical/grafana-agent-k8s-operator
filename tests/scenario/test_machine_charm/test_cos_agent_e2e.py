@@ -14,7 +14,7 @@ from charms.grafana_agent.v0.cos_agent import (
 )
 from ops.charm import CharmBase
 from ops.framework import Framework
-from scenario import Context, PeerRelation, Relation, State, SubordinateRelation
+from scenario import Context, PeerRelation, State, SubordinateRelation
 
 
 @pytest.fixture
@@ -186,7 +186,9 @@ def test_subordinate_update(requirer_ctx):
         cos_agent1.changed_event(remote_unit_id=0), State(relations=[cos_agent1, peer])
     )
     peer_out = state_out1.get_relations("peers")[0]
-    peer_out_data = json.loads(peer_out.local_unit_data[f"{CosAgentPeersUnitData.KEY}-mock-principal/0"])
+    peer_out_data = json.loads(
+        peer_out.local_unit_data[f"{CosAgentPeersUnitData.KEY}-mock-principal/0"]
+    )
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
     assert peer_out_data["principal_relation_id"] == str(cos_agent1.relation_id)
     assert peer_out_data["principal_relation_name"] == cos_agent1.endpoint

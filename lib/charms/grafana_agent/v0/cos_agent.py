@@ -639,7 +639,9 @@ class COSAgentRequirer(Object):
     def _principal_relations(self):
         relations = []
         for relation in self._charm.model.relations[self._relation_name]:
-            if not json.loads(relation.data[next(iter(relation.units))]["config"]).get(["subordinate"], False):
+            if not json.loads(relation.data[next(iter(relation.units))]["config"]).get(
+                ["subordinate"], False
+            ):
                 relations.append(relation)
         if len(relations) > 1:
             logger.error(

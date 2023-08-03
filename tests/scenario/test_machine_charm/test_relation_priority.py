@@ -64,17 +64,19 @@ def test_juju_info_relation(mock_run, vroot):
     set_run_out(mock_run, 0)
     trigger(
         "start",
-        State(relations=[SubordinateRelation(
-            "juju-info",
-            remote_unit_data={"config": json.dumps({'subordinate': True})}
-        )
-        ]),
+        State(
+            relations=[
+                SubordinateRelation(
+                    "juju-info", remote_unit_data={"config": json.dumps({"subordinate": True})}
+                )
+            ]
+        ),
         post_event=post_event,
         vroot=vroot,
     )
 
 
-@ patch("machine_charm.subprocess.run")
+@patch("machine_charm.subprocess.run")
 def test_cos_machine_relation(mock_run, vroot):
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert charm._cos.dashboards
@@ -133,6 +135,7 @@ def test_cos_machine_relation(mock_run, vroot):
         vroot=vroot,
     )
 
+
 @patch("machine_charm.subprocess.run")
 def test_both_relations(mock_run, vroot):
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
@@ -178,11 +181,16 @@ def test_both_relations(mock_run, vroot):
         )
     }
 
-    context = Context(charm_type=machine_charm.GrafanaAgentMachineCharm, meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm), charm_root=vroot)
+    context = Context(
+        charm_type=machine_charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_root=vroot,
+    )
     state = State(
         relations=[
             SubordinateRelation(
-                "cos-agent", remote_app_name="remote-cos-agent",
+                "cos-agent",
+                remote_app_name="remote-cos-agent",
                 remote_unit_data=cos_agent_data,
             ),
             SubordinateRelation("juju-info", remote_app_name="remote-juju-info"),
