@@ -6,23 +6,20 @@ from unittest.mock import patch
 
 import machine_charm
 import pytest
-from charms.grafana_agent.v0.cos_agent import GrafanaDashboard
-from scenario import PeerRelation, State, SubordinateRelation
-from scenario import trigger as _trigger
+from charms.grafana_agent.v0.cos_agent import GrafanaDashboard, MultiplePrincipalsError
+from scenario import Context, PeerRelation, State, SubordinateRelation
 
 from tests.scenario.helpers import get_charm_meta
 from tests.scenario.test_machine_charm.helpers import set_run_out
 
 
 def trigger(evt: str, state: State, vroot: Path = None, **kwargs):
-    return _trigger(
-        event=evt,
-        state=state,
+    context = Context(
         charm_type=machine_charm.GrafanaAgentMachineCharm,
         meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
-        **kwargs,
     )
+    return context.run(event=evt, state=state, **kwargs)
 
 
 @pytest.fixture
@@ -67,13 +64,17 @@ def test_juju_info_relation(mock_run, vroot):
     set_run_out(mock_run, 0)
     trigger(
         "start",
-        State(relations=[SubordinateRelation("juju-info")]),
+        State(relations=[SubordinateRelation(
+            "juju-info",
+            remote_unit_data={"config": json.dumps({'subordinate': True})}
+        )
+        ]),
         post_event=post_event,
         vroot=vroot,
     )
 
 
-@patch("machine_charm.subprocess.run")
+@ patch("machine_charm.subprocess.run")
 def test_cos_machine_relation(mock_run, vroot):
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert charm._cos.dashboards
@@ -132,19 +133,18 @@ def test_cos_machine_relation(mock_run, vroot):
         vroot=vroot,
     )
 
-
 @patch("machine_charm.subprocess.run")
 def test_both_relations(mock_run, vroot):
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert charm._cos.dashboards
-        assert not charm._cos.snap_log_endpoints
+        assert charm._cos.snap_log_endpoints
         assert not charm._cos.logs_alerts
         assert not charm._cos.metrics_alerts
-        assert not charm._cos.metrics_jobs
+        assert charm._cos.metrics_jobs
 
-        # we have both, but principal is grabbed from cos-machine
-        assert charm._principal_relation.name == "cos-agent"
-        assert charm.principal_unit.name == "remote-cos-agent/0"
+        # Trying to get the principal should raise an exception.
+        with pytest.raises(MultiplePrincipalsError):
+            assert charm._principal_relation
 
     set_run_out(mock_run, 0)
 
@@ -178,17 +178,15 @@ def test_both_relations(mock_run, vroot):
         )
     }
 
-    trigger(
-        "start",
-        State(
-            relations=[
-                SubordinateRelation(
-                    "cos-agent", remote_app_name="remote-cos-agent", remote_app_data=cos_agent_data
-                ),
-                # SubordinateRelation("juju-info", remote_app_name="remote-juju-info"),
-                PeerRelation("peers", peers_data={1: peer_data}),
-            ]
-        ),
-        post_event=post_event,
-        vroot=vroot,
+    context = Context(charm_type=machine_charm.GrafanaAgentMachineCharm, meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm), charm_root=vroot)
+    state = State(
+        relations=[
+            SubordinateRelation(
+                "cos-agent", remote_app_name="remote-cos-agent",
+                remote_unit_data=cos_agent_data,
+            ),
+            SubordinateRelation("juju-info", remote_app_name="remote-juju-info"),
+            PeerRelation("peers", peers_data={1: peer_data}),
+        ]
     )
+    context.run(event="start", state=state, post_event=post_event)

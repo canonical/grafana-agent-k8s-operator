@@ -77,15 +77,15 @@ def test_install(charm_type, charm_meta, substrate, vroot):
     out = ctx.run(state=State(), event="install")
 
     if substrate == "lxd":
-        assert out.status.unit == ("maintenance", "Installing grafana-agent snap")
+        assert out.unit_status == ("maintenance", "Installing grafana-agent snap")
 
     else:
-        assert out.status.unit == ("unknown", "")
+        assert out.unit_status == ("unknown", "")
 
 
 def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
     if substrate != "lxd":
-        pytest.skip()
+        pytest.skip(reason="machine-only test")
 
     def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
         assert not charm.is_ready
@@ -101,7 +101,7 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
             state=State(relations=[juju_info]), event=juju_info.joined_event, post_event=post_event
         )
 
-    assert out.status.unit == ("waiting", "waiting for agent to start")
+    assert out.unit_status == ("waiting", "waiting for agent to start")
 
 
 def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
@@ -117,10 +117,10 @@ def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
         written_cfg = placeholder_cfg_path.read_text()
         assert written_cfg  # check nonempty
 
-        assert out.status.unit.name == "blocked"
+        assert out.unit_status.name == "blocked"
 
     else:
-        assert out.status.unit.name == "unknown"
+        assert out.unit_status.name == "unknown"
 
 
 def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot):
@@ -140,6 +140,6 @@ def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot
     )
     out = ctx.run(state=State(containers=[agent]), event=agent.pebble_ready_event)
 
-    assert out.status.unit.name == "blocked"
+    assert out.unit_status.name == "blocked"
     agent_out = out.get_container("agent")
     assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE

@@ -186,7 +186,7 @@ def test_subordinate_update(requirer_ctx):
         cos_agent1.changed_event(remote_unit_id=0), State(relations=[cos_agent1, peer])
     )
     peer_out = state_out1.get_relations("peers")[0]
-    peer_out_data = json.loads(peer_out.local_unit_data[CosAgentPeersUnitData.KEY])
+    peer_out_data = json.loads(peer_out.local_unit_data[f"{CosAgentPeersUnitData.KEY}-mock-principal/0"])
     assert peer_out_data["principal_unit_name"] == "mock-principal/0"
     assert peer_out_data["principal_relation_id"] == str(cos_agent1.relation_id)
     assert peer_out_data["principal_relation_name"] == cos_agent1.endpoint
@@ -197,48 +197,6 @@ def test_subordinate_update(requirer_ctx):
     assert peer_out_data["dashboards"] == config["dashboards"]
 
 
-def test_principal_leader_update(requirer_ctx, emitted_events):
-    # step 3: gagent leader is notified that one of the followers have touched their relation data
-    prometheus = Relation("send-remote-write", remote_app_name="prometheus-k8s")
-    cos_agent_sub_rel_2 = SubordinateRelation(
-        "cos-agent",
-        remote_app_name="mock-principal",
-        remote_unit_data={
-            "config": '{"metrics_alert_rules": {}, "log_alert_rules": {}, '
-            '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAi'
-            'Zm9vIiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"], '
-            '"metrics_scrape_jobs": '
-            '[{"job_name": "mock-principal_0", "path": "/metrics", "port": "8080"}], '
-            '"log_slots": ["charmed-kafka:logs"]}'
-        },
-    )
-    peer = PeerRelation(
-        endpoint="peers",
-        interface="",
-        relation_id=2,
-        local_app_data={},
-        local_unit_data={},
-        peers_data={
-            0: {
-                "config": '{"principal_unit_name": "mock-principal/0", '
-                '"principal_relation_id": "3", '
-                '"principal_relation_name": "cos-agent", '
-                '"metrics_alert_rules": {}, '
-                '"log_alert_rules": {}, '
-                '"dashboards": ["/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAmCnsKICAidGl0bGUiOiAiZm9v'
-                'IiwKICAiYmFyIiA6ICJiYXoiCn0KAACkcc0YFt15xAABPyd8KlLdH7bzfQEAAAAABFla"]}'
-            }
-        },
-    )
-
-    requirer_ctx.run(
-        peer.changed_event(remote_unit_id=1),
-        State(leader=True, relations=[cos_agent_sub_rel_2, peer, prometheus]),
-    )
-
-    # todo: find out meaningful assertions
-
-
 def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, provider_ctx):
     # Step 1: principal charm is deployed and ends in "unknown" state
     provider_ctx.charm_spec.charm_type._log_slots = (
@@ -247,10 +205,10 @@ def test_cos_agent_wrong_rel_data(vroot, snap_is_installed, provider_ctx):
     cos_agent_rel = SubordinateRelation("cos-agent")
     state = State(relations=[cos_agent_rel])
     state_out = provider_ctx.run(cos_agent_rel.changed_event(remote_unit_id=1), state=state)
-    assert state_out.status.unit.name == "unknown"
+    assert state_out.unit_status.name == "unknown"
 
     found = False
-    for log in state_out.juju_log:
+    for log in provider_ctx.juju_log:
         if "ERROR" in log[0] and "Invalid relation data provided:" in log[1]:
             found = True
             break

@@ -10,7 +10,7 @@ import machine_charm
 import pytest
 from ops import BlockedStatus, UnknownStatus, WaitingStatus, pebble
 from ops.testing import CharmType
-from scenario import Container, ExecOutput, State, trigger
+from scenario import Container, Context, ExecOutput, State
 
 from tests.scenario.helpers import get_charm_meta
 
@@ -55,36 +55,34 @@ def patch_all(substrate, mock_cfg_path):
 
 
 def test_install(charm_type, substrate, vroot):
-    out = trigger(
-        state=State(),
-        event="install",
-        charm_type=charm_type,
+    context = Context(
+        charm_type,
         meta=get_charm_meta(charm_type),
         charm_root=vroot,
     )
+    out = context.run("install", State())
 
     if substrate == "lxd":
-        assert out.status.unit == ("maintenance", "Installing grafana-agent snap")
+        assert out.unit_status == ("maintenance", "Installing grafana-agent snap")
 
     else:
-        assert out.status.unit == ("unknown", "")
+        assert out.unit_status == ("unknown", "")
 
 
 def test_start(charm_type, substrate, vroot):
-    out = trigger(
-        state=State(),
-        event="start",
-        charm_type=charm_type,
+    context = Context(
+        charm_type,
         meta=get_charm_meta(charm_type),
         charm_root=vroot,
     )
+    out = context.run("start", State())
 
     if substrate == "lxd":
         assert not grafana_agent.CONFIG_PATH.exists(), "config file written on start"
-        assert out.status.unit == WaitingStatus("waiting for agent to start")
+        assert out.unit_status == WaitingStatus("waiting for agent to start")
 
     else:
-        assert out.status.unit == UnknownStatus()
+        assert out.unit_status == UnknownStatus()
 
 
 def test_k8s_charm_start_with_container(charm_type, substrate, vroot):
@@ -97,14 +95,14 @@ def test_k8s_charm_start_with_container(charm_type, substrate, vroot):
         exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
     )
 
-    out = trigger(
-        state=State(containers=[agent]),
-        event=agent.pebble_ready_event,
-        charm_type=charm_type,
+    context = Context(
+        charm_type,
         meta=get_charm_meta(charm_type),
         charm_root=vroot,
     )
+    state = State(containers=[agent])
+    out = context.run(agent.pebble_ready_event, state)
 
-    assert out.status.unit == BlockedStatus("Missing incoming ('requires') relation")
+    assert out.unit_status == BlockedStatus("Missing incoming ('requires') relation")
     agent_out = out.get_container("agent")
     assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE

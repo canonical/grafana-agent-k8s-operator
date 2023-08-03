@@ -416,9 +416,13 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         for relation in self._agent_relations:
             if not relation.units:
                 continue
-            if relation.name == "juju-info" or json.loads(relation.data[next(iter(relation.units))].get("config", "{}")).get(
-                "subordinate", None
-            ):
+            if relation.name == "juju-info":
+                principal_relations.append(relation)
+                continue
+            relation_data = json.loads(relation.data[next(iter(relation.units))].get("config", "{}"))
+            if not relation_data:
+                continue
+            if not relation_data.get("subordinate", False):
                 principal_relations.append(relation)
         if len(principal_relations) > 1:
             raise MultiplePrincipalsError("Multiple Principle Applications")
