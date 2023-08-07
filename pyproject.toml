@@ -62,6 +62,7 @@ follow_imports = "silent"
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
+asyncio_mode = "auto"
 
 [tool.pyright]
 pythonVersion = "3.8"
