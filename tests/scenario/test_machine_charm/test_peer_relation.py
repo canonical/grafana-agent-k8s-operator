@@ -153,7 +153,8 @@ def test_cosagent_to_peer_data_flow_dashboards(leader):
     )
 
     peer_relation_out = next(filter(lambda r: r.endpoint == "peers", state_out.relations))
-    peer_data = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
+    print(peer_relation_out.local_unit_data)
+    peer_data = peer_relation_out.local_unit_data[f"{CosAgentPeersUnitData.KEY}-primary/0"]
     assert json.loads(peer_data)["dashboards"] == [encode_as_dashboard(raw_dashboard_1)]
 
 
@@ -199,8 +200,8 @@ def test_cosagent_to_peer_data_flow_relation(leader):
         interface="grafana_agent_replica",
         peers_data={
             1: {
-                CosAgentPeersUnitData.KEY: CosAgentPeersUnitData(
-                    principal_unit_name="principal",
+                f"{CosAgentPeersUnitData.KEY}-primary/0": CosAgentPeersUnitData(
+                    principal_unit_name="primary/0",
                     principal_relation_id="42",
                     principal_relation_name="foobar-relation",
                     dashboards=[encode_as_dashboard(raw_dashboard_1)],
@@ -252,11 +253,13 @@ def test_cosagent_to_peer_data_flow_relation(leader):
         filter(lambda r: r.endpoint == "peers", state_out.relations)
     )
     # the dashboard we just received via cos-agent is now in our local peer databag
-    peer_data_local = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
+    peer_data_local = peer_relation_out.local_unit_data[
+        f"{CosAgentPeersUnitData.KEY}-other_primary/0"
+    ]
     assert json.loads(peer_data_local)["dashboards"] == [encode_as_dashboard(raw_dashboard_2)]
 
     # the dashboard we previously had via peer data is still there.
-    peer_data_peer = peer_relation_out.peers_data[1][CosAgentPeersUnitData.KEY]
+    peer_data_peer = peer_relation_out.peers_data[1][f"{CosAgentPeersUnitData.KEY}-primary/0"]
     assert json.loads(peer_data_peer)["dashboards"] == [encode_as_dashboard(raw_dashboard_1)]
 
 
@@ -307,7 +310,7 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
         # logged its part of the data
         peers_data={
             1: {
-                CosAgentPeersUnitData.KEY: CosAgentPeersUnitData(
+                f"{CosAgentPeersUnitData.KEY}-primary/23": CosAgentPeersUnitData(
                     principal_unit_name="primary/23",
                     principal_relation_id="42",
                     principal_relation_name="cos-agent",
@@ -367,12 +370,16 @@ def test_cosagent_to_peer_data_app_vs_unit(leader):
     peer_relation_out: PeerRelation = next(
         filter(lambda r: r.endpoint == "peers", state_out.relations)
     )
-    my_databag_peer_data = peer_relation_out.local_unit_data[CosAgentPeersUnitData.KEY]
+    my_databag_peer_data = peer_relation_out.local_unit_data[
+        f"{CosAgentPeersUnitData.KEY}-other_primary/0"
+    ]
     assert set(json.loads(my_databag_peer_data)["dashboards"]) == {
         encode_as_dashboard(raw_dashboard_2)
     }
 
-    peer_databag_peer_data = peer_relation_out.peers_data[1][CosAgentPeersUnitData.KEY]
+    peer_databag_peer_data = peer_relation_out.peers_data[1][
+        f"{CosAgentPeersUnitData.KEY}-primary/23"
+    ]
     assert json.loads(peer_databag_peer_data)["dashboards"][0] == encode_as_dashboard(
         raw_dashboard_1
     )

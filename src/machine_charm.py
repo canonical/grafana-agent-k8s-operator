@@ -4,6 +4,7 @@
 # See LICENSE file for licensing details.
 
 """A  juju charm for Grafana Agent on Kubernetes."""
+import json
 import logging
 import re
 import subprocess
@@ -11,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from charms.grafana_agent.v0.cos_agent import COSAgentRequirer
+from charms.grafana_agent.v0.cos_agent import COSAgentRequirer, MultiplePrincipalsError
 from charms.operator_libs_linux.v1 import snap  # type: ignore
 from grafana_agent import GrafanaAgentCharm
 from ops.main import main
@@ -185,14 +186,21 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         self._update_config()
         self._update_status()
 
-    def _on_cos_data_changed(self, _event):
+    def _on_cos_data_changed(self, event):
         """Trigger renewals of all data if there is a change."""
-        self._connect_logging_snap_endpoints()
-        self._update_config()
-        self._update_status()
-        self._update_metrics_alerts()
-        self._update_loki_alerts()
-        self._update_grafana_dashboards()
+        try:
+            self._connect_logging_snap_endpoints()
+            self._update_config()
+            self._update_status()
+            self._update_metrics_alerts()
+            self._update_loki_alerts()
+            self._update_grafana_dashboards()
+        except MultiplePrincipalsError:
+            logger.error(
+                "Multiple applications claiming to be principle. Update the cos-agent library in the client application charms."
+            )
+            self.unit.status = BlockedStatus("Multiple Principal Applications")
+            event.defer()
 
     def _on_cos_validation_error(self, event):
         msg_text = "Validation errors for cos-agent relation - check juju debug-log."
@@ -391,6 +399,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         ]
 
     @property
+    def _agent_relations(self) -> List[Relation]:
+        """Return all relations from botih cos-agent and juju-info."""
+        return self.model.relations["cos-agent"] + self.model.relations["juju-info"]
+
+    @property
     def _principal_relation(self) -> Optional[Relation]:
         """The cos-agent relation, if the charm we're related to supports it, else juju-info."""
         # juju relate will do "the right thing" and default to cos-agent, falling back to
@@ -399,7 +412,25 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         # (otherwise, the subordinate won't even execute). However, for the sake of juju maybe not
         # showing us the relation until after the first few install/start/config-changed, we err on
         # the safe side and type this as Optional.
-        return self.model.get_relation("cos-agent") or self.model.get_relation("juju-info")
+        principal_relations = []
+        for relation in self._agent_relations:
+            if not relation.units:
+                continue
+            if relation.name == "juju-info":
+                principal_relations.append(relation)
+                continue
+            relation_data = json.loads(
+                relation.data[next(iter(relation.units))].get("config", "{}")
+            )
+            if not relation_data:
+                continue
+            if not relation_data.get("subordinate", False):
+                principal_relations.append(relation)
+        if len(principal_relations) > 1:
+            raise MultiplePrincipalsError("Multiple Principle Applications")
+        if len(principal_relations) == 1:
+            return principal_relations[0]
+        return None
 
     @property
     def principal_unit(self) -> Optional[Unit]:
@@ -414,9 +445,10 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         return None
 
     @property
-    def _instance_topology(
+    def principal_topology(
         self,
     ) -> Dict[str, str]:
+        """Return the topology of the principal unit."""
         unit = self.principal_unit
         if unit:
             # Note we can't include juju_charm as that information is not available to us.
@@ -427,6 +459,10 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
                 "juju_unit": unit.name,
             }
         return {}
+
+    @property
+    def _instance_topology(self) -> Dict[str, str]:
+        return self.principal_topology
 
     @property
     def _principal_labels(self) -> Dict[str, str]:

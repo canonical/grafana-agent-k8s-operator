@@ -36,6 +36,7 @@ def test_cos_agent_provider_unit_data_dashboard_serialization():
         metrics_scrape_jobs=[],
         log_slots=[],
         dashboards=[encoded_dashboard],
+        subordinate=True,
     )
     assert json.loads(data.json()) == {
         "metrics_alert_rules": {},
@@ -43,6 +44,7 @@ def test_cos_agent_provider_unit_data_dashboard_serialization():
         "dashboards": [encoded_dashboard],
         "metrics_scrape_jobs": [],
         "log_slots": [],
+        "subordinate": True,
     }
 
 

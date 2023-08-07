@@ -5,8 +5,8 @@
 # https://chat.charmhub.io/charmhub/pl/wngp665ycjnb78ar9ojrfhxjkr
 # That's why we are including cosl here until the bug in charmcraft is solved
 cosl
-ops
-pydantic<2
+ops < 2.5.0  # https://github.com/canonical/ops-scenario/issues/48
+pydantic < 2
 requests
 kubernetes
 lightkube

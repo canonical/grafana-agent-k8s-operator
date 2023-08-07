@@ -16,5 +16,6 @@ bases:
       architectures: ["amd64"]
 parts:
   charm:
+    charm-binary-python-packages: [cryptography, cosl, jsonschema]
     build-packages:
     - git
