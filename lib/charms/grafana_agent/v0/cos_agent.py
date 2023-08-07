@@ -496,7 +496,7 @@ class COSAgentRequirerEvents(ObjectEvents):
 
 
 class MultiplePrincipalsError(Exception):
-    """Custom exceptionfor when there are multiple principal applications."""
+    """Custom exception for when there are multiple principal applications."""
 
     pass
 
