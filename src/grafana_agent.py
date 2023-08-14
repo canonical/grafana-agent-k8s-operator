@@ -482,13 +482,26 @@ class GrafanaAgentCharm(CharmBase):
             self.write_file(self._key_path, self.cert.key)
             self.write_file(self._ca_path, self.cert.ca)
         else:
+            # Delete TLS related files if they exist
             try:
                 self.read_file(self._cert_path)
             except (FileNotFoundError, PathError):
                 pass
             else:
                 self.delete_file(self._cert_path)
+
+            try:
+                self.read_file(self._key_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
                 self.delete_file(self._key_path)
+
+            try:
+                self.read_file(self._ca_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
                 self.delete_file(self._ca_path)
 
         try:
