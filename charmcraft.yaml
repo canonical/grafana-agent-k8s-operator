@@ -19,3 +19,4 @@ parts:
     charm-binary-python-packages: [cryptography, cosl, jsonschema]
     build-packages:
     - git
+    - libffi-dev
