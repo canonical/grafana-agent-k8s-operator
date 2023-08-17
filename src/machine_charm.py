@@ -6,6 +6,7 @@
 """A  juju charm for Grafana Agent on Kubernetes."""
 import json
 import logging
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -311,12 +312,35 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         with open(path, "w") as f:
             f.write(text)
 
+    def delete_file(self, path: Union[str, Path]):
+        """Delete a file.
+
+        Args:
+            path: file to be deleted
+        """
+        os.remove(path)
+
+    def stop(self) -> None:
+        """Stop grafana agent."""
+        try:
+            self.snap.stop()
+        except snap.SnapError as e:
+            raise GrafanaAgentServiceError("Failed to restart grafana-agent") from e
+
     def restart(self) -> None:
         """Restart grafana agent."""
         try:
             self.snap.restart()
         except snap.SnapError as e:
             raise GrafanaAgentServiceError("Failed to restart grafana-agent") from e
+
+    def run(self, cmd: List[str]):
+        """Run cmd on the workload.
+
+        Args:
+            cmd: Command to be run.
+        """
+        subprocess.run(cmd)
 
     @property
     def _is_installed(self) -> bool:

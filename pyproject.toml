@@ -20,53 +20,27 @@ exclude = ["__pycache__", "*.egg_info"]
 select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
 # Ignore E501 because using black creates errors with this
 # Ignore D107 Missing docstring in __init__
-ignore = ["E501", "D107", "RET504"]
+ignore = ["C901", "E501", "D107", "RET504"]
 
 [tool.ruff.per-file-ignores]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
-"tests/*" = ["D100","D101","D102","D103","C901"]
-"lib/*" = ["C901"]
+"tests/*" = ["D100","D101","D102","D103"]
 
 [tool.ruff.pydocstyle]
 convention = "google"
 
-[tool.ruff.mccabe]
-max-complexity = 10
-
 # Static analysis tools configuration
-[tool.mypy]
-pretty = true
-python_version = 3.8
-mypy_path = "./src:./lib"
-follow_imports = "normal"
-warn_redundant_casts = true
-warn_unused_ignores = false
-warn_unused_configs = true
-show_traceback = true
-show_error_codes = true
-namespace_packages = true
-explicit_package_bases = true
-check_untyped_defs = true
-allow_redefinition = true
-
-# Ignore libraries that do not have type hint nor stubs
-[[tool.mypy.overrides]]
-module = ["ops.*", "pytest_operator.*", "requests.packages.urllib3.*"]
-ignore_missing_imports = true
-follow_imports = "skip"
-
-[[tool.mypy.overrides]]
-module = ["charms.prometheus_k8s.*", "charms.grafana_k8s.*", "charms.observability_libs.*", "charms.loki_k8s.v0.loki_push_api.*"]
-follow_imports = "silent"
+[tool.pyright]
+extraPaths = ["lib"]
+pythonVersion = "3.8"
+pythonPlatform = "All"
+typeCheckingMode = "basic" # we'll work up to strict
+reportIncompatibleMethodOverride = false
+reportImportCycles = false
 
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
 asyncio_mode = "auto"
 
-[tool.pyright]
-pythonVersion = "3.8"
-pythonPlatform = "All"
-typeCheckingMode = "basic" # we'll work up to strict
-reportIncompatibleMethodOverride = false
-reportImportCycles = false
+

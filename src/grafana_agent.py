@@ -19,6 +19,7 @@ from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -67,6 +68,10 @@ class GrafanaAgentCharm(CharmBase):
     _name = "agent"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
+    # TODO Change to a more suitable location once the snap gets access (#216).
+    _cert_path = "/tmp/agent/grafana-agent.pem"
+    _key_path = "/tmp/agent/grafana-agent.key"
+    _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
@@ -123,6 +128,13 @@ class GrafanaAgentCharm(CharmBase):
             dashboards_path=self.dashboard_paths.dest,
         )
 
+        self.cert = CertHandler(
+            self,
+            key="grafana-agent-cert",
+            peer_relation_name="peers",
+        )
+        self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
+
         self._cloud = GrafanaCloudConfigRequirer(self)
 
         self.framework.observe(
@@ -164,6 +176,12 @@ class GrafanaAgentCharm(CharmBase):
                 for outgoing in outgoing_list:
                     self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
                     self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+
+    def _on_cert_changed(self, _event):
+        """Event handler for cert change."""
+        self._update_config()
+        self._update_ca()
+        self._update_status()
 
     def _on_mandatory_relation_event(self, _event=None):
         """Event handler for any mandatory relation event."""
@@ -227,6 +245,18 @@ class GrafanaAgentCharm(CharmBase):
         """
         raise NotImplementedError("Please override the write_file method")
 
+    def delete_file(self, path: Union[str, pathlib.Path]):
+        """Delete a file.
+
+        Args:
+            path: file to be deleted
+        """
+        raise NotImplementedError("Please override the delete_file method")
+
+    def stop(self) -> None:
+        """Stop grafana agent."""
+        raise NotImplementedError("Please override the stop method")
+
     def restart(self) -> None:
         """Restart grafana agent."""
         raise NotImplementedError("Please override the restart method")
@@ -261,6 +291,14 @@ class GrafanaAgentCharm(CharmBase):
     def positions_dir(self) -> str:
         """Return the positions directory."""
         raise NotImplementedError("Please override the positions_dir method")
+
+    def run(self, cmd: List[str]):
+        """Run cmd on the workload.
+
+        Args:
+            cmd: Command to be run.
+        """
+        raise NotImplementedError("Please override the run method")
 
     # End: Abstract Methods
 
@@ -434,6 +472,38 @@ class GrafanaAgentCharm(CharmBase):
             # Grafana-agent is not yet available so no need to update config
             return
 
+        # Write TLS files
+        if self.cert.enabled:
+            if not (self.cert.cert and self.cert.key and self.cert.ca):
+                self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
+                self.stop()
+                return
+            self.write_file(self._cert_path, self.cert.cert)
+            self.write_file(self._key_path, self.cert.key)
+            self.write_file(self._ca_path, self.cert.ca)
+        else:
+            # Delete TLS related files if they exist
+            try:
+                self.read_file(self._cert_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
+                self.delete_file(self._cert_path)
+
+            try:
+                self.read_file(self._key_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
+                self.delete_file(self._key_path)
+
+            try:
+                self.read_file(self._ca_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
+                self.delete_file(self._ca_path)
+
         try:
             config = self._generate_config()
         except MultiplePrincipalsError as e:
@@ -513,7 +583,11 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             The arguments as a string
         """
-        return f"-config.file={CONFIG_PATH}"
+        args = [f"-config.file={CONFIG_PATH}"]
+        if self.cert.enabled:
+            args.append("-server.http.enable-tls")
+            args.append("-server.grpc.enable-tls")
+        return " ".join(args)
 
     def _generate_config(self) -> Dict[str, Any]:
         """Generates config file str.
@@ -524,7 +598,7 @@ class GrafanaAgentCharm(CharmBase):
         prometheus_endpoints, _ = self._enrich_endpoints()
 
         config = {
-            "server": {"log_level": "info"},
+            "server": self._server_config,
             "integrations": self._integrations_config,
             "metrics": {
                 "wal_directory": "/tmp/agent/data",
@@ -539,6 +613,19 @@ class GrafanaAgentCharm(CharmBase):
             "logs": self._loki_config,
         }
         return config
+
+    @property
+    def _server_config(self) -> dict:
+        """Return the server section of the config.
+
+        Returns:
+            The dict representing the config
+        """
+        server_config: Dict[str, Any] = {"log_level": "info"}
+        if self.cert.enabled:
+            server_config["http_tls_config"] = self.tls_config
+            server_config["grpc_tls_config"] = self.tls_config
+        return server_config
 
     @property
     def _integrations_config(self) -> dict:
@@ -631,6 +718,17 @@ class GrafanaAgentCharm(CharmBase):
                 }
             )
 
+        if self.cert.enabled:
+            for config in configs:
+                for scrape_config in config.get("scrape_configs", []):
+                    if scrape_config.get("loki_push_api"):
+                        scrape_config["loki_push_api"]["server"][
+                            "http_tls_config"
+                        ] = self.tls_config
+                        scrape_config["loki_push_api"]["server"][
+                            "grpc_tls_config"
+                        ] = self.tls_config
+
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
             {
@@ -640,6 +738,14 @@ class GrafanaAgentCharm(CharmBase):
             if configs
             else {}
         )
+
+    @property
+    def tls_config(self):
+        """Generates the TLS config."""
+        return {
+            "cert_file": self._cert_path,
+            "key_file": self._key_path,
+        }
 
     @property
     def _instance_topology(self) -> Dict[str, str]:
@@ -692,3 +798,16 @@ class GrafanaAgentCharm(CharmBase):
         if result is None:
             return result
         return result.group(1)
+
+    def _update_ca(self) -> None:
+        """Updates the CA cert on disk from cert_manager."""
+        if (not self.cert.enabled) or (not self.cert.ca):
+            try:
+                self.read_file(self._ca_path)
+            except (FileNotFoundError, PathError):
+                pass
+            else:
+                self.delete_file(self._ca_path)
+        else:
+            self.write_file(self._ca_path, self.cert.ca)
+        self.run(["update-ca-certificates", "--fresh"])

@@ -75,6 +75,8 @@ REWRITE_CONFIGS = [
     },
 ]
 
+CERTS_RELATION_DATA = """[{"certificate": "-----BEGIN CERTIFICATE-----foobarcert-----END CERTIFICATE-----", "certificate_signing_request": "-----BEGIN CERTIFICATE REQUEST-----foobarcsr-----END CERTIFICATE REQUEST-----", "ca": "-----BEGIN CERTIFICATE-----foobarca-----END CERTIFICATE-----", "chain": ["-----BEGIN CERTIFICATE-----foobarchain0-----END CERTIFICATE-----", "-----BEGIN CERTIFICATE-----foobarchain1-----END CERTIFICATE-----"]}]"""
+
 
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
@@ -256,8 +258,16 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
         )
 
-    def test__cli_args(self):
+    def test_cli_args(self):
         expected = "-config.file=/etc/grafana-agent.yaml"
+        self.assertEqual(self.harness.charm._cli_args(), expected)
+
+    def test_cli_args_with_tls(self):
+        rel_id = self.harness.add_relation("certificates", "certs")
+        self.harness.add_relation_unit(rel_id, "certs/0")
+        expected = (
+            "-config.file=/etc/grafana-agent.yaml -server.http.enable-tls -server.grpc.enable-tls"
+        )
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
     # Leaving this test here as we need to use it again when we figure out how to
@@ -313,3 +323,14 @@ class TestScrapeConfiguration(unittest.TestCase):
 
         self.harness.remove_relation(rel_id)
         self.assertEqual({}, self.harness.charm._loki_config)
+
+    def test_loki_config_with_tls(self):
+        rel_id = self.harness.add_relation("certificates", "certs")
+        self.harness.add_relation_unit(rel_id, "certs/0")
+        self.harness.update_relation_data(rel_id, "certs", {"certificates": CERTS_RELATION_DATA})
+        configs = self.harness.charm._loki_config
+        for config in configs:
+            for scrape_config in config.get("scrape_configs", []):
+                if scrape_config.get("loki_push_api"):
+                    self.assertIn("http_tls_config", scrape_config["loki_push_api"]["server"])
+                    self.assertIn("grpc_tls_config", scrape_config["loki_push_api"]["server"])
