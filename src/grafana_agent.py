@@ -24,7 +24,7 @@ from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationBrokenEvent
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
@@ -73,6 +73,7 @@ class GrafanaAgentCharm(CharmBase):
     _cert_path = "/tmp/agent/grafana-agent.pem"
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
+    _ca_folder_path = "/usr/loca/share/ca-certificates"
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
@@ -172,7 +173,11 @@ class GrafanaAgentCharm(CharmBase):
 
         self.framework.observe(
             self.cert_transfer.on.certificate_available,  # pyright: ignore
-            self._on_cert_transfer_available,
+            self._on_cert_transfer_changed,
+        )
+        self.framework.observe(
+            self.on.cert_transfer.relation_broken,  # pyright: ignore
+            self._on_cert_transfer_changed
         )
 
         # Register status observers
@@ -225,11 +230,18 @@ class GrafanaAgentCharm(CharmBase):
         logger.info("cloud config revoked")
         self._update_config()
 
-    def _on_cert_transfer_available(self, event):
-        # TODO: trust the certificate instead of printing it
-        print(event.certificate)
-        print(event.ca)
-        print(event.chain)
+    def _on_cert_transfer_changed(self, event):
+        filename_components = [
+            self.model.uuid,
+            event.relation.id,
+        ]
+        cert_prefix = "-".join(filename_components)
+        cert_filename = f"{self._ca_folder_path}/{cert_prefix}-ca"
+        if isinstance(event, RelationBrokenEvent):
+            self.delete_file(cert_filename)
+        else:
+            self.write_file(cert_filename, event.ca)
+        self.run(["update-ca-certificates", "--fresh"])
 
     # Abstract Methods
     def agent_version_output(self) -> str:
