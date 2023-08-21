@@ -176,7 +176,7 @@ class GrafanaAgentCharm(CharmBase):
             self._on_cert_transfer_changed,
         )
         self.framework.observe(
-            self.on.cert_transfer.relation_broken,  # pyright: ignore
+            self.on["cert_transfer"].relation_broken,  # pyright: ignore
             self._on_cert_transfer_changed,
         )
 
