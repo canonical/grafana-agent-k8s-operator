@@ -19,7 +19,10 @@ from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
-from charms.mutual_tls_interface.v0.mutual_tls import MutualTLSRequires
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateTransferRequires,
+)
 from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -111,7 +114,7 @@ class GrafanaAgentCharm(CharmBase):
             src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
             dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
-        self.cert_transfer = MutualTLSRequires(self, "cert-transfer")
+        self.cert_transfer = CertificateTransferRequires(self, "cert-transfer")
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
