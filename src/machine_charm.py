@@ -15,7 +15,9 @@ from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_agent import COSAgentRequirer, MultiplePrincipalsError
 from charms.operator_libs_linux.v1 import snap  # type: ignore
-from grafana_agent import GrafanaAgentCharm
+from cosl import JujuTopology
+from cosl.rules import AlertRules
+from grafana_agent import METRICS_RULES_SRC_PATH, GrafanaAgentCharm
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus, Relation, Unit
 
@@ -256,7 +258,24 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
-        return self._cos.metrics_alerts
+        rules = self._cos.metrics_alerts
+        principal_topology = self.principal_topology
+        if principal_topology:
+            topology = JujuTopology(
+                model=principal_topology["juju_model"],
+                model_uuid=principal_topology["juju_model_uuid"],
+                application=principal_topology["juju_application"],
+                unit=principal_topology["juju_unit"],
+            )
+        else:
+            return {}
+        own_rules = AlertRules(query_type="promql", topology=topology)
+        own_rules.add_path(METRICS_RULES_SRC_PATH)
+        if topology.identifier in rules:
+            rules[topology.identifier]["groups"].append(own_rules.as_dict()["groups"])
+        else:
+            rules[topology.identifier] = own_rules.as_dict()
+        return rules
 
     def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""

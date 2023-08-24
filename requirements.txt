@@ -12,4 +12,4 @@ kubernetes
 lightkube
 lightkube-models
 cryptography
-jsonschema
+jsonschema < 4  # Pin prevents the machine charm error "ModuleNotFoundError: No module named 'rpds.rpds'"

@@ -110,7 +110,7 @@ class GrafanaAgentCharm(CharmBase):
             dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
 
-        for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
+        for rules in [self.loki_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
@@ -314,6 +314,7 @@ class GrafanaAgentCharm(CharmBase):
             alerts_func=self.logs_rules,
             reload_func=self._loki_consumer._reinitialize_alert_rules,
             mapping=self.loki_rules_paths,
+            copy_files=True,
         )
 
     def _update_grafana_dashboards(self):
@@ -329,15 +330,25 @@ class GrafanaAgentCharm(CharmBase):
             return self._recurse_call_chain(maybe_func())
         return maybe_func
 
-    def update_alerts_rules(self, alerts_func: Any, reload_func: Callable, mapping: RulesMapping):
+    def update_alerts_rules(
+        self,
+        alerts_func: Any,
+        reload_func: Callable,
+        mapping: RulesMapping,
+        copy_files: bool = False,
+    ):
         """Copy alert rules from relations and save them to disk."""
         # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
         # do the right thing. With an additional layer of indirection, recurse
         # to the bottom until we find a real List|Dict|not-Callable
         rules = self._recurse_call_chain(alerts_func)
 
-        shutil.rmtree(mapping.dest)
-        shutil.copytree(mapping.src, mapping.dest)
+        if os.path.exists(mapping.dest):
+            shutil.rmtree(mapping.dest)
+        if copy_files:
+            shutil.copytree(mapping.src, mapping.dest)
+        else:
+            os.mkdir(mapping.dest)
         for topology_identifier, rule in rules.items():
             file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
             file_handle.write_text(yaml.dump(rule))
