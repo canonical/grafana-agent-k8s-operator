@@ -113,7 +113,7 @@ class TestAlertIngestion(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(GrafanaAgentK8sCharm)
         self.addCleanup(self.harness.cleanup)
-        self.harness.set_model_info(name="lma", uuid="1234567890")
+        self.harness.set_model_info(name="lma", uuid="20ed9535-c14a-4ec9-a250-fd7a6414feb5")
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.metrics_path = self.harness.charm.metrics_rules_paths

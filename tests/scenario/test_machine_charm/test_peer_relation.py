@@ -10,7 +10,7 @@ from charms.grafana_agent.v0.cos_agent import (
     COSAgentRequirer,
     GrafanaDashboard,
 )
-from charms.prometheus_k8s.v0.prometheus_remote_write import (
+from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from ops.charm import CharmBase

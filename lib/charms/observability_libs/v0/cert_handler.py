@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 LIBID = "b5cd5cd580f3428fa5f59a8876dcbe6a"
 LIBAPI = 0
-LIBPATCH = 3
+LIBPATCH = 7
 
 
 class CertChanged(EventBase):
@@ -101,14 +101,18 @@ class CertHandler(Object):
             peer_relation_name: Must match metadata.yaml.
             certificates_relation_name: Must match metadata.yaml.
             cert_subject: Custom subject. Name collisions are under the caller's responsibility.
-            extra_sans_dns: Any additional DNS names apart from FQDN.
+            extra_sans_dns: DNS names. If none are given, use FQDN.
         """
         super().__init__(charm, key)
 
         self.charm = charm
-        self.cert_subject = cert_subject or charm.unit.name
-        self.cert_subject = charm.unit.name if not cert_subject else cert_subject
-        self.extra_sans_dns = list(filter(None, extra_sans_dns or []))  # drop empty list items
+        # We need to sanitize the unit name, otherwise route53 complains:
+        # "urn:ietf:params:acme:error:malformed" :: Domain name contains an invalid character
+        self.cert_subject = charm.unit.name.replace("/", "-") if not cert_subject else cert_subject
+
+        # Use fqdn only if no SANs were given, and drop empty/duplicate SANs
+        self.sans_dns = list(set(filter(None, (extra_sans_dns or [socket.getfqdn()]))))
+
         self.peer_relation_name = peer_relation_name
         self.certificates_relation_name = certificates_relation_name
 
@@ -224,7 +228,7 @@ class CertHandler(Object):
             csr = generate_csr(
                 private_key=private_key.encode(),
                 subject=self.cert_subject,
-                sans_dns=[socket.getfqdn()] + self.extra_sans_dns,
+                sans_dns=self.sans_dns,
             )
 
             if renew and self._csr:
@@ -233,6 +237,7 @@ class CertHandler(Object):
                     new_certificate_signing_request=csr,
                 )
             else:
+                logger.info("Creating CSR for %s with DNS %s", self.cert_subject, self.sans_dns)
                 self.certificates.request_certificate_creation(certificate_signing_request=csr)
 
             # Note: CSR is being replaced with a new one, so until we get the new cert, we'd have
@@ -348,6 +353,11 @@ class CertHandler(Object):
         rel = self._peer_relation
         assert rel is not None  # For type checker
         rel.data[self.charm.unit].update({"chain": json.dumps(value)})
+
+    @property
+    def chain(self) -> List[str]:
+        """Return the ca chain."""
+        return self._chain
 
     def _on_certificate_expiring(
         self, event: Union[CertificateExpiringEvent, CertificateInvalidatedEvent]
