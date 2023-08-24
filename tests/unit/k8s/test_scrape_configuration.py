@@ -22,6 +22,8 @@ from charm import (  # isort: skip <- needed because charm.py does not always ex
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 
+SAMPLE_UUID = "20ed9535-c14a-4ec9-a250-fd7a6414feb5"
+
 SCRAPE_METADATA = {
     "model": "consumer-model",
     "model_uuid": "abcdef",
@@ -41,12 +43,12 @@ REWRITE_CONFIGS = [
     {
         "target_label": "job",
         "regex": "(.*)",
-        "replacement": "juju_lma_1234567890_grafana-agent-k8s_self-monitoring",
+        "replacement": f"juju_lma_{SAMPLE_UUID}_grafana-agent-k8s_self-monitoring",
     },
     {
         "target_label": "instance",
         "regex": "(.*)",
-        "replacement": "lma_1234567890_grafana-agent-k8s_grafana-agent-k8s/0",
+        "replacement": f"lma_{SAMPLE_UUID}_grafana-agent-k8s_grafana-agent-k8s/0",
     },
     {
         "source_labels": ["__address__"],
@@ -61,7 +63,7 @@ REWRITE_CONFIGS = [
     {
         "source_labels": ["__address__"],
         "target_label": "juju_model_uuid",
-        "replacement": "1234567890",
+        "replacement": SAMPLE_UUID,
     },
     {
         "source_labels": ["__address__"],
@@ -96,7 +98,7 @@ class TestScrapeConfiguration(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(GrafanaAgentK8sCharm)
         self.addCleanup(self.harness.cleanup)
-        self.harness.set_model_info(name="lma", uuid="1234567890")
+        self.harness.set_model_info(name="lma", uuid=SAMPLE_UUID)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("agent")
