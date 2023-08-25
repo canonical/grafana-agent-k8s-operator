@@ -219,6 +219,11 @@ class GrafanaAgentCharm(CharmBase):
         self._update_config()
 
     # Abstract Methods
+    @property
+    def is_k8s(self) -> bool:
+        """Is this a k8s charm."""
+        raise NotImplementedError("Please override the is_k8s method")
+
     def agent_version_output(self) -> str:
         """Gets the raw output from `agent -version`."""
         raise NotImplementedError("Please override the agent_version_output method")
@@ -307,6 +312,7 @@ class GrafanaAgentCharm(CharmBase):
             alerts_func=self.metrics_rules,
             reload_func=self._remote_write.reload_alerts,
             mapping=self.metrics_rules_paths,
+            copy_files=self.is_k8s,  # TODO: This is ugly
         )
 
     def _update_loki_alerts(self):

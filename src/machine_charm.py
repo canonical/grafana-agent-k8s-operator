@@ -256,6 +256,11 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         except snap.SnapError as e:
             raise GrafanaAgentInstallError("Failed to uninstall grafana-agent") from e
 
+    @property
+    def is_k8s(self) -> bool:
+        """Is this a k8s charm."""
+        return False
+
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
         rules = self._cos.metrics_alerts
