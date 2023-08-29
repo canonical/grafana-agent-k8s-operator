@@ -115,7 +115,7 @@ class GrafanaAgentCharm(CharmBase):
             src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
             dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
-        self.cert_transfer = CertificateTransferRequires(self, "cert-transfer")
+        self.cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
 
         for rules in [self.loki_rules_paths, self.metrics_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
@@ -178,7 +178,7 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(
             self.cert_transfer.on.certificate_available,  # pyright: ignore
             self._on_cert_transfer_available,
-        )/
+        )
         self.framework.observe(
             self.cert_transfer.on.certificate_removed,  # pyright: ignore
             self._on_cert_transfer_removed,
@@ -235,12 +235,12 @@ class GrafanaAgentCharm(CharmBase):
         self._update_config()
 
     def _on_cert_transfer_available(self, event: CertificateTransferAvailableEvent):
-        cert_filename = f"{self._ca_folder_path}/{self.model.uuid}-{event.relation_id}-ca"
+        cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
         self.write_file(cert_filename, event.ca)
         self.run(["update-ca-certificates", "--fresh"])
 
     def _on_cert_transfer_removed(self, event: CertificateTransferRemovedEvent):
-        cert_filename = f"{self._ca_folder_path}/{self.model.uuid}-{event.relation_id}-ca"
+        cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
         self.delete_file(cert_filename)
         self.run(["update-ca-certificates", "--fresh"])
 
