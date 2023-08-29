@@ -13,22 +13,26 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent as CertificateTransferAvailableEvent,
+)
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateRemovedEvent as CertificateTransferRemovedEvent,
+)
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
     GrafanaCloudConfigRequirer,
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent as CertificateTransferAvailableEvent,
-    CertificateRemovedEvent as CertificateTransferRemovedEvent,
-    CertificateTransferRequires,
-)
 from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from ops.charm import CharmBase, RelationBrokenEvent
+from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import APIError, PathError
 from requests import Session
@@ -235,12 +239,16 @@ class GrafanaAgentCharm(CharmBase):
         self._update_config()
 
     def _on_cert_transfer_available(self, event: CertificateTransferAvailableEvent):
-        cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
+        cert_filename = (
+            f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
+        )
         self.write_file(cert_filename, event.ca)
         self.run(["update-ca-certificates", "--fresh"])
 
     def _on_cert_transfer_removed(self, event: CertificateTransferRemovedEvent):
-        cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
+        cert_filename = (
+            f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
+        )
         self.delete_file(cert_filename)
         self.run(["update-ca-certificates", "--fresh"])
 
