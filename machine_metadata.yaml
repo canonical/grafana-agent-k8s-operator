@@ -57,8 +57,8 @@ requires:
   grafana-cloud-config:
     interface: grafana_cloud_config
     limit: 1
-  cert-transfer:
-    interface: mutual_tls
+  receive-ca-cert:
+    interface: certificate_transfer
     description: |
       Obtain TLS information (certificate, ca, chain) from another charm.
 
