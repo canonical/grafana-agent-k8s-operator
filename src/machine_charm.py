@@ -277,7 +277,7 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
         own_rules = AlertRules(query_type="promql", topology=topology)
         own_rules.add_path(METRICS_RULES_SRC_PATH)
         if topology.identifier in rules:
-            rules[topology.identifier]["groups"].append(own_rules.as_dict()["groups"])
+            rules[topology.identifier]["groups"] += own_rules.as_dict()["groups"]
         else:
             rules[topology.identifier] = own_rules.as_dict()
         return rules
