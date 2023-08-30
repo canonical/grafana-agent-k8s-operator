@@ -120,6 +120,11 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         return self._loki_provider.alerts
 
     @property
+    def is_k8s(self) -> bool:
+        """Is this a k8s charm."""
+        return True
+
+    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         return self._container.can_connect()
