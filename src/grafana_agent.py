@@ -13,6 +13,15 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent as CertificateTransferAvailableEvent,
+)
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateRemovedEvent as CertificateTransferRemovedEvent,
+)
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
     GrafanaCloudConfigRequirer,
@@ -72,6 +81,7 @@ class GrafanaAgentCharm(CharmBase):
     _cert_path = "/tmp/agent/grafana-agent.pem"
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
+    _ca_folder_path = "/usr/loca/share/ca-certificates"
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
@@ -109,6 +119,7 @@ class GrafanaAgentCharm(CharmBase):
             src=charm_root.joinpath(*DASHBOARDS_SRC_PATH.split("/")),
             dest=charm_root.joinpath(*DASHBOARDS_DEST_PATH.split("/")),
         )
+        self.cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
 
         for rules in [self.loki_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
@@ -168,6 +179,15 @@ class GrafanaAgentCharm(CharmBase):
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
+        self.framework.observe(
+            self.cert_transfer.on.certificate_available,  # pyright: ignore
+            self._on_cert_transfer_available,
+        )
+        self.framework.observe(
+            self.cert_transfer.on.certificate_removed,  # pyright: ignore
+            self._on_cert_transfer_removed,
+        )
+
         # Register status observers
         for incoming, outgoings in self.mandatory_relation_pairs.items():
             self.framework.observe(self.on[incoming].relation_joined, self._update_status)
@@ -217,6 +237,20 @@ class GrafanaAgentCharm(CharmBase):
     def _on_cloud_config_revoked(self, _) -> None:
         logger.info("cloud config revoked")
         self._update_config()
+
+    def _on_cert_transfer_available(self, event: CertificateTransferAvailableEvent):
+        cert_filename = (
+            f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
+        )
+        self.write_file(cert_filename, event.ca)
+        self.run(["update-ca-certificates", "--fresh"])
+
+    def _on_cert_transfer_removed(self, event: CertificateTransferRemovedEvent):
+        cert_filename = (
+            f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
+        )
+        self.delete_file(cert_filename)
+        self.run(["update-ca-certificates", "--fresh"])
 
     # Abstract Methods
     @property
