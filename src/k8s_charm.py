@@ -104,7 +104,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def _on_dashboards_changed(self, _event) -> None:
         logger.info("updating dashboards")
         self.update_dashboards(
-            dashboards_func=self.dashboards,
+            dashboards=self.dashboards,
             reload_func=self._grafana_dashboards_provider._update_all_dashboards_from_dir,
             mapping=self.dashboard_paths,
         )
@@ -132,7 +132,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Returns an aggregate of all dashboards received by this grafana-agent."""
         aggregate = {}
         for rel in self.model.relations["grafana-dashboards-consumer"]:
-            dashboards = json.loads(rel.data[rel.app].get("dashboards"))
+            dashboards = json.loads(rel.data[rel.app].get("dashboards", "")) # type: ignore
             if "templates" not in dashboards:
                 continue
             for template in dashboards["templates"]:
@@ -147,7 +147,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 }
                 aggregate[template] = entry
 
-        return aggregate.values()
+        return list(aggregate.values())
 
     def metrics_jobs(self) -> list:
         """Return a list of metrics scrape jobs."""

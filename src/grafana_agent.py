@@ -325,7 +325,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _update_grafana_dashboards(self):
         self.update_dashboards(
-            dashboards_func=self.dashboards,
+            dashboards=self.dashboards,
             reload_func=self._grafana_dashboards_provider._update_all_dashboards_from_dir,
             mapping=self.dashboard_paths,
         )
@@ -362,14 +362,10 @@ class GrafanaAgentCharm(CharmBase):
         reload_func()
 
     def update_dashboards(
-        self, dashboards_func: Any, reload_func: Callable, mapping: RulesMapping
+        self, dashboards: Any, reload_func: Callable, mapping: RulesMapping
     ) -> None:
         """Copy dashboards from relations, save them to disk, and update."""
-        try:
-            dashboards = dashboards_func
-        except NotImplementedError:
-            logger.error("Dashboard forwarding is not yet enabled for this substrate!")
-            return
+
 
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
