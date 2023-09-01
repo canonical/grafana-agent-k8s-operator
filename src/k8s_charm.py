@@ -103,6 +103,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def _on_dashboards_changed(self, _event) -> None:
         logger.info("updating dashboards")
+
+        if not self._charm.unit.is_leader():
+            return
+
         self.update_dashboards(
             dashboards=self.dashboards,
             reload_func=self._grafana_dashboards_provider._update_all_dashboards_from_dir,
