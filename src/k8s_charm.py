@@ -10,7 +10,7 @@ import pathlib
 from typing import Any, Dict, List, Union
 
 import yaml
-from charms.grafana_agent.v0.cos_agent import GrafanaDashboard
+from cosl import GrafanaDashboard
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
@@ -136,7 +136,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Returns an aggregate of all dashboards received by this grafana-agent."""
         aggregate = {}
         for rel in self.model.relations["grafana-dashboards-consumer"]:
-            dashboards = json.loads(rel.data[rel.app].get("dashboards", "")) # type: ignore
+            dashboards = json.loads(rel.data[rel.app].get("dashboards", ""))  # type: ignore
             if "templates" not in dashboards:
                 continue
             for template in dashboards["templates"]:

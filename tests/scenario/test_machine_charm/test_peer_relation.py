@@ -4,11 +4,12 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+
+from cosl import GrafanaDashboard
 from charms.grafana_agent.v0.cos_agent import (
     CosAgentPeersUnitData,
     CosAgentProviderUnitData,
     COSAgentRequirer,
-    GrafanaDashboard,
 )
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,

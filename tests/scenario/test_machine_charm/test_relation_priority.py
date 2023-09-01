@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 import machine_charm
 import pytest
-from charms.grafana_agent.v0.cos_agent import GrafanaDashboard, MultiplePrincipalsError
+
+from cosl import GrafanaDashboard
+from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from scenario import Context, PeerRelation, State, SubordinateRelation
 
 from tests.scenario.helpers import get_charm_meta

@@ -365,8 +365,6 @@ class GrafanaAgentCharm(CharmBase):
         self, dashboards: Any, reload_func: Callable, mapping: RulesMapping
     ) -> None:
         """Copy dashboards from relations, save them to disk, and update."""
-
-
         shutil.rmtree(mapping.dest)
         shutil.copytree(mapping.src, mapping.dest)
         for dash in dashboards:
