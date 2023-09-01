@@ -368,7 +368,7 @@ class GrafanaAgentCharm(CharmBase):
         try:
             dashboards = dashboards_func
         except NotImplementedError:
-            logger.debug("Dashboard forwarding is not yet enabled for k8s grafana-agent")
+            logger.error("Dashboard forwarding is not yet enabled for this substrate!")
             return
 
         shutil.rmtree(mapping.dest)
