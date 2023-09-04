@@ -206,17 +206,15 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm)
 ```
 """
 
-import base64
 import json
 import logging
-import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Optional, Set, Union
 
 import pydantic
-from cosl import JujuTopology, GrafanaDashboard
+from cosl import GrafanaDashboard, JujuTopology
 from cosl.rules import AlertRules
 from ops.charm import RelationChangedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
@@ -249,7 +247,6 @@ DEFAULT_SCRAPE_CONFIG = {
 
 logger = logging.getLogger(__name__)
 SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
-
 
 
 class CosAgentProviderUnitData(pydantic.BaseModel):

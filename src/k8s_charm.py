@@ -10,13 +10,13 @@ import pathlib
 from typing import Any, Dict, List, Union
 
 import yaml
-from cosl import GrafanaDashboard
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from cosl import GrafanaDashboard
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
 from ops.pebble import Layer
@@ -104,7 +104,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def _on_dashboards_changed(self, _event) -> None:
         logger.info("updating dashboards")
 
-        if not self._charm.unit.is_leader():
+        if not self.unit.is_leader():
             return
 
         self.update_dashboards(
@@ -136,7 +136,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         """Returns an aggregate of all dashboards received by this grafana-agent."""
         aggregate = {}
         for rel in self.model.relations["grafana-dashboards-consumer"]:
-            dashboards = json.loads(rel.data[rel.app].get("dashboards", ""))  # type: ignore
+            dashboards = json.loads(rel.data[rel.app].get("dashboards", "{}"))  # type: ignore
             if "templates" not in dashboards:
                 continue
             for template in dashboards["templates"]:
