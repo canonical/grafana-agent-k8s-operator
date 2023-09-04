@@ -206,17 +206,15 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm)
 ```
 """
 
-import base64
 import json
 import logging
-import lzma
 from collections import namedtuple
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Optional, Set, Union
 
 import pydantic
-from cosl import JujuTopology
+from cosl import GrafanaDashboard, JujuTopology
 from cosl.rules import AlertRules
 from ops.charm import RelationChangedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
@@ -249,31 +247,6 @@ DEFAULT_SCRAPE_CONFIG = {
 
 logger = logging.getLogger(__name__)
 SnapEndpoint = namedtuple("SnapEndpoint", "owner, name")
-
-
-class GrafanaDashboard(str):
-    """Grafana Dashboard encoded json; lzma-compressed."""
-
-    # TODO Replace this with a custom type when pydantic v2 released (end of 2023 Q1?)
-    # https://github.com/pydantic/pydantic/issues/4887
-    @staticmethod
-    def _serialize(raw_json: Union[str, bytes]) -> "GrafanaDashboard":
-        if not isinstance(raw_json, bytes):
-            raw_json = raw_json.encode("utf-8")
-        encoded = base64.b64encode(lzma.compress(raw_json)).decode("utf-8")
-        return GrafanaDashboard(encoded)
-
-    def _deserialize(self) -> Dict:
-        try:
-            raw = lzma.decompress(base64.b64decode(self.encode("utf-8"))).decode()
-            return json.loads(raw)
-        except json.decoder.JSONDecodeError as e:
-            logger.error("Invalid Dashboard format: %s", e)
-            return {}
-
-    def __repr__(self):
-        """Return string representation of self."""
-        return "<GrafanaDashboard>"
 
 
 class CosAgentProviderUnitData(pydantic.BaseModel):

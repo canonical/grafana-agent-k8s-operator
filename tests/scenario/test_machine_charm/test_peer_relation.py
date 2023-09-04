@@ -8,11 +8,11 @@ from charms.grafana_agent.v0.cos_agent import (
     CosAgentPeersUnitData,
     CosAgentProviderUnitData,
     COSAgentRequirer,
-    GrafanaDashboard,
 )
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
+from cosl import GrafanaDashboard
 from ops.charm import CharmBase
 from ops.framework import Framework
 from scenario import Context, PeerRelation, State, SubordinateRelation
