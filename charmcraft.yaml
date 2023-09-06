@@ -16,6 +16,14 @@ bases:
       architectures: ["amd64"]
 parts:
   charm:
-    charm-binary-python-packages: [cryptography, cosl, jsonschema]
     build-packages:
     - git
+
+    # The following are needed for tls-certificates-interface
+    - build-essential
+    - python3-dev
+    - libffi-dev
+    - libssl-dev
+    - pkg-config
+    - rustc
+    - cargo
