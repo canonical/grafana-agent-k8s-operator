@@ -722,6 +722,8 @@ class COSAgentRequirer(Object):
                         "metrics_path": job["path"],
                         "static_configs": [{"targets": [f"localhost:{job['port']}"]}],
                         # We include insecure_skip_verify because we are always scraping localhost.
+                        # Even if we have the certs for the scrape targets, we'd rather specify the scrape
+                        # jobs with localhost rather than the SAN DNS the cert was issued for.
                         "tls_config": {"insecure_skip_verify": True},
                     }
 
