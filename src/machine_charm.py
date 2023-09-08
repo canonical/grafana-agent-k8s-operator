@@ -264,6 +264,8 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
         rules = self._cos.metrics_alerts
+
+        # Determine the principal topology.
         principal_topology = self.principal_topology
         if principal_topology:
             topology = JujuTopology(
@@ -274,12 +276,23 @@ class GrafanaAgentMachineCharm(GrafanaAgentCharm):
             )
         else:
             return {}
+
+        # Replace any existing topology labels with those from the principal.
+        for identifier in rules:
+            for group in rules[identifier]["groups"]:
+                for rule in group["rules"]:
+                    rule["labels"]["juju_model"] = principal_topology["juju_model"]
+                    rule["labels"]["juju_model_uuid"] = principal_topology["juju_model_uuid"]
+                    rule["labels"]["juju_application"] = principal_topology["juju_application"]
+
+        # Get the rules defined by Grafana Agent itself.
         own_rules = AlertRules(query_type="promql", topology=topology)
         own_rules.add_path(METRICS_RULES_SRC_PATH)
         if topology.identifier in rules:
             rules[topology.identifier]["groups"] += own_rules.as_dict()["groups"]
         else:
             rules[topology.identifier] = own_rules.as_dict()
+
         return rules
 
     def metrics_jobs(self) -> list:
