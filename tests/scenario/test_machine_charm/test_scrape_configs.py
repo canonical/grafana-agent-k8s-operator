@@ -64,7 +64,7 @@ def test_snap_endpoints(placeholder_cfg_path):
 
     my_uuid = str(uuid.uuid4())
 
-    with patch("charms.operator_libs_linux.v1.snap.SnapCache"), patch(
+    with patch("charms.operator_libs_linux.v2.snap.SnapCache"), patch(
         "machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write
     ), patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
         state = State(

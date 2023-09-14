@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from charms.grafana_agent.v0.cos_agent import COSAgentRequirer, MultiplePrincipalsError
-from charms.operator_libs_linux.v1 import snap  # type: ignore
+from charms.operator_libs_linux.v2 import snap  # type: ignore
 from cosl import JujuTopology
 from cosl.rules import AlertRules
 from grafana_agent import METRICS_RULES_SRC_PATH, GrafanaAgentCharm
