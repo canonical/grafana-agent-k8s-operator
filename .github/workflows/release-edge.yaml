@@ -8,7 +8,7 @@ on:
 
 jobs:
   render:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -21,7 +21,7 @@ jobs:
       - name: Render k8s Charm
         run: tox -e render-k8s
       - name: Pack Artifact
-        run: sudo apt-get update && sudo apt-get install tar && tar czvf artifact.tar.gz metadata.yaml src/charm.py
+        run: sudo apt-get update && sudo apt-get install tar && tar czvf artifact.tar.gz charmcraft.yaml metadata.yaml src/charm.py
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:

@@ -1,0 +1,26 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: charm
+bases:
+  - build-on:
+    - name: "ubuntu"
+      channel: "22.04"
+      architectures: ["amd64"]
+    run-on:
+    - name: "ubuntu"
+      channel: "22.04"
+      architectures: ["amd64"]
+parts:
+  charm:
+    build-packages:
+    - git
+
+    # The following are needed for tls-certificates-interface
+    - build-essential
+    - python3-dev
+    - libffi-dev
+    - libssl-dev
+    - pkg-config
+    - rustc
+    - cargo

@@ -1,12 +1,14 @@
 venv/
 build/
 *.charm
+*.orig
 .coverage
 __pycache__/
 *.py[cod]
 .tox
 .idea/
 tests/integration/*-tester/lib/
+charmcraft.yaml
 metadata.yaml
 src/charm.py
 .env
