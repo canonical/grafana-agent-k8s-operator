@@ -10,6 +10,7 @@ from tests.scenario.helpers import get_charm_meta
 
 
 def test_metrics_alert_rule_labels(vroot):
+    """Check that metrics alert rules are labeled with principal topology."""
     cos_agent_primary_data = {
         "config": json.dumps(
             {
