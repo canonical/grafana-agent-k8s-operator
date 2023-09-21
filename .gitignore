@@ -7,6 +7,4 @@ __pycache__/
 .tox
 .idea/
 tests/integration/*-tester/lib/
-metadata.yaml
-src/charm.py
 .env
