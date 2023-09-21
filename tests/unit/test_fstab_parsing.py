@@ -3,8 +3,8 @@
 import unittest
 from pathlib import Path
 
+from charm import SnapFstab
 from fs.tempfs import TempFS
-from machine_charm import SnapFstab
 
 
 class TestFstabParsing(unittest.TestCase):

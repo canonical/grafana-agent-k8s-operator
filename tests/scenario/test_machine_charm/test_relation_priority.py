@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import machine_charm
+import charm
 import pytest
 from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from cosl import GrafanaDashboard
@@ -16,8 +16,8 @@ from tests.scenario.test_machine_charm.helpers import set_run_out
 
 def trigger(evt: str, state: State, vroot: Path = None, **kwargs):
     context = Context(
-        charm_type=machine_charm.GrafanaAgentMachineCharm,
-        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_type=charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
     )
     return context.run(event=evt, state=state, **kwargs)
@@ -34,9 +34,9 @@ def patch_all(placeholder_cfg_path):
         yield
 
 
-@patch("machine_charm.subprocess.run")
+@patch("charm.subprocess.run")
 def test_no_relations(mock_run, vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert not charm._cos.dashboards
         assert not charm._cos.logs_alerts
         assert not charm._cos.metrics_alerts
@@ -50,9 +50,9 @@ def test_no_relations(mock_run, vroot):
     trigger("start", State(), post_event=post_event, vroot=vroot)
 
 
-@patch("machine_charm.subprocess.run")
+@patch("charm.subprocess.run")
 def test_juju_info_relation(mock_run, vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert not charm._cos.dashboards
         assert not charm._cos.logs_alerts
         assert not charm._cos.metrics_alerts
@@ -77,9 +77,9 @@ def test_juju_info_relation(mock_run, vroot):
     )
 
 
-@patch("machine_charm.subprocess.run")
+@patch("charm.subprocess.run")
 def test_cos_machine_relation(mock_run, vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert charm._cos.dashboards
         assert charm._cos.snap_log_endpoints
         assert not charm._cos.logs_alerts
@@ -137,9 +137,9 @@ def test_cos_machine_relation(mock_run, vroot):
     )
 
 
-@patch("machine_charm.subprocess.run")
+@patch("charm.subprocess.run")
 def test_both_relations(mock_run, vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert charm._cos.dashboards
         assert charm._cos.snap_log_endpoints
         assert not charm._cos.logs_alerts
@@ -183,8 +183,8 @@ def test_both_relations(mock_run, vroot):
     }
 
     context = Context(
-        charm_type=machine_charm.GrafanaAgentMachineCharm,
-        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_type=charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
     )
     state = State(

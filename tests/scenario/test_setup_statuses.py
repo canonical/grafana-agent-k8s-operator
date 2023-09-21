@@ -4,13 +4,12 @@ import dataclasses
 from typing import Type
 from unittest.mock import patch
 
+import charm
 import grafana_agent
-import k8s_charm
-import machine_charm
 import pytest
-from ops import BlockedStatus, UnknownStatus, WaitingStatus, pebble
+from ops import UnknownStatus, WaitingStatus
 from ops.testing import CharmType
-from scenario import Container, Context, ExecOutput, State
+from scenario import Context, State
 
 from tests.scenario.helpers import get_charm_meta
 
@@ -22,9 +21,7 @@ def substrate(request):
 
 @pytest.fixture
 def charm_type(substrate) -> Type[CharmType]:
-    return {"lxd": machine_charm.GrafanaAgentMachineCharm, "k8s": k8s_charm.GrafanaAgentK8sCharm}[
-        substrate
-    ]
+    return {"lxd": charm.GrafanaAgentMachineCharm}[substrate]
 
 
 @pytest.fixture
@@ -44,14 +41,9 @@ def _subp_run_mock(*a, **kw):
 
 @pytest.fixture(autouse=True)
 def patch_all(substrate, mock_cfg_path):
-    if substrate == "lxd":
-        grafana_agent.CONFIG_PATH = mock_cfg_path
-        with patch("subprocess.run", _subp_run_mock):
-            yield
-
-    else:
-        with patch("k8s_charm.KubernetesServicePatch", lambda x, y: None):
-            yield
+    grafana_agent.CONFIG_PATH = mock_cfg_path
+    with patch("subprocess.run", _subp_run_mock):
+        yield
 
 
 def test_install(charm_type, substrate, vroot):
@@ -83,26 +75,3 @@ def test_start(charm_type, substrate, vroot):
 
     else:
         assert out.unit_status == UnknownStatus()
-
-
-def test_k8s_charm_start_with_container(charm_type, substrate, vroot):
-    if substrate == "lxd":
-        pytest.skip("k8s-only test")
-
-    agent = Container(
-        name="agent",
-        can_connect=True,
-        exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
-    )
-
-    context = Context(
-        charm_type,
-        meta=get_charm_meta(charm_type),
-        charm_root=vroot,
-    )
-    state = State(containers=[agent])
-    out = context.run(agent.pebble_ready_event, state)
-
-    assert out.unit_status == BlockedStatus("Missing incoming ('requires') relation")
-    agent_out = out.get_container("agent")
-    assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE

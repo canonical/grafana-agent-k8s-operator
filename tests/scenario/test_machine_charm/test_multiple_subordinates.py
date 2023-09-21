@@ -3,7 +3,7 @@
 
 import json
 
-import machine_charm
+import charm
 import pytest
 from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from scenario import Context, PeerRelation, State, SubordinateRelation
@@ -12,7 +12,7 @@ from tests.scenario.helpers import get_charm_meta
 
 
 def test_juju_info_and_cos_agent(vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert len(charm._cos.dashboards) == 1
         assert len(charm._cos.snap_log_endpoints) == 1
         assert not charm._cos.logs_alerts
@@ -43,8 +43,8 @@ def test_juju_info_and_cos_agent(vroot):
     )
 
     context = Context(
-        charm_type=machine_charm.GrafanaAgentMachineCharm,
-        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_type=charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
     )
     state = State(
@@ -58,7 +58,7 @@ def test_juju_info_and_cos_agent(vroot):
 
 
 def test_two_cos_agent_relations(vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert len(charm._cos.dashboards) == 2
         assert len(charm._cos.snap_log_endpoints) == 2
         assert not charm._cos.logs_alerts
@@ -111,8 +111,8 @@ def test_two_cos_agent_relations(vroot):
     )
 
     context = Context(
-        charm_type=machine_charm.GrafanaAgentMachineCharm,
-        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_type=charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
     )
     state = State(
@@ -130,7 +130,7 @@ def test_two_cos_agent_relations(vroot):
 
 
 def test_two_cos_primary_relations(vroot):
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         with pytest.raises(MultiplePrincipalsError):
             charm._principal_relation
 
@@ -178,8 +178,8 @@ def test_two_cos_primary_relations(vroot):
     )
 
     context = Context(
-        charm_type=machine_charm.GrafanaAgentMachineCharm,
-        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_type=charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
     )
     state = State(

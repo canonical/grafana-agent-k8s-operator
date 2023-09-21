@@ -2,8 +2,6 @@
 # See LICENSE file for licensing details.
 import functools
 import logging
-import os
-import shutil
 from collections import defaultdict
 from datetime import datetime
 
@@ -50,41 +48,9 @@ def timed_memoizer(func):
     return wrapper
 
 
-@pytest.fixture(scope="module", autouse=True)
-def copy_libraries_into_test_charm():
-    """Ensure that the tester charm uses the current Prometheus library."""
-    testers = ["loki-tester", "prometheus-tester"]
-    for t in testers:
-        if os.path.exists(f"tests/integration/{t}/lib"):
-            shutil.rmtree(f"tests/integration/{t}/lib")
-        shutil.copytree("lib", f"tests/integration/{t}/lib")
-
-
 @pytest.fixture(scope="module")
 @timed_memoizer
 async def grafana_agent_charm(ops_test: OpsTest):
-    """Loki charm used for integration testing."""
+    """Grafana-agent charm used for integration testing."""
     charm = await ops_test.build_charm(".")
-    return charm
-
-
-@pytest.fixture(scope="module")
-@timed_memoizer
-async def loki_tester_charm(ops_test):
-    """A charm for integration test of the Loki charm."""
-    charm_path = "tests/integration/loki-tester"
-    clean_cmd = ["charmcraft", "clean", "-p", charm_path]
-    await ops_test.run(*clean_cmd)
-    charm = await ops_test.build_charm(charm_path)
-    return charm
-
-
-@pytest.fixture(scope="module")
-@timed_memoizer
-async def prometheus_tester_charm(ops_test):
-    """A charm for integration test of the Prometheus charm."""
-    charm_path = "tests/integration/prometheus-tester"
-    clean_cmd = ["charmcraft", "clean", "-p", charm_path]
-    await ops_test.run(*clean_cmd)
-    charm = await ops_test.build_charm(charm_path)
     return charm

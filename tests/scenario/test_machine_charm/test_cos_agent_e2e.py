@@ -83,7 +83,7 @@ def vroot(placeholder_cfg_path):
 @pytest.fixture(autouse=True)
 def snap_is_installed():
     with patch(
-        "machine_charm.GrafanaAgentMachineCharm._is_installed", new_callable=PropertyMock
+        "charm.GrafanaAgentMachineCharm._is_installed", new_callable=PropertyMock
     ) as mock_foo:
         mock_foo.return_value = True
         yield

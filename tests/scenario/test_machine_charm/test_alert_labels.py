@@ -3,7 +3,7 @@
 
 import json
 
-import machine_charm
+import charm
 from scenario import Context, PeerRelation, Relation, State, SubordinateRelation
 
 from tests.scenario.helpers import get_charm_meta
@@ -92,8 +92,8 @@ def test_metrics_alert_rule_labels(vroot):
     remote_write_relation = Relation("send-remote-write", remote_app_name="prometheus")
 
     context = Context(
-        charm_type=machine_charm.GrafanaAgentMachineCharm,
-        meta=get_charm_meta(machine_charm.GrafanaAgentMachineCharm),
+        charm_type=charm.GrafanaAgentMachineCharm,
+        meta=get_charm_meta(charm.GrafanaAgentMachineCharm),
         charm_root=vroot,
     )
     state = State(
@@ -106,13 +106,13 @@ def test_metrics_alert_rule_labels(vroot):
         ],
     )
     state_0 = context.run(event=cos_agent_primary_relation.changed_event, state=state)
-    (vroot / "metadata.yaml").unlink()
-    (vroot / "config.yaml").unlink()
-    (vroot / "actions.yaml").unlink()
+    (vroot / "metadata.yaml").unlink(missing_ok=True)
+    (vroot / "config.yaml").unlink(missing_ok=True)
+    (vroot / "actions.yaml").unlink(missing_ok=True)
     state_1 = context.run(event=cos_agent_subordinate_relation.changed_event, state=state_0)
-    (vroot / "metadata.yaml").unlink()
-    (vroot / "config.yaml").unlink()
-    (vroot / "actions.yaml").unlink()
+    (vroot / "metadata.yaml").unlink(missing_ok=True)
+    (vroot / "config.yaml").unlink(missing_ok=True)
+    (vroot / "actions.yaml").unlink(missing_ok=True)
     state_2 = context.run(event=remote_write_relation.joined_event, state=state_1)
 
     alert_rules = json.loads(state_2.relations[2].local_app_data["alert_rules"])

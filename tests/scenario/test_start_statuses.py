@@ -6,13 +6,11 @@ from pathlib import Path
 from typing import Type
 from unittest.mock import patch
 
-import k8s_charm
-import machine_charm
+import charm
 import pytest
 import yaml
-from ops import pebble
 from ops.testing import CharmType
-from scenario import Container, Context, ExecOutput, State, SubordinateRelation
+from scenario import Context, State, SubordinateRelation
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
 
@@ -24,9 +22,7 @@ def substrate(request):
 
 @pytest.fixture
 def charm_type(substrate) -> Type[CharmType]:
-    return {"lxd": machine_charm.GrafanaAgentMachineCharm, "k8s": k8s_charm.GrafanaAgentK8sCharm}[
-        substrate
-    ]
+    return {"lxd": charm.GrafanaAgentMachineCharm}[substrate]
 
 
 @pytest.fixture
@@ -46,20 +42,15 @@ def _subp_run_mock(*a, **kw):
 
 @pytest.fixture(autouse=True)
 def patch_all(substrate, placeholder_cfg_path):
-    if substrate == "lxd":
-        with patch("subprocess.run", _subp_run_mock), patch(
-            "grafana_agent.CONFIG_PATH", placeholder_cfg_path
-        ):
-            yield
-
-    else:
-        with patch("k8s_charm.KubernetesServicePatch", lambda x, y: None):
-            yield
+    with patch("subprocess.run", _subp_run_mock), patch(
+        "grafana_agent.CONFIG_PATH", placeholder_cfg_path
+    ):
+        yield
 
 
 @pytest.fixture
 def charm_meta(substrate, charm_type) -> dict:
-    fname = {"lxd": "machine_metadata", "k8s": "k8s_metadata"}[substrate]
+    fname = {"lxd": "metadata"}[substrate]
 
     charm_source_path = Path(inspect.getfile(charm_type))
     charm_root = charm_source_path.parent.parent
@@ -87,11 +78,11 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
     if substrate != "lxd":
         pytest.skip(reason="machine-only test")
 
-    def post_event(charm: machine_charm.GrafanaAgentMachineCharm):
+    def post_event(charm: charm.GrafanaAgentMachineCharm):
         assert not charm.is_ready
 
     juju_info = SubordinateRelation("juju-info")
-    with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", False):
+    with patch("charm.GrafanaAgentMachineCharm.is_ready", False):
         ctx = Context(
             charm_type=charm_type,
             meta=charm_meta,
@@ -105,7 +96,7 @@ def test_start_not_ready(charm_type, charm_meta, substrate, vroot, placeholder_c
 
 
 def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
-    with patch("machine_charm.GrafanaAgentMachineCharm.is_ready", True):
+    with patch("charm.GrafanaAgentMachineCharm.is_ready", True):
         ctx = Context(
             charm_type=charm_type,
             meta=charm_meta,
@@ -121,25 +112,3 @@ def test_start(charm_type, charm_meta, substrate, vroot, placeholder_cfg_path):
 
     else:
         assert out.unit_status.name == "unknown"
-
-
-def test_k8s_charm_start_with_container(charm_type, charm_meta, substrate, vroot):
-    if substrate == "lxd":
-        pytest.skip("k8s-only test")
-
-    agent = Container(
-        name="agent",
-        can_connect=True,
-        exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
-    )
-
-    ctx = Context(
-        charm_type=charm_type,
-        meta=charm_meta,
-        charm_root=vroot,
-    )
-    out = ctx.run(state=State(containers=[agent]), event=agent.pebble_ready_event)
-
-    assert out.unit_status.name == "blocked"
-    agent_out = out.get_container("agent")
-    assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE

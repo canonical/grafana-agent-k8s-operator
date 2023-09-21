@@ -8,8 +8,5 @@ cosl
 ops > 2.5.0
 pydantic < 2
 requests
-kubernetes
-lightkube
-lightkube-models
 cryptography
 jsonschema < 4  # Pin prevents the machine charm error "ModuleNotFoundError: No module named 'rpds.rpds'"

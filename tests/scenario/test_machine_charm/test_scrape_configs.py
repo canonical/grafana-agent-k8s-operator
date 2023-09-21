@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import patch
 
-import machine_charm
+import charm
 import pytest
 import yaml
 from charms.grafana_agent.v0.cos_agent import CosAgentProviderUnitData
@@ -17,8 +17,7 @@ from scenario import Context, Model, PeerRelation, Relation, State, SubordinateR
 
 machine_meta = yaml.safe_load(
     (
-        Path(inspect.getfile(machine_charm.GrafanaAgentMachineCharm)).parent.parent
-        / "machine_metadata.yaml"
+        Path(inspect.getfile(charm.GrafanaAgentMachineCharm)).parent.parent / "metadata.yaml"
     ).read_text()
 )
 
@@ -65,15 +64,15 @@ def test_snap_endpoints(placeholder_cfg_path):
     my_uuid = str(uuid.uuid4())
 
     with patch("charms.operator_libs_linux.v2.snap.SnapCache"), patch(
-        "machine_charm.GrafanaAgentMachineCharm.write_file", new=mock_write
-    ), patch("machine_charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
+        "charm.GrafanaAgentMachineCharm.write_file", new=mock_write
+    ), patch("charm.GrafanaAgentMachineCharm.is_ready", return_value=True):
         state = State(
             relations=[cos_relation, loki_relation, PeerRelation("peers")],
             model=Model(name="my-model", uuid=my_uuid),
         )
 
         ctx = Context(
-            charm_type=machine_charm.GrafanaAgentMachineCharm,
+            charm_type=charm.GrafanaAgentMachineCharm,
             meta=machine_meta,
             charm_root=vroot.name,
         )
