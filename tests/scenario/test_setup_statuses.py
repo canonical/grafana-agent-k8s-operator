@@ -4,9 +4,8 @@ import dataclasses
 from typing import Type
 from unittest.mock import patch
 
+import charm
 import grafana_agent
-import k8s_charm
-import machine_charm
 import pytest
 from ops import BlockedStatus, UnknownStatus, WaitingStatus, pebble
 from ops.testing import CharmType
@@ -15,16 +14,14 @@ from scenario import Container, Context, ExecOutput, State
 from tests.scenario.helpers import get_charm_meta
 
 
-@pytest.fixture(params=["k8s", "lxd"])
+@pytest.fixture(params=["k8s"])
 def substrate(request):
     return request.param
 
 
 @pytest.fixture
 def charm_type(substrate) -> Type[CharmType]:
-    return {"lxd": machine_charm.GrafanaAgentMachineCharm, "k8s": k8s_charm.GrafanaAgentK8sCharm}[
-        substrate
-    ]
+    return {"k8s": charm.GrafanaAgentK8sCharm}[substrate]
 
 
 @pytest.fixture
@@ -50,7 +47,7 @@ def patch_all(substrate, mock_cfg_path):
             yield
 
     else:
-        with patch("k8s_charm.KubernetesServicePatch", lambda x, y: None):
+        with patch("charm.KubernetesServicePatch", lambda x, y: None):
             yield
 
 
@@ -85,7 +82,7 @@ def test_start(charm_type, substrate, vroot):
         assert out.unit_status == UnknownStatus()
 
 
-def test_k8s_charm_start_with_container(charm_type, substrate, vroot):
+def test_charm_start_with_container(charm_type, substrate, vroot):
     if substrate == "lxd":
         pytest.skip("k8s-only test")
 

@@ -22,7 +22,6 @@ from charms.certificate_transfer_interface.v0.certificate_transfer import (
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferRequires,
 )
-from charms.grafana_agent.v0.cos_agent import MultiplePrincipalsError
 from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
     GrafanaCloudConfigRequirer,
 )
@@ -549,11 +548,7 @@ class GrafanaAgentCharm(CharmBase):
             else:
                 self.delete_file(self._ca_path)
 
-        try:
-            config = self._generate_config()
-        except MultiplePrincipalsError as e:
-            self.status.update_config = BlockedStatus(str(e))
-            return
+        config = self._generate_config()
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))

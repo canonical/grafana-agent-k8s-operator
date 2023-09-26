@@ -2,8 +2,8 @@
 # See LICENSE file for licensing details.
 import json
 
+from charm import GrafanaAgentK8sCharm
 from cosl import GrafanaDashboard
-from k8s_charm import GrafanaAgentK8sCharm
 from scenario import Container, Context, Relation, State
 
 

@@ -7,5 +7,5 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def patch_all():
-    with patch("k8s_charm.KubernetesServicePatch", lambda x, y: None):
+    with patch("charm.KubernetesServicePatch", lambda x, y: None):
         yield
