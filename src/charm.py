@@ -17,9 +17,10 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from cosl import GrafanaDashboard
-from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
 from ops.pebble import Layer
+
+from lib.charms.observability_libs.v0.grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
 

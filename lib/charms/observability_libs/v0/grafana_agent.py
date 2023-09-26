@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Common logic for both k8s and machine charms for Grafana Agent."""
@@ -40,6 +40,12 @@ from requests.packages.urllib3.util import Retry  # type: ignore
 from yaml.parser import ParserError
 
 logger = logging.getLogger(__name__)
+
+
+LIBID = "deadbeef"
+LIBAPI = 0
+LIBPATCH = 1
+
 
 CONFIG_PATH = "/etc/grafana-agent.yaml"
 # all these are relative to the charm root
@@ -548,7 +554,14 @@ class GrafanaAgentCharm(CharmBase):
             else:
                 self.delete_file(self._ca_path)
 
-        config = self._generate_config()
+        try:
+            config = self._generate_config()
+        except Exception as e:
+            # FIXME the precise exception is
+            #  charms.grafana_agent.v0.cos_agent.MultiplePrincipalsError, but we cannot use it here
+            #  like that because this is shared code. Should refactor a bit.
+            self.status.update_config = BlockedStatus(str(e))
+            return
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))

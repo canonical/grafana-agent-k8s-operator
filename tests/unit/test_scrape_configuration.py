@@ -84,13 +84,13 @@ CERTS_RELATION_DATA = """[{"certificate": "-----BEGIN CERTIFICATE-----foobarcert
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @patch("grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
-    @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
-    @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
-    @patch("grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
-    @patch("grafana_agent.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
-    @patch("grafana_agent.DASHBOARDS_SRC_PATH", tempfile.mkdtemp())
-    @patch("grafana_agent.DASHBOARDS_DEST_PATH", tempfile.mkdtemp())
+    @patch("charms.observability_libs.v0.grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
+    @patch("charms.observability_libs.v0.grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
+    @patch("charms.observability_libs.v0.grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("charms.observability_libs.v0.grafana_agent.LOKI_RULES_SRC_PATH", tempfile.mkdtemp())
+    @patch("charms.observability_libs.v0.grafana_agent.LOKI_RULES_DEST_PATH", tempfile.mkdtemp())
+    @patch("charms.observability_libs.v0.grafana_agent.DASHBOARDS_SRC_PATH", tempfile.mkdtemp())
+    @patch("charms.observability_libs.v0.grafana_agent.DASHBOARDS_DEST_PATH", tempfile.mkdtemp())
     @patch(
         "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
     )

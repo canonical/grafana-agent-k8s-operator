@@ -45,7 +45,7 @@ def _subp_run_mock(*a, **kw):
 def patch_all(substrate, placeholder_cfg_path):
     if substrate == "lxd":
         with patch("subprocess.run", _subp_run_mock), patch(
-            "grafana_agent.CONFIG_PATH", placeholder_cfg_path
+            "charms.observability_libs.v0.grafana_agent.CONFIG_PATH", placeholder_cfg_path
         ):
             yield
 
