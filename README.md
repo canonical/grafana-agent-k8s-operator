@@ -3,6 +3,11 @@
 
 [![Test Suite](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release-edge.yaml/badge.svg)](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release-edge.yaml)
 
+
+> #### ⚠️ Are you looking for the Grafana Agent _machine_ charm?
+>
+> The charms have been split into separate repositories. The machine charm is now available [here](https://github.com/canonical/grafana-agent-operator/).
+
 ## Description
 
 [Grafana Agent](https://github.com/grafana/agent) is a telemetry collector for sending metrics,
