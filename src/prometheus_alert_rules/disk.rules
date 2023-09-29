@@ -4,7 +4,7 @@ groups:
   - record: used_disk_space
     expr: |
       100 * (1 - (
-        node_filesystem_free_bytes / node_filesystem_size_bytes_bytes)
+        node_filesystem_free_bytes / node_filesystem_size_bytes)
       )
   - alert: HostDiskSpaceFillsUp
     expr: predict_linear(used_disk_space{mountpoint=~"/"}[6h], 6*60*60) > 90
