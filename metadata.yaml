@@ -33,7 +33,7 @@ containers:
 resources:
   agent-image:
     type: oci-image
-    upstream-source: ghcr.io/canonical/grafana-agent:latest
+    upstream-source: ubuntu/grafana-agent:0.35.2-22.04_stable
     description: OCI image for Grafana Agent
 
 requires:
