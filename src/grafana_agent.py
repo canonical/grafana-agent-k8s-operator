@@ -604,6 +604,9 @@ class GrafanaAgentCharm(CharmBase):
             loki_endpoints.append(
                 {
                     "url": self._cloud.loki_url,
+                    "headers": {
+                      "Content-Encoding": "snappy",
+                    },
                     "basic_auth": {
                         "username": self._cloud.credentials.username,
                         "password": self._cloud.credentials.password,
