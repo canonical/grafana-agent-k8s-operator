@@ -1,8 +1,8 @@
 # Grafana Agent Charmed Operator for Kubernetes
 
-
-[![Test Suite](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release-edge.yaml/badge.svg)](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release-edge.yaml)
-
+[![Charmhub Badge](https://charmhub.io/grafana-agent-k8s/badge.svg)](https://charmhub.io/grafana-agent-k8s)
+[![Release Edge](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release.yaml)
+[![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)
 
 > #### ⚠️ Are you looking for the Grafana Agent _machine_ charm?
 >
