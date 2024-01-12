@@ -6,7 +6,7 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
 LIBID = "e6f580481c1b4388aa4d2cdf412a47fa"
 LIBAPI = 0
-LIBPATCH = 3
+LIBPATCH = 4
 
 DEFAULT_RELATION_NAME = "grafana-cloud-config"
 
@@ -45,7 +45,7 @@ class GrafanaCloudConfigRequirer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        
+
         for event in self._change_events:
             self.framework.observe(event, self._on_relation_changed)
 
@@ -55,14 +55,6 @@ class GrafanaCloudConfigRequirer(Object):
     def _on_relation_changed(self, event):
         if not self._charm.unit.is_leader():
             return
-
-        if not all(
-            self._is_not_empty(x)
-            for x in [
-                event.relation.data[event.app].get("username", ""),
-                event.relation.data[event.app].get("password", ""),
-            ]):
-                return
 
         self.on.cloud_config_available.emit()  # pyright: ignore
 
@@ -96,29 +88,55 @@ class GrafanaCloudConfigRequirer(Object):
 
     @property
     def credentials(self):
-        return Credentials(
-            self._data.get("username", ""),
-            self._data.get("password", "")
-        )
+        """Return the credentials, if any; otherwise, return None."""
+        if not all(
+            self._is_not_empty(x)
+            for x in [
+                self._data.get("username", ""),
+                self._data.get("password", ""),
+            ]):
+                return Credentials(
+                    self._data.get("username", ""),
+                    self._data.get("password", "")
+                )
+        return None
 
     @property
     def loki_ready(self):
-        return (
-            self._is_not_empty(self.credentials.username)
-            and self._is_not_empty(self.credentials.password)
-            and self._is_not_empty(self.loki_url))
+        return self._is_not_empty(self.loki_url)
+
+    @property
+    def loki_endpoint(self) -> dict:
+        """Return the loki endpoint dict."""
+        if not self.loki_ready:
+            return {}
+
+        endpoint = {}
+        endpoint["url"] = self.loki_url
+        if self.credentials:
+            endpoint["basic_auth"] = {"username": self.credentials.username, "password": self.credentials.password}
+        return endpoint
 
     @property
     def prometheus_ready(self):
-        return (
-            self._is_not_empty(self.credentials.username)
-            and self._is_not_empty(self.credentials.password)
-            and self._is_not_empty(self.prometheus_url))
+        return self._is_not_empty(self.prometheus_url)
+
+    @property
+    def prometheus_endpoint(self) -> dict:
+        """Return the prometheus endpoint dict."""
+        if not self.prometheus_ready:
+            return {}
+        
+        endpoint = {}
+        endpoint["url"] = self.prometheus_url
+        if self.credentials:
+            endpoint["basic_auth"] = {"username": self.credentials.username, "password": self.credentials.password}
+        return endpoint
 
     @property
     def loki_url(self):
         return self._data.get("loki_url", "")
-    
+
     @property
     def prometheus_url(self):
         return self._data.get("prometheus_url", "")
