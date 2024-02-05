@@ -1,7 +1,16 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 variable "model_name" {
   description = "Name of Juju model to deploy application to"
   type        = string
   default     = ""
+}
+
+variable "app_name" {
+  description = "Name of the application in the Juju model"
+  type        = string
+  default     = "grafana"
 }
 
 variable "channel" {
@@ -10,19 +19,7 @@ variable "channel" {
   default     = "latest/stable"
 }
 
-variable "grafana-config" {
-  description = "Additional configuration for the Grafana"
+variable "grafana_config" {
+  description = "Additional configurations for the Grafana. Please see the available options: https://charmhub.io/grafana-agent-k8s/configure"
   default     = {}
-}
-
-variable "metrics_remote_write_offer_url" {
-  description = "Prometheus offer URL for `send-remote-write` endpoint"
-  type        = string
-  default     = ""
-}
-
-variable "logging_offer_url" {
-  description = "Loki offer URL for `logging-consumer` endpoint"
-  type        = string
-  default     = ""
 }

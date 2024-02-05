@@ -6,65 +6,60 @@ This Grafana-agent-k8s Terraform module aims to deploy the [grafana-agent-k8s ch
 
 ### Prerequisites
 
-The following software and tools needs to be installed and should be running in the local environment.
+The following software and tools needs to be installed and should be running in the local environment. Please [set up your environment](https://discourse.charmhub.io/t/set-up-your-development-environment-with-microk8s-for-juju-terraform-provider/13109) before deployment.
 
 - `microk8s`
 - `juju 3.x`
 - `terrafom`
 
-### Deploy the grafana-agent-k8s charm using Terraform
+### Module structure
 
-Make sure that `storage` plugin is enabled for Microk8s:
+- **main.tf** - Defines the Juju application to be deployed.
+- **variables.tf** - Allows customization of the deployment. Except for exposing the deployment options (Juju model name, channel or application name) also models the charm configuration.
+- **output.tf** - Responsible for integrating the module with other Terraform modules, primarily by defining potential integration endpoints (charm integrations), but also by exposing the application name.
+- **terraform.tf** - Defines the Terraform provider.
 
-```console
-sudo microk8s enable hostpath-storage
+## Using Grafana-agent-k8s base module in higher level modules
+
+If you want to use `grafana-agent-k8s` base module as part of your Terraform module, import it like shown below.
+
+```text
+module "grafana-agent-k8s" {
+  source = "git::https://github.com/canonical/grafana-agent-k8s-operator//terraform"
+  
+  model_name = "juju_model_name"
+  # Optional Configurations
+  # channel                        = "put the Charm channel here" 
+  # grafana-config = {
+  #   tls_insecure_skip_verify = "put True not to skip the TLS verification"
+  # }
+}
 ```
 
-Add a Juju model:
+Please see the link to customize the Grafana configuration variables if needed.
 
-```console
-juju add model <model-name>
+- [Grafana configuration option](https://charmhub.io/grafana-agent-k8s/configure)
+
+Create the integrations, for instance:
+
+```text
+resource "juju_integration" "amf-metrics" {
+  model = var.model_name
+
+  application {
+    name     = module.amf.app_name
+    endpoint = module.grafana.metrics_endpoint
+  }
+
+  application {
+    name     = module.grafana.app_name
+    endpoint = module.grafana.metrics_endpoint
+  }
+}
 ```
 
-Initialise the provider:
+Please check the available [integration pairs](https://charmhub.io/grafana-agent-k8s/integrations).
 
-```console
-terraform init
-```
+[Terraform](https://www.terraform.io/)
 
-Customize the configuration inputs under `terraform.tfvars` file according to requirement.
-
-Replace the values in the `terraform.tfvars` file:
-
-```yaml
-# Mandatory Config Options
-model_name = "put your model-name here"
-```
-
-Run Terraform Plan by providing var-file:
-
-```console
-terraform plan -var-file="terraform.tfvars" 
-```
-
-Deploy the resources, skip the approval:
-
-```console
-terraform apply -auto-approve 
-```
-
-### Check the Output
-
-Run `juju switch <juju model>` to switch to the target Juju model and observe the status of the application.
-
-```console
-juju status --relations
-```
-
-### Clean Up
-
-Remove the application:
-
-```console
-terraform destroy -auto-approve
-```
+[Terraform Juju provider](https://registry.terraform.io/providers/juju/juju/latest)
