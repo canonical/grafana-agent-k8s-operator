@@ -9,7 +9,7 @@ resource "juju_application" "grafana-agent-k8s" {
     name    = "grafana-agent-k8s"
     channel = var.channel
   }
-  config = var.grafana_config
+  config = var.config
   units  = 1
   trust  = true
 }

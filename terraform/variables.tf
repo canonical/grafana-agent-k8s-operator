@@ -10,7 +10,7 @@ variable "model_name" {
 variable "app_name" {
   description = "Name of the application in the Juju model"
   type        = string
-  default     = "grafana"
+  default     = "grafana-agent"
 }
 
 variable "channel" {
@@ -19,7 +19,8 @@ variable "channel" {
   default     = "latest/stable"
 }
 
-variable "grafana_config" {
-  description = "Additional configurations for the Grafana. Please see the available options: https://charmhub.io/grafana-agent-k8s/configure"
+variable "config" {
+  description = "Additional configurations for the Grafana Agent. Please see the available options: https://charmhub.io/grafana-agent-k8s/configure"
+  type        = map(string)
   default     = {}
 }

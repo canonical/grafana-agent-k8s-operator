@@ -6,6 +6,8 @@ output "app_name" {
   value       = juju_application.grafana-agent-k8s.name
 }
 
+# Required integration endpoints
+
 output "certificates_endpoint" {
   description = "Name of the endpoint to get the X.509 certificate using tls-certificates interface."
   value       = "certificates"
@@ -40,6 +42,8 @@ output "receive_ca_cert_endpoint" {
   description = "Name of the endpoint to get the Self signed X.509 Certificates through the relation with Self Signed Certificates Charm using certificate_transfer interface."
   value       = "receive-ca-cert"
 }
+
+# Provided integration endpoints
 
 output "logging_provider_endpoint" {
   description = "Name of the endpoint provided by Grafana to receive logs from any charm that supports the loki_push_api relation interface."
