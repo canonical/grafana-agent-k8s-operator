@@ -10,7 +10,7 @@ import pathlib
 from typing import Any, Dict, List, Union
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
     ServicePort,
