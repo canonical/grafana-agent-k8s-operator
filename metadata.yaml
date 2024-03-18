@@ -59,6 +59,9 @@ requires:
     interface: certificate_transfer
     description: |
       Obtain TLS information (certificate, ca, chain) from another charm.
+  tracing:
+    interface: tracing
+    limit: 1
 
 provides:
   logging-provider:

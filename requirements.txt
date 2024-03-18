@@ -13,3 +13,5 @@ lightkube
 lightkube-models
 cryptography
 jsonschema < 4  # Pin prevents the machine charm error "ModuleNotFoundError: No module named 'rpds.rpds'"
+# Deps: tracing
+opentelemetry-exporter-otlp-proto-http>=1.21.0
