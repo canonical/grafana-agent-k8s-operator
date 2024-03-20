@@ -7,7 +7,7 @@
 import json
 import logging
 import pathlib
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
@@ -16,6 +16,8 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from cosl import GrafanaDashboard
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
@@ -26,6 +28,17 @@ logger = logging.getLogger(__name__)
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 
+@trace_charm(
+    tracing_endpoint="tracing_endpoint",
+    server_cert="server_cert_path",
+    extra_types=(
+        GrafanaAgentCharm,
+        LokiPushApiProvider,
+        KubernetesServicePatch,
+        MetricsEndpointConsumer,
+        GrafanaDashboard,
+    ),
+)
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
 
@@ -70,6 +83,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self._on_loki_push_api_alert_rules_changed,
         )
 
+        self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
         self.framework.observe(
             self.on["grafana-dashboards-consumer"].relation_changed,
             self._on_dashboards_changed,
@@ -236,6 +250,18 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             cmd: Command to be run.
         """
         self._container.exec(cmd)
+
+    @property
+    def tracing_endpoint(self) -> Optional[str]:
+        """Otlp http endpoint for charm instrumentation."""
+        if self._tracing.is_ready():
+            return self._tracing.get_endpoint("otlp_http")
+        return None
+
+    @property
+    def server_cert_path(self) -> Optional[str]:
+        """Server certificate path for tls tracing."""
+        return self._cert_path
 
 
 if __name__ == "__main__":
