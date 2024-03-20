@@ -497,6 +497,7 @@ from cosl import JujuTopology
 from ops.charm import (
     CharmBase,
     HookEvent,
+    PebbleReadyEvent,
     RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
@@ -518,7 +519,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -2094,15 +2095,18 @@ class LogProxyConsumer(ConsumerBase):
             container: container into which promtail is to be uploaded.
         """
         # Check for Juju proxy variables and fall back to standard ones if not set
-        proxies: Optional[Dict[str, str]] = {}
-        if proxies and os.environ.get("JUJU_CHARM_HTTP_PROXY"):
-            proxies.update({"http": os.environ["JUJU_CHARM_HTTP_PROXY"]})
-        if proxies and os.environ.get("JUJU_CHARM_HTTPS_PROXY"):
-            proxies.update({"https": os.environ["JUJU_CHARM_HTTPS_PROXY"]})
-        if proxies and os.environ.get("JUJU_CHARM_NO_PROXY"):
-            proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
-        else:
-            proxies = None
+        # If no Juju proxy variable was set, we set proxies to None to let the ProxyHandler get
+        # the proxy env variables from the environment
+        proxies = {
+            # The ProxyHandler uses only the protocol names as keys
+            # https://docs.python.org/3/library/urllib.request.html#urllib.request.ProxyHandler
+            "https": os.environ.get("JUJU_CHARM_HTTPS_PROXY", ""),
+            "http": os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
+            # The ProxyHandler uses `no` for the no_proxy key
+            # https://github.com/python/cpython/blob/3.12/Lib/urllib/request.py#L2553
+            "no": os.environ.get("JUJU_CHARM_NO_PROXY", ""),
+        }
+        proxies = {k: v for k, v in proxies.items() if v != ""} or None
 
         proxy_handler = request.ProxyHandler(proxies)
         opener = request.build_opener(proxy_handler)
@@ -2483,7 +2487,10 @@ class _PebbleLogClient:
 
 
 class LogForwarder(ConsumerBase):
-    """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints."""
+    """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints.
+
+    This class implements Pebble log forwarding. Juju >= 3.4 is needed.
+    """
 
     def __init__(
         self,
@@ -2507,27 +2514,47 @@ class LogForwarder(ConsumerBase):
         self.framework.observe(on.relation_departed, self._update_logging)
         self.framework.observe(on.relation_broken, self._update_logging)
 
+        for container_name in self._charm.meta.containers.keys():
+            snake_case_container_name = container_name.replace("-", "_")
+            self.framework.observe(
+                getattr(self._charm.on, f"{snake_case_container_name}_pebble_ready"),
+                self._on_pebble_ready,
+            )
+
+    def _on_pebble_ready(self, event: PebbleReadyEvent):
+        if not (loki_endpoints := self._retrieve_endpoints_from_relation()):
+            logger.warning("No Loki endpoints available")
+            return
+
+        self._update_endpoints(event.workload, loki_endpoints)
+
     def _update_logging(self, _):
         """Update the log forwarding to match the active Loki endpoints."""
+        if not (loki_endpoints := self._retrieve_endpoints_from_relation()):
+            logger.warning("No Loki endpoints available")
+            return
+
+        for container in self._charm.unit.containers.values():
+            self._update_endpoints(container, loki_endpoints)
+
+    def _retrieve_endpoints_from_relation(self) -> dict:
         loki_endpoints = {}
 
         # Get the endpoints from relation data
         for relation in self._charm.model.relations[self._relation_name]:
             loki_endpoints.update(self._fetch_endpoints(relation))
 
-        if not loki_endpoints:
-            logger.warning("No Loki endpoints available")
-            return
+        return loki_endpoints
 
-        for container in self._charm.unit.containers.values():
-            _PebbleLogClient.disable_inactive_endpoints(
-                container=container,
-                active_endpoints=loki_endpoints,
-                topology=self.topology,
-            )
-            _PebbleLogClient.enable_endpoints(
-                container=container, active_endpoints=loki_endpoints, topology=self.topology
-            )
+    def _update_endpoints(self, container: Container, loki_endpoints: dict):
+        _PebbleLogClient.disable_inactive_endpoints(
+            container=container,
+            active_endpoints=loki_endpoints,
+            topology=self.topology,
+        )
+        _PebbleLogClient.enable_endpoints(
+            container=container, active_endpoints=loki_endpoints, topology=self.topology
+        )
 
     def is_ready(self, relation: Optional[Relation] = None):
         """Check if the relation is active and healthy."""
