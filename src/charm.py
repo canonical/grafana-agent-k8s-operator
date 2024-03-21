@@ -249,7 +249,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         Args:
             cmd: Command to be run.
         """
-        self._container.exec(cmd)
+        self._container.exec(cmd).wait()
 
     @property
     def tracing_endpoint(self) -> Optional[str]:
