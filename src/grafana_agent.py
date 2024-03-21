@@ -80,7 +80,7 @@ class GrafanaAgentCharm(CharmBase):
     _cert_path = "/tmp/agent/grafana-agent.pem"
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
-    _ca_folder_path = "/usr/loca/share/ca-certificates"
+    _ca_folder_path = "/usr/local/share/ca-certificates"
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
