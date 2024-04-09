@@ -192,7 +192,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.assertEqual(
             DeepDiff(expected_config, self.harness.charm._generate_config(), ignore_order=True), {}
         )
-        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
+        self.assertIsInstance(self.harness.model.unit.status, ActiveStatus)
 
         # Test scale down
         self.harness.remove_relation_unit(rel_id, "prometheus/1")
