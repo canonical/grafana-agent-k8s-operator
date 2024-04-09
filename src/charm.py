@@ -88,6 +88,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self.on["grafana-dashboards-consumer"].relation_changed,
             self._on_dashboards_changed,
         )
+        self.framework.observe(
+            self.on["grafana-dashboards-consumer"].relation_broken,
+            self._on_dashboards_changed,
+        )
 
         self.framework.observe(
             self.on.agent_pebble_ready,  # pyright: ignore
