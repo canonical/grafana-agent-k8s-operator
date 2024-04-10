@@ -31,6 +31,7 @@ from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
+from cosl import MandatoryRelationPairs
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import APIError, PathError
@@ -446,70 +447,39 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = self.status.validation_error
             return
 
-        has_incoming = False
-        outgoing_rels = {"has": False, "message": ""}
-
-        # Make sure every incoming relation has at least one matching outgoing relation
-        for incoming, outgoings in self.mandatory_relation_pairs.items():
-            if not self.model.relations.get(incoming):
-                continue
-
-            has_incoming = True
-            outgoing_rels = self._has_outgoings(outgoings)
-
-        if not has_incoming:
-            self.unit.status = BlockedStatus("Missing incoming ('requires') relation")
+        # Put charm in blocked status if all incoming relations are missing
+        active_relations = {k for k, v in self.model.relations.items() if v}
+        if not set(self.mandatory_relation_pairs.keys()).intersection(active_relations):
+            self.unit.status = BlockedStatus(
+                "Missing incoming ('requires') relation: {}".format(
+                    "|".join(self.mandatory_relation_pairs.keys())
+                )
+            )
             return
 
-        if not outgoing_rels["has"]:
-            self.unit.status = BlockedStatus(f"{outgoing_rels['message']}")
+        if missing := MandatoryRelationPairs(self.mandatory_relation_pairs).get_missing_as_str(
+            *active_relations
+        ):
+            self.unit.status = BlockedStatus(f"Missing {missing}")
             return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
             return
 
-        self.unit.status = ActiveStatus(f"{outgoing_rels['message']}")
-
-    def _has_outgoings(self, outgoings: List[Set[str]]) -> Dict[str, Any]:
-        missing_rels = set()
-        active_rels = set()
-
-        for outgoing_list in outgoings:
-            for outgoing in outgoing_list:
-                relation = self.model.relations.get(outgoing, False)
-
-                if not relation:
-                    missing_rels.add(outgoing)
-                    continue
-
-                try:
-                    units = relation[0].units  # pyright: ignore
-                except IndexError:
-                    missing_rels.add(outgoing)
-                    units = None
-
-                if not units:
-                    missing_rels.add(outgoing)
-
-                if relation and units:
-                    active_rels.add(outgoing)
-
-        return {"has": bool(active_rels), "message": self._status_message(missing_rels)}
-
-    def _status_message(self, missing_relations: set) -> str:
-        if not missing_relations:
-            return ""
-
-        # The grafana-cloud-config relation is  established
-        if "grafana-cloud-config" not in missing_relations:
-            return ""
-
-        # The other 3 relations (logs, metrics, dashboards) are established
-        if len(missing_relations) == 1 and "grafana-cloud-config" in missing_relations:
-            return ""
-
-        return ", ".join([f"{x}: off" for x in missing_relations])
+        # If only _some_ of the COS relations are present, we do not want to block, but we do want
+        # to inform via the Active message that they are in fact missing ("soft" warning).
+        cos_rels = {
+            "send-remote-write",
+            "logging-consumer",
+            "grafana-dashboards-provider",
+        }
+        missing_rels = (
+            cos_rels.difference(active_relations)
+            if cos_rels.intersection(active_relations)
+            else set()
+        )
+        self.unit.status = ActiveStatus(", ".join([f"{x}: off" for x in missing_rels]))
 
     def _update_config(self) -> None:
         if not self.is_ready:
