@@ -48,10 +48,7 @@ def patch_all(substrate, placeholder_cfg_path):
             "grafana_agent.CONFIG_PATH", placeholder_cfg_path
         ):
             yield
-
-    else:
-        with patch("charm.KubernetesServicePatch", lambda x, y: None):
-            yield
+    yield
 
 
 @pytest.fixture

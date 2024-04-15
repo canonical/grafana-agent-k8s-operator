@@ -45,10 +45,7 @@ def patch_all(substrate, mock_cfg_path):
         grafana_agent.CONFIG_PATH = mock_cfg_path
         with patch("subprocess.run", _subp_run_mock):
             yield
-
-    else:
-        with patch("charm.KubernetesServicePatch", lambda x, y: None):
-            yield
+    yield
 
 
 def test_install(charm_type, substrate, vroot):
