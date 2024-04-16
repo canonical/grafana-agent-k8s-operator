@@ -11,10 +11,6 @@ from typing import Any, Dict, List, Optional, Union
 
 import yaml
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
@@ -34,7 +30,6 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
     extra_types=(
         GrafanaAgentCharm,
         LokiPushApiProvider,
-        KubernetesServicePatch,
         MetricsEndpointConsumer,
         GrafanaDashboard,
     ),
@@ -60,14 +55,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+        self.unit.open_port(protocol="tcp", port=self._http_listen_port)
+        self.unit.open_port(protocol="tcp", port=self._grpc_listen_port)
 
-        self.service_patch = KubernetesServicePatch(
-            self,
-            [
-                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
-                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
-            ],
-        )
         self._scrape = MetricsEndpointConsumer(self)
         self.framework.observe(
             self._scrape.on.targets_changed,  # pyright: ignore

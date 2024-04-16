@@ -9,9 +9,7 @@ from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
 
 
-@patch("charm.KubernetesServicePatch", lambda *_, **__: None)
 class TestRelationStatus(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda *_, **__: None)
     def setUp(self, *unused):
         patcher = patch.object(GrafanaAgentCharm, "_agent_version", property(lambda *_: "0.0.0"))
         self.mock_version = patcher.start()
