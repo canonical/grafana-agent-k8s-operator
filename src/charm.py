@@ -55,8 +55,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self.unit.open_port(protocol="tcp", port=self._http_listen_port)
-        self.unit.open_port(protocol="tcp", port=self._grpc_listen_port)
+        self.unit.set_ports(self._http_listen_port, self._grpc_listen_port)
 
         self._scrape = MetricsEndpointConsumer(self)
         self.framework.observe(
