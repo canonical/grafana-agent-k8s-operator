@@ -27,7 +27,7 @@ from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -142,8 +142,8 @@ class GrafanaAgentCharm(CharmBase):
         self.cert = CertHandler(
             self,
             key="grafana-agent-cert",
-            peer_relation_name="peers",
         )
+
         self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
 
         self._cloud = GrafanaCloudConfigRequirer(self)
@@ -488,13 +488,13 @@ class GrafanaAgentCharm(CharmBase):
 
         # Write TLS files
         if self.cert.enabled:
-            if not (self.cert.cert and self.cert.key and self.cert.ca):
+            if not (self.cert.server_cert and self.cert.private_key and self.cert.ca_cert):
                 self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
                 self.stop()
                 return
-            self.write_file(self._cert_path, self.cert.cert)
-            self.write_file(self._key_path, self.cert.key)
-            self.write_file(self._ca_path, self.cert.ca)
+            self.write_file(self._cert_path, self.cert.server_cert)
+            self.write_file(self._key_path, self.cert.private_key)
+            self.write_file(self._ca_path, self.cert.ca_cert)
         else:
             # Delete TLS related files if they exist
             try:
@@ -812,7 +812,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _update_ca(self) -> None:
         """Updates the CA cert on disk from cert_manager."""
-        if (not self.cert.enabled) or (not self.cert.ca):
+        if (not self.cert.enabled) or (not self.cert.ca_cert):
             try:
                 self.read_file(self._ca_path)
             except (FileNotFoundError, PathError):
@@ -820,5 +820,5 @@ class GrafanaAgentCharm(CharmBase):
             else:
                 self.delete_file(self._ca_path)
         else:
-            self.write_file(self._ca_path, self.cert.ca)
+            self.write_file(self._ca_path, self.cert.ca_cert)
         self.run(["update-ca-certificates", "--fresh"])
