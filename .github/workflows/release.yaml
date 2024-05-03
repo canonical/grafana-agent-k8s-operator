@@ -10,3 +10,5 @@ jobs:
   release:
     uses: canonical/observability/.github/workflows/charm-release.yaml@main
     secrets: inherit
+    with:
+      build-for-arm: true
