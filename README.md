@@ -1,4 +1,4 @@
-# Grafana Agent Charmed Operator for Kubernetes
+# Grafana Agent Charmed Operator for Kubernetes 
 
 [![Charmhub Badge](https://charmhub.io/grafana-agent-k8s/badge.svg)](https://charmhub.io/grafana-agent-k8s)
 [![Release Edge](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release.yaml)
