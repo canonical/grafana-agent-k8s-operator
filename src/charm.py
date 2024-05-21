@@ -26,7 +26,7 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
-    server_cert="server_cert_path",
+    server_cert="server_ca_cert_path",
     extra_types=(
         GrafanaAgentCharm,
         LokiPushApiProvider,
@@ -252,9 +252,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         return None
 
     @property
-    def server_cert_path(self) -> Optional[str]:
-        """Server certificate path for tls tracing."""
-        return self._cert_path
+    def server_ca_cert_path(self) -> Optional[str]:
+        """Server CA certificate path for tls tracing."""
+        return self._ca_path if self.cert.enabled else None
 
 
 if __name__ == "__main__":

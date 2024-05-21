@@ -5,11 +5,12 @@
 import json
 import logging
 import os
-import pathlib
 import re
 import shutil
+import subprocess
 from collections import namedtuple
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
@@ -267,7 +268,7 @@ class GrafanaAgentCharm(CharmBase):
         """Checks if the charm is ready for configuration."""
         raise NotImplementedError("Please override the is_ready method")
 
-    def read_file(self, filepath: Union[str, pathlib.Path]):
+    def read_file(self, filepath: Union[str, Path]):
         """Read a file's contents.
 
         Returns:
@@ -275,7 +276,7 @@ class GrafanaAgentCharm(CharmBase):
         """
         raise NotImplementedError("Please override the read_file method")
 
-    def write_file(self, path: Union[str, pathlib.Path], text: str) -> None:
+    def write_file(self, path: Union[str, Path], text: str) -> None:
         """Write text to a file.
 
         Args:
@@ -284,7 +285,7 @@ class GrafanaAgentCharm(CharmBase):
         """
         raise NotImplementedError("Please override the write_file method")
 
-    def delete_file(self, path: Union[str, pathlib.Path]):
+    def delete_file(self, path: Union[str, Path]):
         """Delete a file.
 
         Args:
@@ -390,7 +391,7 @@ class GrafanaAgentCharm(CharmBase):
         else:
             os.mkdir(mapping.dest)
         for topology_identifier, rule in rules.items():
-            file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
+            file_handle = Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
             file_handle.write_text(yaml.dump(rule))
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
         reload_func()
@@ -408,7 +409,7 @@ class GrafanaAgentCharm(CharmBase):
             title = dash.get("title").replace(" ", "_").replace("/", "_").lower()
             filename = f"juju_{title}-{charm}-{rel_id}.json"
 
-            with open(pathlib.Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
+            with open(Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
                 f.write(json.dumps(dash["content"]))
                 logger.debug("updated dashboard file %s", f.name)
 
@@ -495,6 +496,12 @@ class GrafanaAgentCharm(CharmBase):
             self.write_file(self._cert_path, self.cert.server_cert)
             self.write_file(self._key_path, self.cert.private_key)
             self.write_file(self._ca_path, self.cert.ca_cert)
+
+            # push CA certificate to charm container
+            ca_cert_path = Path(self._ca_path)
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.cert.ca_cert)  # pyright: ignore
+            subprocess.run(["update-ca-certificates", "--fresh"], check=True)
         else:
             # Delete TLS related files if they exist
             try:
@@ -517,6 +524,9 @@ class GrafanaAgentCharm(CharmBase):
                 pass
             else:
                 self.delete_file(self._ca_path)
+
+            # charm container CA cert
+            Path(self._ca_path).unlink(missing_ok=True)
 
         config = self._generate_config()
 
