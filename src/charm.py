@@ -7,17 +7,18 @@
 import json
 import logging
 import pathlib
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import yaml
+from cosl import GrafanaDashboard
+from ops.main import main
+from ops.pebble import Layer
+
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer, charm_tracing_config
-from cosl import GrafanaDashboard
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
-from ops.main import main
-from ops.pebble import Layer
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +26,14 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 
 @trace_charm(
+    # implemented in GrafanaAgentCharm
     tracing_endpoint="_tracing_endpoint",
     server_cert="_server_ca_cert_path",
     extra_types=(
-        GrafanaAgentCharm,
-        LokiPushApiProvider,
-        MetricsEndpointConsumer,
-        GrafanaDashboard,
+            GrafanaAgentCharm,
+            LokiPushApiProvider,
+            MetricsEndpointConsumer,
+            GrafanaDashboard,
     ),
 )
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
@@ -62,7 +64,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self, relation_name="logging-provider", port=self._http_listen_port
         )
         self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
-        self._tracing_endpoint, self._server_ca_cert_path = charm_tracing_config(self._tracing, self._ca_path)
 
         self.framework.observe(
             self._loki_provider.on.loki_push_api_alert_rules_changed,  # pyright: ignore
@@ -165,11 +166,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
         return self._loki_provider.alerts
-
-    @property
-    def is_k8s(self) -> bool:
-        """Is this a k8s charm."""
-        return True
 
     @property
     def is_ready(self):
