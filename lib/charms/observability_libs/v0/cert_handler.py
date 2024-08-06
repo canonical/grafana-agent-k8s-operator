@@ -37,7 +37,7 @@ import ipaddress
 import json
 import socket
 from itertools import filterfalse
-from typing import List, Optional, Union
+from typing import List, Optional, Union, cast
 
 try:
     from charms.tls_certificates_interface.v2.tls_certificates import (  # type: ignore
@@ -49,13 +49,16 @@ try:
         generate_csr,
         generate_private_key,
     )
-except ImportError:
+except ImportError as e:
     raise ImportError(
-        "charms.tls_certificates_interface.v2.tls_certificates is missing; please get it through charmcraft fetch-lib"
-    )
+        "failed to import charms.tls_certificates_interface.v2.tls_certificates; "
+        "Either the library itself is missing (please get it through charmcraft fetch-lib) "
+        "or one of its dependencies is unmet."
+    ) from e
+
 import logging
 
-from ops.charm import CharmBase, RelationBrokenEvent
+from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Relation
 
@@ -64,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 LIBID = "b5cd5cd580f3428fa5f59a8876dcbe6a"
 LIBAPI = 0
-LIBPATCH = 9
+LIBPATCH = 14
 
 
 def is_ip_address(value: str) -> bool:
@@ -155,10 +158,6 @@ class CertHandler(Object):
             self.certificates.on.all_certificates_invalidated,  # pyright: ignore
             self._on_all_certificates_invalidated,
         )
-        self.framework.observe(
-            self.charm.on[self.certificates_relation_name].relation_broken,  # pyright: ignore
-            self._on_certificates_relation_broken,
-        )
 
         # Peer relation events
         self.framework.observe(
@@ -237,6 +236,13 @@ class CertHandler(Object):
 
         This method intentionally does not emit any events, leave it for caller's responsibility.
         """
+        # if we are in a relation-broken hook, we might not have a relation to publish the csr to.
+        if not self.charm.model.get_relation(self.certificates_relation_name):
+            logger.warning(
+                f"No {self.certificates_relation_name!r} relation found. " f"Cannot generate csr."
+            )
+            return
+
         # At this point, assuming "peer joined" and "certificates joined" have already fired
         # (caller must guard) so we must have a private_key entry in relation data at our disposal.
         # Otherwise, traceback -> debug.
@@ -375,7 +381,7 @@ class CertHandler(Object):
     def _chain(self) -> List[str]:
         if self._peer_relation:
             if chain := self._peer_relation.data[self.charm.unit].get("chain", []):
-                return json.loads(chain)
+                return cast(list, json.loads(cast(str, chain)))
         return []
 
     @_chain.setter
@@ -415,13 +421,11 @@ class CertHandler(Object):
         self.on.cert_changed.emit()  # pyright: ignore
 
     def _on_all_certificates_invalidated(self, event: AllCertificatesInvalidatedEvent) -> None:
-        # Do what you want with this information, probably remove all certificates
-        # Note: assuming "limit: 1" in metadata
-        self._generate_csr(overwrite=True, clear_cert=True)
-        self.on.cert_changed.emit()  # pyright: ignore
-
-    def _on_certificates_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Clear the certificates data when removing the relation."""
+        # Note: assuming "limit: 1" in metadata
+        # The "certificates_relation_broken" event is converted to "all invalidated" custom
+        # event by the tls-certificates library. Per convention, we let the lib manage the
+        # relation and we do not observe "certificates_relation_broken" directly.
         if self._peer_relation:
             private_key = self._private_key
             # This is a workaround for https://bugs.launchpad.net/juju/+bug/2024583
@@ -429,4 +433,5 @@ class CertHandler(Object):
             if private_key:
                 self._peer_relation.data[self.charm.unit].update({"private_key": private_key})
 
+        # We do not generate a CSR here because the relation is gone.
         self.on.cert_changed.emit()  # pyright: ignore
