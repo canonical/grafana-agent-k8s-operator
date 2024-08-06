@@ -43,7 +43,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util import Retry  # type: ignore
 from yaml.parser import ParserError
 
-from charms.tempo_k8s.v2.tracing import charm_tracing_config, TracingEndpointRequirer, TracingEndpointProvider, Receiver
+from charms.tempo_k8s.v2.tracing import charm_tracing_config, TracingEndpointRequirer, TracingEndpointProvider, ReceiverProtocol, receiver_protocol_to_transport_protocol, TransportProtocolType
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +75,6 @@ class CompoundStatus:
     update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
     validation_error: Optional[BlockedStatus] = None
 
-class TransportProtocolType(str, enum.Enum):
-    """Receiver Type."""
-
-    http = "http"
-    grpc = "grpc"
-
-ReceiverProtocol = Literal["otlp_grpc", "otlp_http", "zipkin", "jaeger_thrift_http", "jaeger_grpc"]
 
 class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
@@ -94,16 +87,6 @@ class GrafanaAgentCharm(CharmBase):
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
     _ca_folder_path = "/usr/local/share/ca-certificates"
-
-    receiver_protocol_to_transport_protocol: Dict[ReceiverProtocol, TransportProtocolType] = {
-        "zipkin": TransportProtocolType.http,
-        "kafka": TransportProtocolType.http,
-        "tempo_http": TransportProtocolType.http,
-        "tempo_grpc": TransportProtocolType.grpc,
-        "otlp_grpc": TransportProtocolType.grpc,
-        "otlp_http": TransportProtocolType.http,
-        "jaeger_thrift_http": TransportProtocolType.http,
-    }
 
     # mapping from tempo-supported receivers to the receiver ports to be opened on the grafana-agent host
     # to ingest traces for them. Note that we 'support' more receivers here than tempo currently does, so
@@ -211,6 +194,14 @@ class GrafanaAgentCharm(CharmBase):
             self._tracing.on.endpoint_removed,  # pyright: ignore
             self._on_tracing_endpoint_removed,
         )
+        self.framework.observe(
+            self._tracing_provider.on.request,  # pyright: ignore
+            self._on_tracing_provider_request,
+        )
+        self.framework.observe(
+            self._tracing_provider.on.broken,  # pyright: ignore
+            self._on_tracing_provider_broken,
+        )
         self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
 
         self.framework.observe(
@@ -262,7 +253,7 @@ class GrafanaAgentCharm(CharmBase):
                     self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
                     self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
 
-    def _get_tracing_receiver_url(self, protocol: str):
+    def _get_tracing_receiver_url(self, protocol: ReceiverProtocol):
         scheme = "http"
         try:
             if self._charm.cert.available:  # type: ignore
@@ -271,7 +262,7 @@ class GrafanaAgentCharm(CharmBase):
             pass
 
         # assume we're doing this in-model, since this charm doesn't have ingress
-        if self.receiver_protocol_to_transport_protocol[protocol] == TransportProtocolType.grpc:
+        if receiver_protocol_to_transport_protocol[protocol] == TransportProtocolType.grpc:
             return f"{socket.getfqdn()}:{self._tracing_receivers_ports[protocol]}"
         return f"{scheme}://{socket.getfqdn()}:{self._tracing_receivers_ports[protocol]}"
 
@@ -305,11 +296,25 @@ class GrafanaAgentCharm(CharmBase):
         """Event handler for the tracing endpoint-changed event."""
         self._update_config()
         self._update_status()
+        self._update_tracing_provider()
 
     def _on_tracing_endpoint_removed(self, _event) -> None:
         """Event handler for the tracing endpoint-removed event."""
         self._update_config()
         self._update_status()
+        self._update_tracing_provider()
+
+    def _on_tracing_provider_request(self, _event) -> None:
+        """Event handler for the tracing-provider request event."""
+        self._update_config()
+        self._update_status()
+        self._update_tracing_provider()
+
+    def _on_tracing_provider_broken(self, _event) -> None:
+        """Event handler for the tracing-provider broken event."""
+        self._update_config()
+        self._update_status()
+        self._update_tracing_provider()
 
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
@@ -317,6 +322,7 @@ class GrafanaAgentCharm(CharmBase):
         self._update_loki_alerts()
         self._update_config()
         self._update_status()
+        self._update_tracing_provider()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
@@ -332,14 +338,17 @@ class GrafanaAgentCharm(CharmBase):
         """Rebuild the config."""
         self._update_config()
         self._update_status()
+        self._update_tracing_provider()
 
     def _on_cloud_config_available(self, _) -> None:
         logger.info("cloud config available")
         self._update_config()
+        self._update_tracing_provider()
 
     def _on_cloud_config_revoked(self, _) -> None:
         logger.info("cloud config revoked")
         self._update_config()
+        self._update_tracing_provider()
 
     def _on_cert_transfer_available(self, event: CertificateTransferAvailableEvent):
         cert_filename = (
@@ -528,7 +537,7 @@ class GrafanaAgentCharm(CharmBase):
         """Determine the charm status based on relation health and grafana-agent service readiness.
 
         This is a centralized status setter. Status should only be calculated here, or, if you need
-        to temporarily change the status (e.g. during snap install), always call this method after
+        to temporarily change the status (e.g. during install), always call this method after
         so the status is re-calculated (exceptions: on_install, on_remove).
         TODO: Rework this when "compound status" is implemented
          https://github.com/canonical/operator/issues/665
@@ -595,13 +604,6 @@ class GrafanaAgentCharm(CharmBase):
             self.write_file(self._key_path, self.cert.private_key)
             self.write_file(self._ca_path, self.cert.ca_cert)
 
-            if os.path.exists(self._snap_folder_path):
-                # copy cert files within the snap context as well until snap is able to connect to certificate files.
-                # ref: https://github.com/canonical/grafana-agent-snap/issues/71
-                self.write_file(self._snap_cert_path, self.cert.server_cert)
-                self.write_file(self._snap_key_path, self.cert.private_key)
-                self.write_file(self._snap_ca_path, self.cert.ca_cert)
-
             # push CA certificate to charm container
             ca_cert_path = Path(self._ca_path)
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
@@ -612,9 +614,6 @@ class GrafanaAgentCharm(CharmBase):
             self._delete_file_if_exists(self._cert_path)
             self._delete_file_if_exists(self._key_path)
             self._delete_file_if_exists(self._ca_path)
-            self._delete_file_if_exists(self._snap_cert_path)
-            self._delete_file_if_exists(self._snap_key_path)
-            self._delete_file_if_exists(self._snap_ca_path)
 
             # charm container CA cert
             Path(self._ca_path).unlink(missing_ok=True)
@@ -855,9 +854,6 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with the receivers config.
         """
-        if not self._tracing.is_ready():
-            return {}
-
         receivers_set = self._requested_tracing_protocols
 
         if not receivers_set:
@@ -867,9 +863,9 @@ class GrafanaAgentCharm(CharmBase):
         if self.cert.enabled:
             base_receiver_config: Dict[str, Union[str, Dict]] = {
                 "tls": {
-                    "ca_file": str(self._snap_ca_path),
-                    "cert_file": str(self._snap_cert_path),
-                    "key_file": str(self._snap_key_path),
+                    "ca_file": str(self._ca_path),
+                    "cert_file": str(self._cert_path),
+                    "key_file": str(self._key_path),
                     "min_version": "",
                 }
             }

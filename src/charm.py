@@ -17,7 +17,6 @@ from ops.pebble import Layer
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
@@ -63,8 +62,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
-        self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
-
         self.framework.observe(
             self._loki_provider.on.loki_push_api_alert_rules_changed,  # pyright: ignore
             self._on_loki_push_api_alert_rules_changed,
