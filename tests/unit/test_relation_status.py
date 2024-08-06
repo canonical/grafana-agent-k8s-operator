@@ -9,9 +9,7 @@ from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
 
 
-@patch("charm.KubernetesServicePatch", lambda *_, **__: None)
 class TestRelationStatus(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda *_, **__: None)
     def setUp(self, *unused):
         patcher = patch.object(GrafanaAgentCharm, "_agent_version", property(lambda *_: "0.0.0"))
         self.mock_version = patcher.start()
@@ -43,21 +41,21 @@ class TestRelationStatus(unittest.TestCase):
         ]:
             with self.subTest(incoming=incoming, outgoing=outgoing):
                 # WHEN an incoming relation is added
-                rel_incoming_id = self.harness.add_relation(incoming, "grafana-agent")
-                self.harness.add_relation_unit(rel_incoming_id, "grafana-agent/0")
+                rel_incoming_id = self.harness.add_relation(incoming, "incoming")
+                self.harness.add_relation_unit(rel_incoming_id, "incoming/0")
                 self.harness.update_relation_data(
-                    rel_incoming_id, "grafana-agent/0", {"sample": "value"}
+                    rel_incoming_id, "incoming/0", {"sample": "value"}
                 )
 
                 # THEN the charm goes into blocked status
                 self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
                 # AND WHEN an appropriate outgoing relation is added
-                rel_outgoing_id = self.harness.add_relation(outgoing, "grafana-agent")
-                self.harness.add_relation_unit(rel_outgoing_id, "grafana-agent/0")
+                rel_outgoing_id = self.harness.add_relation(outgoing, "outgoing")
+                self.harness.add_relation_unit(rel_outgoing_id, "outgoing/0")
 
                 # THEN the charm goes into active status
                 self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-                # Remove incoming relation.
+                # Remove incoming relation (cleanup for the next subTest).
                 self.harness.remove_relation(rel_incoming_id)

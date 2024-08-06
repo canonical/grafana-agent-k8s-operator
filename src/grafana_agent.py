@@ -5,11 +5,12 @@
 import json
 import logging
 import os
-import pathlib
 import re
 import shutil
+import subprocess
 from collections import namedtuple
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
@@ -26,11 +27,12 @@ from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
     GrafanaCloudConfigRequirer,
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
+from cosl import MandatoryRelationPairs
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import APIError, PathError
@@ -80,7 +82,7 @@ class GrafanaAgentCharm(CharmBase):
     _cert_path = "/tmp/agent/grafana-agent.pem"
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
-    _ca_folder_path = "/usr/loca/share/ca-certificates"
+    _ca_folder_path = "/usr/local/share/ca-certificates"
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
@@ -141,8 +143,8 @@ class GrafanaAgentCharm(CharmBase):
         self.cert = CertHandler(
             self,
             key="grafana-agent-cert",
-            peer_relation_name="peers",
         )
+
         self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
 
         self._cloud = GrafanaCloudConfigRequirer(self)
@@ -266,7 +268,7 @@ class GrafanaAgentCharm(CharmBase):
         """Checks if the charm is ready for configuration."""
         raise NotImplementedError("Please override the is_ready method")
 
-    def read_file(self, filepath: Union[str, pathlib.Path]):
+    def read_file(self, filepath: Union[str, Path]):
         """Read a file's contents.
 
         Returns:
@@ -274,7 +276,7 @@ class GrafanaAgentCharm(CharmBase):
         """
         raise NotImplementedError("Please override the read_file method")
 
-    def write_file(self, path: Union[str, pathlib.Path], text: str) -> None:
+    def write_file(self, path: Union[str, Path], text: str) -> None:
         """Write text to a file.
 
         Args:
@@ -283,7 +285,7 @@ class GrafanaAgentCharm(CharmBase):
         """
         raise NotImplementedError("Please override the write_file method")
 
-    def delete_file(self, path: Union[str, pathlib.Path]):
+    def delete_file(self, path: Union[str, Path]):
         """Delete a file.
 
         Args:
@@ -389,7 +391,7 @@ class GrafanaAgentCharm(CharmBase):
         else:
             os.mkdir(mapping.dest)
         for topology_identifier, rule in rules.items():
-            file_handle = pathlib.Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
+            file_handle = Path(mapping.dest, "juju_{}.rules".format(topology_identifier))
             file_handle.write_text(yaml.dump(rule))
             logger.debug("updated alert rules file {}".format(file_handle.absolute()))
         reload_func()
@@ -407,7 +409,7 @@ class GrafanaAgentCharm(CharmBase):
             title = dash.get("title").replace(" ", "_").replace("/", "_").lower()
             filename = f"juju_{title}-{charm}-{rel_id}.json"
 
-            with open(pathlib.Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
+            with open(Path(mapping.dest, filename), mode="w", encoding="utf-8") as f:
                 f.write(json.dumps(dash["content"]))
                 logger.debug("updated dashboard file %s", f.name)
 
@@ -446,70 +448,39 @@ class GrafanaAgentCharm(CharmBase):
             self.unit.status = self.status.validation_error
             return
 
-        has_incoming = False
-        outgoing_rels = {"has": False, "message": ""}
-
-        # Make sure every incoming relation has at least one matching outgoing relation
-        for incoming, outgoings in self.mandatory_relation_pairs.items():
-            if not self.model.relations.get(incoming):
-                continue
-
-            has_incoming = True
-            outgoing_rels = self._has_outgoings(outgoings)
-
-        if not has_incoming:
-            self.unit.status = BlockedStatus("Missing incoming ('requires') relation")
+        # Put charm in blocked status if all incoming relations are missing
+        active_relations = {k for k, v in self.model.relations.items() if v}
+        if not set(self.mandatory_relation_pairs.keys()).intersection(active_relations):
+            self.unit.status = BlockedStatus(
+                "Missing incoming ('requires') relation: {}".format(
+                    "|".join(self.mandatory_relation_pairs.keys())
+                )
+            )
             return
 
-        if not outgoing_rels["has"]:
-            self.unit.status = BlockedStatus(f"{outgoing_rels['message']}")
+        if missing := MandatoryRelationPairs(self.mandatory_relation_pairs).get_missing_as_str(
+            *active_relations
+        ):
+            self.unit.status = BlockedStatus(f"Missing {missing}")
             return
 
         if not self.is_ready:
             self.unit.status = WaitingStatus("waiting for the agent to start")
             return
 
-        self.unit.status = ActiveStatus(f"{outgoing_rels['message']}")
-
-    def _has_outgoings(self, outgoings: List[Set[str]]) -> Dict[str, Any]:
-        missing_rels = set()
-        active_rels = set()
-
-        for outgoing_list in outgoings:
-            for outgoing in outgoing_list:
-                relation = self.model.relations.get(outgoing, False)
-
-                if not relation:
-                    missing_rels.add(outgoing)
-                    continue
-
-                try:
-                    units = relation[0].units  # pyright: ignore
-                except IndexError:
-                    missing_rels.add(outgoing)
-                    units = None
-
-                if not units:
-                    missing_rels.add(outgoing)
-
-                if relation and units:
-                    active_rels.add(outgoing)
-
-        return {"has": bool(active_rels), "message": self._status_message(missing_rels)}
-
-    def _status_message(self, missing_relations: set) -> str:
-        if not missing_relations:
-            return ""
-
-        # The grafana-cloud-config relation is  established
-        if "grafana-cloud-config" not in missing_relations:
-            return ""
-
-        # The other 3 relations (logs, metrics, dashboards) are established
-        if len(missing_relations) == 1 and "grafana-cloud-config" in missing_relations:
-            return ""
-
-        return ", ".join([f"{x}: off" for x in missing_relations])
+        # If only _some_ of the COS relations are present, we do not want to block, but we do want
+        # to inform via the Active message that they are in fact missing ("soft" warning).
+        cos_rels = {
+            "send-remote-write",
+            "logging-consumer",
+            "grafana-dashboards-provider",
+        }
+        missing_rels = (
+            cos_rels.difference(active_relations)
+            if cos_rels.intersection(active_relations)
+            else set()
+        )
+        self.unit.status = ActiveStatus(", ".join([f"{x}: off" for x in missing_rels]))
 
     def _update_config(self) -> None:
         if not self.is_ready:
@@ -518,13 +489,19 @@ class GrafanaAgentCharm(CharmBase):
 
         # Write TLS files
         if self.cert.enabled:
-            if not (self.cert.cert and self.cert.key and self.cert.ca):
+            if not (self.cert.server_cert and self.cert.private_key and self.cert.ca_cert):
                 self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
                 self.stop()
                 return
-            self.write_file(self._cert_path, self.cert.cert)
-            self.write_file(self._key_path, self.cert.key)
-            self.write_file(self._ca_path, self.cert.ca)
+            self.write_file(self._cert_path, self.cert.server_cert)
+            self.write_file(self._key_path, self.cert.private_key)
+            self.write_file(self._ca_path, self.cert.ca_cert)
+
+            # push CA certificate to charm container
+            ca_cert_path = Path(self._ca_path)
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.cert.ca_cert)  # pyright: ignore
+            subprocess.run(["update-ca-certificates", "--fresh"], check=True)
         else:
             # Delete TLS related files if they exist
             try:
@@ -547,6 +524,9 @@ class GrafanaAgentCharm(CharmBase):
                 pass
             else:
                 self.delete_file(self._ca_path)
+
+            # charm container CA cert
+            Path(self._ca_path).unlink(missing_ok=True)
 
         config = self._generate_config()
 
@@ -842,7 +822,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _update_ca(self) -> None:
         """Updates the CA cert on disk from cert_manager."""
-        if (not self.cert.enabled) or (not self.cert.ca):
+        if (not self.cert.enabled) or (not self.cert.ca_cert):
             try:
                 self.read_file(self._ca_path)
             except (FileNotFoundError, PathError):
@@ -850,5 +830,5 @@ class GrafanaAgentCharm(CharmBase):
             else:
                 self.delete_file(self._ca_path)
         else:
-            self.write_file(self._ca_path, self.cert.ca)
+            self.write_file(self._ca_path, self.cert.ca_cert)
         self.run(["update-ca-certificates", "--fresh"])

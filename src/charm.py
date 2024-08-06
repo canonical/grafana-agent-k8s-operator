@@ -7,15 +7,13 @@
 import json
 import logging
 import pathlib
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from cosl import GrafanaDashboard
 from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
@@ -26,6 +24,16 @@ logger = logging.getLogger(__name__)
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 
+@trace_charm(
+    tracing_endpoint="tracing_endpoint",
+    server_cert="server_ca_cert_path",
+    extra_types=(
+        GrafanaAgentCharm,
+        LokiPushApiProvider,
+        MetricsEndpointConsumer,
+        GrafanaDashboard,
+    ),
+)
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
 
@@ -47,14 +55,8 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+        self.unit.set_ports(self._http_listen_port, self._grpc_listen_port)
 
-        self.service_patch = KubernetesServicePatch(
-            self,
-            [
-                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
-                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
-            ],
-        )
         self._scrape = MetricsEndpointConsumer(self)
         self.framework.observe(
             self._scrape.on.targets_changed,  # pyright: ignore
@@ -70,8 +72,13 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             self._on_loki_push_api_alert_rules_changed,
         )
 
+        self._tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
         self.framework.observe(
             self.on["grafana-dashboards-consumer"].relation_changed,
+            self._on_dashboards_changed,
+        )
+        self.framework.observe(
+            self.on["grafana-dashboards-consumer"].relation_broken,
             self._on_dashboards_changed,
         )
 
@@ -235,7 +242,19 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         Args:
             cmd: Command to be run.
         """
-        self._container.exec(cmd)
+        self._container.exec(cmd).wait()
+
+    @property
+    def tracing_endpoint(self) -> Optional[str]:
+        """Otlp http endpoint for charm instrumentation."""
+        if self._tracing.is_ready():
+            return self._tracing.get_endpoint("otlp_http")
+        return None
+
+    @property
+    def server_ca_cert_path(self) -> Optional[str]:
+        """Server CA certificate path for tls tracing."""
+        return self._ca_path if self.cert.enabled else None
 
 
 if __name__ == "__main__":
