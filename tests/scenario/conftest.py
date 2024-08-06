@@ -3,8 +3,7 @@ from pathlib import Path, PosixPath
 
 import pytest
 
-from tests.scenario.helpers import CHARM_ROOT
-
+CHARM_ROOT = Path(__file__).parent.parent.parent
 
 class Vroot(PosixPath):
     def clean(self) -> None:
