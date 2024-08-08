@@ -582,7 +582,8 @@ class GrafanaAgentCharm(CharmBase):
             "logging-consumer",
             "grafana-dashboards-provider",
         }
-        missing_rels = (
+        # sorting is so that the order doesn't keep flapping on each hook depending on <whims>
+        missing_rels = sorted(
             cos_rels.difference(active_relations)
             if cos_rels.intersection(active_relations)
             else set()

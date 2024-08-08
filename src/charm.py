@@ -47,6 +47,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             {"logging-consumer"},  # or
             {"grafana-cloud-config"},
         ],
+        "tracing-provider": [  # must be paired with:
+            {"tracing"},  # or
+            {"grafana-cloud-config"},
+        ],
         "grafana-dashboards-consumer": [  # must be paired with:
             {"grafana-dashboards-provider"},  # or
             {"grafana-cloud-config"},

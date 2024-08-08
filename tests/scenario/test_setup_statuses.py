@@ -60,7 +60,7 @@ def test_charm_start_with_container(vroot):
     out = context.run(agent.pebble_ready_event, state)
 
     assert out.unit_status == BlockedStatus(
-        "Missing incoming ('requires') relation: metrics-endpoint|logging-provider|grafana-dashboards-consumer"
+        "Missing incoming ('requires') relation: metrics-endpoint|logging-provider|tracing-provider|grafana-dashboards-consumer"
     )
     agent_out = out.get_container("agent")
     assert agent_out.services["agent"].current == pebble.ServiceStatus.ACTIVE
