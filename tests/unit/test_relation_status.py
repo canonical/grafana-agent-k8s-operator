@@ -21,6 +21,7 @@ class TestRelationStatus(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
+        self.harness.evaluate_status()
 
     def test_no_relations(self):
         # GIVEN no relations joined (see SetUp)
@@ -30,6 +31,7 @@ class TestRelationStatus(unittest.TestCase):
 
         # AND WHEN "update-status" fires
         self.harness.charm.on.update_status.emit()
+        self.harness.evaluate_status()
         # THEN status is still "blocked"
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
@@ -48,6 +50,7 @@ class TestRelationStatus(unittest.TestCase):
                 )
 
                 # THEN the charm goes into blocked status
+                self.harness.evaluate_status()
                 self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
                 # AND WHEN an appropriate outgoing relation is added
@@ -55,6 +58,7 @@ class TestRelationStatus(unittest.TestCase):
                 self.harness.add_relation_unit(rel_outgoing_id, "outgoing/0")
 
                 # THEN the charm goes into active status
+                self.harness.evaluate_status()
                 self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
                 # Remove incoming relation (cleanup for the next subTest).

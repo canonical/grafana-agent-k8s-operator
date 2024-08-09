@@ -192,6 +192,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.assertEqual(
             DeepDiff(expected_config, self.harness.charm._generate_config(), ignore_order=True), {}
         )
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.model.unit.status, ActiveStatus)
 
         # Test scale down
@@ -327,11 +328,19 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.assertEqual({}, self.harness.charm._loki_config)
 
     def test_loki_config_with_tls(self):
+        rel_id = self.harness.add_relation("logging-consumer", "loki")
+
+        for u in range(2):
+            self.harness.add_relation_unit(rel_id, f"loki/{u}")
+            endpoint = json.dumps({"url": f"http://loki{u}:3100:/loki/api/v1/push"})
+            self.harness.update_relation_data(rel_id, f"loki/{u}", {"endpoint": endpoint})
+
         rel_id = self.harness.add_relation("certificates", "certs")
         self.harness.add_relation_unit(rel_id, "certs/0")
         self.harness.update_relation_data(rel_id, "certs", {"certificates": CERTS_RELATION_DATA})
-        configs = self.harness.charm._loki_config
-        for config in configs:
+        loki_config = self.harness.charm._loki_config
+
+        for config in loki_config['configs']:
             for scrape_config in config.get("scrape_configs", []):
                 if scrape_config.get("loki_push_api"):
                     self.assertIn("http_tls_config", scrape_config["loki_push_api"]["server"])

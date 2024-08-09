@@ -1,27 +1,20 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
+import pytest
 
 import charm
 from ops import BlockedStatus, UnknownStatus, pebble
 from scenario import Container, Context, ExecOutput, State
 
 
-def test_install(vroot):
+@pytest.mark.parametrize("event", ("start", "install"))
+def test_install(vroot, event):
     context = Context(
         charm.GrafanaAgentK8sCharm,
         charm_root=vroot,
     )
-    out = context.run("install", State())
-    assert out.unit_status == UnknownStatus()
-
-
-def test_start(vroot):
-    context = Context(
-        charm.GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
-    out = context.run("start", State())
-    assert out.unit_status == UnknownStatus()
+    out = context.run(event, State(containers=[Container("agent")]))
+    assert out.unit_status == BlockedStatus("Missing incoming ('requires') relation: metrics-endpoint|logging-provider|tracing-provider|grafana-dashboards-consumer")
 
 
 def test_charm_start_with_container(vroot):

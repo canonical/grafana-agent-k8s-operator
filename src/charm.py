@@ -131,7 +131,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             logger.debug(
                 "Cannot set workload version at this time: could not get grafana-agent version."
             )
-        self._update_status()
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
