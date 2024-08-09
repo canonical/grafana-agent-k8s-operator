@@ -49,5 +49,3 @@ def test_dashboard_propagation(vroot):
         assert dash["charm"] == expected["charm"]
         assert dash["title"] == expected["title"]
         assert dash["content"] == expected["content"]._deserialize()
-
-

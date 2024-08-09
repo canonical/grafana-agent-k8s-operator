@@ -184,6 +184,7 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
             "server": {"log_level": "info"},
             "logs": {},
+            "traces": {},
         }
 
         config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())

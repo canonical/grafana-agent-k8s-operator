@@ -2,7 +2,6 @@
 # See LICENSE file for licensing details.
 
 """Common logic for both k8s and machine charms for Grafana Agent."""
-import enum
 import json
 import logging
 import os
@@ -13,7 +12,7 @@ import subprocess
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, get_args, Literal
+from typing import Any, Callable, Dict, List, Optional, Set, Union, get_args
 
 import yaml
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -34,6 +33,14 @@ from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
+from charms.tempo_k8s.v2.tracing import (
+    ReceiverProtocol,
+    TracingEndpointProvider,
+    TracingEndpointRequirer,
+    TransportProtocolType,
+    charm_tracing_config,
+    receiver_protocol_to_transport_protocol,
+)
 from cosl import MandatoryRelationPairs
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
@@ -42,8 +49,6 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util import Retry  # type: ignore
 from yaml.parser import ParserError
-
-from charms.tempo_k8s.v2.tracing import charm_tracing_config, TracingEndpointRequirer, TracingEndpointProvider, ReceiverProtocol, receiver_protocol_to_transport_protocol, TransportProtocolType
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +94,6 @@ class GrafanaAgentCharm(CharmBase):
     _ca_folder_path = "/usr/local/share/ca-certificates"
 
     # mapping from tempo-supported receivers to the receiver ports to be opened on the grafana-agent host
-    # to ingest traces for them. Note that we 'support' more receivers here than tempo currently does, so
-    # that if in the future we decide to enable the receivers in tempo, we don't need to make changes
-    # to grafana-agent.
     _tracing_receivers_ports: Dict[ReceiverProtocol, int] = {
         # OTLP receiver: see
         #   https://github.com/open-telemetry/opentelemetry-collector/tree/v0.96.0/receiver/otlpreceiver
@@ -177,7 +179,7 @@ class GrafanaAgentCharm(CharmBase):
         self._tracing_provider = TracingEndpointProvider(
             self,
             # TODO: do we have an external url via ingress?
-            relation_name="tracing-provider"
+            relation_name="tracing-provider",
         )
 
         self._tracing_endpoint, self._server_ca_cert_path = charm_tracing_config(
@@ -269,20 +271,25 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _force_enabled_tracing_protocols(self) -> Set[ReceiverProtocol]:
         """Return a list of tracing receivers that have been force-enabled (by config)."""
-        return {receiver
+        return {
+            receiver
             for receiver in get_args(ReceiverProtocol)
             if self.config.get(f"always_enable_{receiver}")
-                }
+        }
 
     @property
     def _requested_tracing_protocols(self) -> Set[ReceiverProtocol]:
         """All receiver protocols that have been requested by our related apps."""
-        return set(self._tracing_provider.requested_protocols()).union(self._force_enabled_tracing_protocols)
+        return set(self._tracing_provider.requested_protocols()).union(
+            self._force_enabled_tracing_protocols
+        )
 
     def _update_tracing_provider(self):
         self._tracing_provider.publish_receivers(
-            tuple((protocol, self._get_tracing_receiver_url(protocol))
-                  for protocol in self._requested_tracing_protocols)
+            tuple(
+                (protocol, self._get_tracing_receiver_url(protocol))
+                for protocol in self._requested_tracing_protocols
+            )
         )
 
     def _on_cert_changed(self, _event):
@@ -478,11 +485,11 @@ class GrafanaAgentCharm(CharmBase):
         return maybe_func
 
     def update_alerts_rules(
-            self,
-            alerts_func: Any,
-            reload_func: Callable,
-            mapping: RulesMapping,
-            copy_files: bool = False,
+        self,
+        alerts_func: Any,
+        reload_func: Callable,
+        mapping: RulesMapping,
+        copy_files: bool = False,
     ):
         """Copy alert rules from relations and save them to disk."""
         # MetricsEndpointConsumer.alerts is not @property, but Loki is, so
@@ -503,7 +510,7 @@ class GrafanaAgentCharm(CharmBase):
         reload_func()
 
     def update_dashboards(
-            self, dashboards: Any, reload_func: Callable, mapping: RulesMapping
+        self, dashboards: Any, reload_func: Callable, mapping: RulesMapping
     ) -> None:
         """Copy dashboards from relations, save them to disk, and update."""
         shutil.rmtree(mapping.dest)
@@ -565,7 +572,7 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         if missing := MandatoryRelationPairs(self.mandatory_relation_pairs).get_missing_as_str(
-                *active_relations
+            *active_relations
         ):
             self.unit.status = BlockedStatus(f"Missing {missing}")
             return
@@ -671,6 +678,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _prometheus_endpoints_with_tls(self) -> List[Dict[str, Any]]:
         """Add TLS information to Prometheus endpoints.
+
         Also, injects the grafana-cloud-integrator endpoints into those we get from juju relations.
         FIXME: these should be separate concerns.
         """
@@ -689,10 +697,10 @@ class GrafanaAgentCharm(CharmBase):
 
     def _loki_endpoints_with_tls(self) -> List[Dict[str, Any]]:
         """Add TLS information to Loki endpoints.
+
         Also, injects the grafana-cloud-integrator endpoints into those we get from juju relations.
         FIXME: these should be separate concerns.
         """
-
         loki_endpoints = self._loki_consumer.loki_endpoints
 
         if self._cloud.loki_ready:
@@ -713,6 +721,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _tempo_endpoints_with_tls(self) -> List[Dict[str, Any]]:
         """Add TLS information to Tempo endpoints.
+
         Also, injects the grafana-cloud-integrator endpoints into those we get from juju relations.
         FIXME: these should be separate concerns.
         """
@@ -852,6 +861,7 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _tracing_receivers(self) -> Dict[str, Union[Any, List[Any]]]:
         """Receivers configuration for tracing.
+
         Returns:
             a dict with the receivers config.
         """
@@ -905,6 +915,7 @@ class GrafanaAgentCharm(CharmBase):
     @property
     def _tempo_config(self) -> Dict[str, Union[Any, List[Any]]]:
         """The tracing section of the config.
+
         Returns:
             a dict with the tracing config.
         """

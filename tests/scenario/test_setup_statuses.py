@@ -1,30 +1,9 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-from unittest.mock import patch, MagicMock
-
-import pytest
-from ops import BlockedStatus, UnknownStatus, pebble
-from scenario import Container, Context, ExecOutput, State
 
 import charm
-import grafana_agent
-
-
-@pytest.fixture
-def mock_cfg_path(tmp_path):
-    return tmp_path / "foo.yaml"
-
-
-@pytest.fixture(autouse=True)
-def patch_all(mock_cfg_path):
-    grafana_agent.CONFIG_PATH = mock_cfg_path
-
-    procmock = MagicMock()
-    procmock.returncode = 0
-    procmock.stdout = ""
-
-    with patch("subprocess.run", new_callable=lambda: procmock):
-        yield
+from ops import BlockedStatus, UnknownStatus, pebble
+from scenario import Container, Context, ExecOutput, State
 
 
 def test_install(vroot):
