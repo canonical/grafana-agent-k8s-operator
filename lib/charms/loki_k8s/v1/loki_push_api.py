@@ -16,20 +16,24 @@ The provider side of the relation represents the server side, to which logs are 
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
 For instance, a Promtail or Grafana agent charm which needs to send logs to Loki.
 
-- `LogProxyConsumer`: This object can be used by any Charmed Operator which needs to
-send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
-`loki_push_api` relation interface.
+- `LogProxyConsumer`: DEPRECATED.
+This object can be used by any Charmed Operator which needs to send telemetry, such as logs, to
+Loki through a Log Proxy by implementing the consumer side of the `loki_push_api` relation
+interface.
+In order to be able to control the labels on the logs pushed this object adds a Pebble layer
+that runs Promtail in the workload container, injecting Juju topology labels into the
+logs on the fly.
+This object is deprecated. Consider migrating to LogForwarder with the release of Juju 3.6 LTS.
 
 - `LogForwarder`: This object can be used by any Charmed Operator which needs to send the workload
 standard output (stdout) through Pebble's log forwarding mechanism, to Loki endpoints through the
 `loki_push_api` relation interface.
+In order to be able to control the labels on the logs pushed this object updates the pebble layer's
+"log-targets" section with Juju topology.
 
 Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
 topology labels are used to uniquely identify the workload which generates telemetry like logs.
 
-In order to be able to control the labels on the logs pushed this object adds a Pebble layer
-that runs Promtail in the workload container, injecting Juju topology labels into the
-logs on the fly.
 
 ## LokiPushApiProvider Library Usage
 
@@ -42,13 +46,14 @@ and three optional arguments.
 - `charm`: A reference to the parent (Loki) charm.
 
 - `relation_name`: The name of the relation that the charm uses to interact
-  with its clients, which implement `LokiPushApiConsumer` or `LogProxyConsumer`.
+  with its clients, which implement `LokiPushApiConsumer` `LogForwarder`, or `LogProxyConsumer`
+  (note that LogProxyConsumer is deprecated).
 
   If provided, this relation name must match a provided relation in metadata.yaml with the
   `loki_push_api` interface.
 
-  The default relation name is "logging" for `LokiPushApiConsumer` and "log-proxy" for
-  `LogProxyConsumer`.
+  The default relation name is "logging" for `LokiPushApiConsumer` and `LogForwarder`, and
+  "log-proxy" for `LogProxyConsumer` (note that LogProxyConsumer is deprecated).
 
   For example, a provider's `metadata.yaml` file may look as follows:
 
@@ -222,6 +227,9 @@ labels in charm code. See :func:`LogProxyConsumer._scrape_configs` for an exampl
 to do this with promtail.
 
 ## LogProxyConsumer Library Usage
+
+> Note: This object is deprecated. Consider migrating to LogForwarder with the release of Juju 3.6
+> LTS.
 
 Let's say that we have a workload charm that produces logs, and we need to send those logs to a
 workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana Agent`.
@@ -519,7 +527,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 12
 
 PYDEPS = ["cosl"]
 
@@ -534,13 +542,21 @@ PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/dow
 # To update Promtail version you only need to change the PROMTAIL_VERSION and
 # update all sha256 sums in PROMTAIL_BINARIES. To support a new architecture
 # you only need to add a new key value pair for the architecture in PROMTAIL_BINARIES.
-PROMTAIL_VERSION = "v2.5.0"
+PROMTAIL_VERSION = "v2.9.7"
+PROMTAIL_ARM_BINARY = {
+    "filename": "promtail-static-arm64",
+    "zipsha": "c083fdb45e5c794103f974eeb426489b4142438d9e10d0ae272b2aff886e249b",
+    "binsha": "4cd055c477a301c0bdfdbcea514e6e93f6df5d57425ce10ffc77f3e16fec1ddf",
+}
+
 PROMTAIL_BINARIES = {
     "amd64": {
         "filename": "promtail-static-amd64",
-        "zipsha": "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d",
-        "binsha": "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9",
+        "zipsha": "6873cbdabf23062aeefed6de5f00ff382710332af3ab90a48c253ea17e08f465",
+        "binsha": "28da9b99f81296fe297831f3bc9d92aea43b4a92826b8ff04ba433b8cb92fb50",
     },
+    "arm64": PROMTAIL_ARM_BINARY,
+    "aarch64": PROMTAIL_ARM_BINARY,
 }
 
 # Paths in `charm` container
@@ -1585,7 +1601,8 @@ class LokiPushApiConsumer(ConsumerBase):
         the Loki API endpoint to push logs. It is intended for workloads that can speak
         loki_push_api (https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki), such
         as grafana-agent.
-        (If you only need to forward a few workload log files, then use LogProxyConsumer.)
+        (If you need to forward workload stdout logs, then use LogForwarder; if you need to forward
+        log files, then use LogProxyConsumer.)
 
         `LokiPushApiConsumer` can be instantiated as follows:
 
@@ -1760,6 +1777,9 @@ class LogProxyEvents(ObjectEvents):
 class LogProxyConsumer(ConsumerBase):
     """LogProxyConsumer class.
 
+    > Note: This object is deprecated. Consider migrating to LogForwarder with the release of Juju
+    > 3.6 LTS.
+
     The `LogProxyConsumer` object provides a method for attaching `promtail` to
     a workload in order to generate structured logging data from applications
     which traditionally log to syslog or do not have native Loki integration.
@@ -1831,7 +1851,12 @@ class LogProxyConsumer(ConsumerBase):
 
         # architecture used for promtail binary
         arch = platform.processor()
-        self._arch = "amd64" if arch == "x86_64" else arch
+        if arch in ["x86_64", "amd64"]:
+            self._arch = "amd64"
+        elif arch in ["aarch64", "arm64", "armv8b", "armv8l"]:
+            self._arch = "arm64"
+        else:
+            self._arch = arch
 
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_created, self._on_relation_created)
@@ -2537,7 +2562,9 @@ class LogForwarder(ConsumerBase):
             return
 
         for container in self._charm.unit.containers.values():
-            self._update_endpoints(container, loki_endpoints)
+            if container.can_connect():
+                self._update_endpoints(container, loki_endpoints)
+            # else: `_update_endpoints` will be called on pebble-ready anyway.
 
     def _retrieve_endpoints_from_relation(self) -> dict:
         loki_endpoints = {}
