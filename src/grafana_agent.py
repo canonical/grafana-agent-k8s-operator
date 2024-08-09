@@ -7,12 +7,13 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 from collections import namedtuple
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union, get_args
 
+import ops
 import yaml
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateAvailableEvent as CertificateTransferAvailableEvent,
@@ -31,6 +32,14 @@ from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
+)
+from charms.tempo_k8s.v2.tracing import (
+    ReceiverProtocol,
+    TracingEndpointProvider,
+    TracingEndpointRequirer,
+    TransportProtocolType,
+    charm_tracing_config,
+    receiver_protocol_to_transport_protocol,
 )
 from cosl import MandatoryRelationPairs
 from ops.charm import CharmBase
@@ -63,26 +72,32 @@ class GrafanaAgentReloadError(Exception):
         super().__init__(self.message)
 
 
-@dataclass
-class CompoundStatus:
-    """'Dumb struct' for helping with centralized status setting."""
-
-    # None = good; do not use ActiveStatus here.
-    update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
-    validation_error: Optional[BlockedStatus] = None
-
-
 class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
 
     _name = "agent"
     _http_listen_port = 3500
     _grpc_listen_port = 3600
-    # TODO Change to a more suitable location once the snap gets access (#216).
+
     _cert_path = "/tmp/agent/grafana-agent.pem"
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
     _ca_folder_path = "/usr/local/share/ca-certificates"
+
+    # mapping from tempo-supported receivers to the receiver ports to be opened on the grafana-agent host
+    _tracing_receivers_ports: Dict[ReceiverProtocol, int] = {
+        # OTLP receiver: see
+        #   https://github.com/open-telemetry/opentelemetry-collector/tree/v0.96.0/receiver/otlpreceiver
+        "otlp_http": 4318,
+        "otlp_grpc": 4317,
+        # Jaeger receiver: see
+        #   https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.96.0/receiver/jaegerreceiver
+        "jaeger_grpc": 14250,
+        "jaeger_thrift_http": 14268,
+        # Zipkin receiver: see
+        #   https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.96.0/receiver/zipkinreceiver
+        "zipkin": 9411,
+    }
 
     # Pairs of (incoming, [outgoing]) relation names. If any 'incoming' is joined without at least
     # one matching 'outgoing', the charm will block. Without any matching outgoing relation we may
@@ -99,9 +114,6 @@ class GrafanaAgentCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-
-        # Property to facilitate centralized status update
-        self.status = CompoundStatus()
 
         charm_root = self.charm_dir.absolute()
         self.loki_rules_paths = RulesMapping(
@@ -145,9 +157,47 @@ class GrafanaAgentCharm(CharmBase):
             key="grafana-agent-cert",
         )
 
-        self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
+        self._tracing = TracingEndpointRequirer(
+            self,
+            protocols=[
+                "otlp_http",  # for charm traces
+                "otlp_grpc",  # for forwarding workload traces
+            ],
+        )
+        self._tracing_provider = TracingEndpointProvider(
+            self,
+            # TODO: do we have an external url via ingress?
+            relation_name="tracing-provider",
+        )
+
+        self._tracing_endpoint, self._server_ca_cert_path = charm_tracing_config(
+            self._tracing, self._ca_path
+        )
 
         self._cloud = GrafanaCloudConfigRequirer(self)
+
+        # allows any event handler to set a status without the collect-unit-status handler having
+        # to reach into nested components to find out what the status is.
+        # downside is, this status will effectively only last for a single event.
+        self.push_status = None
+
+        self.framework.observe(
+            self._tracing.on.endpoint_changed,  # pyright: ignore
+            self._on_tracing_endpoint_changed,
+        )
+        self.framework.observe(
+            self._tracing.on.endpoint_removed,  # pyright: ignore
+            self._on_tracing_endpoint_removed,
+        )
+        self.framework.observe(
+            self._tracing_provider.on.request,  # pyright: ignore
+            self._on_tracing_provider_request,
+        )
+        self.framework.observe(
+            self._tracing_provider.on.broken,  # pyright: ignore
+            self._on_tracing_provider_broken,
+        )
+        self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
 
         self.framework.observe(
             self._cloud.on.cloud_config_available,  # pyright: ignore
@@ -188,56 +238,99 @@ class GrafanaAgentCharm(CharmBase):
             self.cert_transfer.on.certificate_removed,  # pyright: ignore
             self._on_cert_transfer_removed,
         )
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
-        # Register status observers
-        for incoming, outgoings in self.mandatory_relation_pairs.items():
-            self.framework.observe(self.on[incoming].relation_joined, self._update_status)
-            self.framework.observe(self.on[incoming].relation_broken, self._update_status)
-            for outgoing_list in outgoings:
-                for outgoing in outgoing_list:
-                    self.framework.observe(self.on[outgoing].relation_joined, self._update_status)
-                    self.framework.observe(self.on[outgoing].relation_broken, self._update_status)
+    def _get_tracing_receiver_url(self, protocol: ReceiverProtocol):
+        scheme = "http"
+        try:
+            if self._charm.cert.available:  # type: ignore
+                scheme = "https"
+        except AttributeError:
+            pass
+
+        # assume we're doing this in-model, since this charm doesn't have ingress
+        if receiver_protocol_to_transport_protocol[protocol] == TransportProtocolType.grpc:
+            return f"{socket.getfqdn()}:{self._tracing_receivers_ports[protocol]}"
+        return f"{scheme}://{socket.getfqdn()}:{self._tracing_receivers_ports[protocol]}"
+
+    @property
+    def _force_enabled_tracing_protocols(self) -> Set[ReceiverProtocol]:
+        """Return a list of tracing receivers that have been force-enabled (by config)."""
+        return {
+            receiver
+            for receiver in get_args(ReceiverProtocol)
+            if self.config.get(f"always_enable_{receiver}")
+        }
+
+    @property
+    def _requested_tracing_protocols(self) -> Set[ReceiverProtocol]:
+        """All receiver protocols that have been requested by our related apps."""
+        return set(self._tracing_provider.requested_protocols()).union(
+            self._force_enabled_tracing_protocols
+        )
+
+    def _update_tracing_provider(self):
+        self._tracing_provider.publish_receivers(
+            tuple(
+                (protocol, self._get_tracing_receiver_url(protocol))
+                for protocol in self._requested_tracing_protocols
+            )
+        )
 
     def _on_cert_changed(self, _event):
         """Event handler for cert change."""
         self._update_config()
-        self._update_ca()
-        self._update_status()
+        self._update_tracing_provider()
 
-    def _on_mandatory_relation_event(self, _event=None):
-        """Event handler for any mandatory relation event."""
+    def _on_tracing_endpoint_changed(self, _event) -> None:
+        """Event handler for the tracing endpoint-changed event."""
         self._update_config()
-        self._update_status()
+        self._update_tracing_provider()
+
+    def _on_tracing_endpoint_removed(self, _event) -> None:
+        """Event handler for the tracing endpoint-removed event."""
+        self._update_config()
+        self._update_tracing_provider()
+
+    def _on_tracing_provider_request(self, _event) -> None:
+        """Event handler for the tracing-provider request event."""
+        self._update_config()
+        self._update_tracing_provider()
+
+    def _on_tracing_provider_broken(self, _event) -> None:
+        """Event handler for the tracing-provider broken event."""
+        self._update_config()
+        self._update_tracing_provider()
 
     def _on_upgrade_charm(self, _event=None):
         """Refresh alerts if the charm is updated."""
         self._update_metrics_alerts()
         self._update_loki_alerts()
         self._update_config()
-        self._update_status()
+        self._update_tracing_provider()
 
     def _on_loki_push_api_endpoint_joined(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
-        self._update_status()
 
     def _on_loki_push_api_endpoint_departed(self, _event=None):
         """Rebuild the config with correct Loki sinks."""
         self._update_config()
-        self._update_status()
 
     def _on_config_changed(self, _event=None):
         """Rebuild the config."""
         self._update_config()
-        self._update_status()
+        self._update_tracing_provider()
 
     def _on_cloud_config_available(self, _) -> None:
         logger.info("cloud config available")
         self._update_config()
+        self._update_tracing_provider()
 
     def _on_cloud_config_revoked(self, _) -> None:
         logger.info("cloud config revoked")
         self._update_config()
+        self._update_tracing_provider()
 
     def _on_cert_transfer_available(self, event: CertificateTransferAvailableEvent):
         cert_filename = (
@@ -254,11 +347,6 @@ class GrafanaAgentCharm(CharmBase):
         self.run(["update-ca-certificates", "--fresh"])
 
     # Abstract Methods
-    @property
-    def is_k8s(self) -> bool:
-        """Is this a k8s charm."""
-        raise NotImplementedError("Please override the is_k8s method")
-
     def agent_version_output(self) -> str:
         """Gets the raw output from `agent -version`."""
         raise NotImplementedError("Please override the agent_version_output method")
@@ -347,7 +435,7 @@ class GrafanaAgentCharm(CharmBase):
             alerts_func=self.metrics_rules,
             reload_func=self._remote_write.reload_alerts,
             mapping=self.metrics_rules_paths,
-            copy_files=self.is_k8s,  # TODO: This is ugly
+            copy_files=True,
         )
 
     def _update_loki_alerts(self):
@@ -418,69 +506,58 @@ class GrafanaAgentCharm(CharmBase):
     def on_scrape_targets_changed(self, _event) -> None:
         """Event handler for the scrape targets changed event."""
         self._update_config()
-        self._update_status()
         self._update_metrics_alerts()
 
     def on_remote_write_changed(self, _event) -> None:
         """Event handler for the remote write changed event."""
         self._update_config()
-        self._update_status()
         self._update_metrics_alerts()
 
-    def _update_status(self, *_):
-        """Determine the charm status based on relation health and grafana-agent service readiness.
-
-        This is a centralized status setter. Status should only be calculated here, or, if you need
-        to temporarily change the status (e.g. during snap install), always call this method after
-        so the status is re-calculated (exceptions: on_install, on_remove).
-        TODO: Rework this when "compound status" is implemented
-         https://github.com/canonical/operator/issues/665
-        """
+    def _on_collect_unit_status(self, event: ops.CollectStatusEvent):
+        """Determine the charm status based on relation health and grafana-agent service readiness."""
         if not self.is_ready:
-            self.unit.status = WaitingStatus("waiting for agent to start")
-            return
+            event.add_status(WaitingStatus("waiting for agent to start"))
 
-        if self.status.update_config:
-            self.unit.status = self.status.update_config
-            return
+        if self.cert.enabled and not self.cert.available:
+            event.add_status(WaitingStatus("Waiting for TLS certificate."))
 
-        if self.status.validation_error:
-            self.unit.status = self.status.validation_error
-            return
+        if self.push_status:
+            event.add_status(self.push_status)
 
         # Put charm in blocked status if all incoming relations are missing
         active_relations = {k for k, v in self.model.relations.items() if v}
         if not set(self.mandatory_relation_pairs.keys()).intersection(active_relations):
-            self.unit.status = BlockedStatus(
-                "Missing incoming ('requires') relation: {}".format(
-                    "|".join(self.mandatory_relation_pairs.keys())
+            event.add_status(
+                BlockedStatus(
+                    "Missing incoming ('requires') relation: {}".format(
+                        "|".join(self.mandatory_relation_pairs.keys())
+                    )
                 )
             )
-            return
 
         if missing := MandatoryRelationPairs(self.mandatory_relation_pairs).get_missing_as_str(
             *active_relations
         ):
-            self.unit.status = BlockedStatus(f"Missing {missing}")
-            return
+            event.add_status(BlockedStatus(f"Missing {missing}"))
 
         if not self.is_ready:
-            self.unit.status = WaitingStatus("waiting for the agent to start")
-            return
+            event.add_status(WaitingStatus("waiting for the agent to start"))
 
         # If only _some_ of the COS relations are present, we do not want to block, but we do want
         # to inform via the Active message that they are in fact missing ("soft" warning).
         cos_rels = {
             "send-remote-write",
+            "tracing",
             "logging-consumer",
             "grafana-dashboards-provider",
         }
-        missing_rels = (
+        # sorting is so that the order doesn't keep flapping on each hook depending on <whims>
+        missing_rels = sorted(
             cos_rels.difference(active_relations)
             if cos_rels.intersection(active_relations)
             else set()
         )
-        self.unit.status = ActiveStatus(", ".join([f"{x}: off" for x in missing_rels]))
+        event.add_status(ActiveStatus(", ".join([f"{x}: off" for x in missing_rels])))
 
     def _update_config(self) -> None:
         if not self.is_ready:
@@ -489,8 +566,7 @@ class GrafanaAgentCharm(CharmBase):
 
         # Write TLS files
         if self.cert.enabled:
-            if not (self.cert.server_cert and self.cert.private_key and self.cert.ca_cert):
-                self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
+            if not self.cert.available:
                 self.stop()
                 return
             self.write_file(self._cert_path, self.cert.server_cert)
@@ -504,26 +580,9 @@ class GrafanaAgentCharm(CharmBase):
             subprocess.run(["update-ca-certificates", "--fresh"], check=True)
         else:
             # Delete TLS related files if they exist
-            try:
-                self.read_file(self._cert_path)
-            except (FileNotFoundError, PathError):
-                pass
-            else:
-                self.delete_file(self._cert_path)
-
-            try:
-                self.read_file(self._key_path)
-            except (FileNotFoundError, PathError):
-                pass
-            else:
-                self.delete_file(self._key_path)
-
-            try:
-                self.read_file(self._ca_path)
-            except (FileNotFoundError, PathError):
-                pass
-            else:
-                self.delete_file(self._ca_path)
+            self._delete_file_if_exists(self._cert_path)
+            self._delete_file_if_exists(self._key_path)
+            self._delete_file_if_exists(self._ca_path)
 
             # charm container CA cert
             Path(self._ca_path).unlink(missing_ok=True)
@@ -538,7 +597,6 @@ class GrafanaAgentCharm(CharmBase):
 
         if config == old_config:
             # Nothing changed, possibly new installation. Move on.
-            self.status.update_config = None
             return
 
         try:
@@ -548,12 +606,18 @@ class GrafanaAgentCharm(CharmBase):
             self.restart()
         except GrafanaAgentReloadError as e:
             logger.error(str(e))
-            self.status.update_config = BlockedStatus(str(e))
+            self.push_status = BlockedStatus(str(e))
         except APIError as e:
             logger.warning(str(e))
-            self.status.update_config = WaitingStatus(str(e))
+            self.push_status = WaitingStatus(str(e))
 
-        self.status.update_config = None
+    def _delete_file_if_exists(self, file_path):
+        try:
+            self.read_file(file_path)
+        except (FileNotFoundError, PathError):
+            pass
+        else:
+            self.delete_file(file_path)
 
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
@@ -561,14 +625,23 @@ class GrafanaAgentCharm(CharmBase):
         self._grafana_dashboards_provider._reinitialize_dashboard_data(
             inject_dropdowns=False
         )  # noqa
-        self._update_status()
 
-    def _enrich_endpoints(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Add TLS information to Prometheus and Loki endpoints."""
+    def _add_tls_config(self, endpoint):
+        """Update an endpoint definition with insecure_skip_verify as per app config."""
+        endpoint["tls_config"] = {
+            "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
+        }
+
+    def _prometheus_endpoints(self) -> List[Dict[str, Any]]:
+        """Add TLS information to Prometheus endpoints.
+
+        Also, injects the grafana-cloud-integrator endpoints into those we get from juju relations.
+        FIXME: these should be separate concerns.
+        """
         prometheus_endpoints: List[Dict[str, Any]] = self._remote_write.endpoints
 
         if self._cloud.prometheus_ready:
-            prometheus_endpoint = {"url": self._cloud.prometheus_url}
+            prometheus_endpoint: Dict[str, Any] = {"url": self._cloud.prometheus_url}
             if self._cloud.credentials:
                 prometheus_endpoint["basic_auth"] = {
                     "username": self._cloud.credentials.username,
@@ -576,6 +649,17 @@ class GrafanaAgentCharm(CharmBase):
                 }
             prometheus_endpoints.append(prometheus_endpoint)
 
+        for endpoint in prometheus_endpoints:
+            self._add_tls_config(endpoint)
+
+        return prometheus_endpoints
+
+    def _loki_endpoints(self) -> List[Dict[str, Any]]:
+        """Add TLS information to Loki endpoints.
+
+        Also, injects the grafana-cloud-integrator endpoints into those we get from juju relations.
+        FIXME: these should be separate concerns.
+        """
         loki_endpoints = self._loki_consumer.loki_endpoints
 
         if self._cloud.loki_ready:
@@ -592,11 +676,43 @@ class GrafanaAgentCharm(CharmBase):
                 }
             loki_endpoints.append(loki_endpoint)
 
-        for endpoint in prometheus_endpoints + loki_endpoints:
-            endpoint["tls_config"] = {
-                "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
+        for endpoint in loki_endpoints:
+            self._add_tls_config(endpoint)
+
+        return loki_endpoints
+
+    def _tempo_endpoints(self) -> List[Dict[str, Any]]:
+        """Add TLS information to Tempo endpoints.
+
+        Also, injects the grafana-cloud-integrator endpoints into those we get from juju relations.
+        FIXME: these should be separate concerns.
+        """
+        tempo_endpoints = []
+        if self._tracing.is_ready():
+            tempo_endpoint = {
+                # outgoing traces are all otlp/grpc
+                # cit: While Tempo and the Agent both can ingest in multiple formats,
+                #  the Agent only exports in OTLP gRPC and HTTP.
+                "endpoint": self._tracing.get_endpoint("otlp_grpc"),
+                "insecure": False if self.cert.enabled else True,
             }
-        return prometheus_endpoints, loki_endpoints
+            tempo_endpoints.append(tempo_endpoint)
+
+        if self._cloud.tempo_ready:
+            tempo_endpoint: Dict[str, Any] = {
+                "endpoint": self._cloud.tempo_url,
+            }
+            if self._cloud.credentials:
+                tempo_endpoint["basic_auth"] = {
+                    "username": self._cloud.credentials.username,
+                    "password": self._cloud.credentials.password,
+                }
+            tempo_endpoints.append(tempo_endpoint)
+
+        for endpoint in tempo_endpoints:
+            self._add_tls_config(endpoint)
+
+        return tempo_endpoints
 
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to agent.
@@ -616,8 +732,6 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             A yaml string with grafana agent config
         """
-        prometheus_endpoints, _ = self._enrich_endpoints()
-
         config = {
             "server": self._server_config,
             "integrations": self._integrations_config,
@@ -627,11 +741,12 @@ class GrafanaAgentCharm(CharmBase):
                     {
                         "name": "agent_scraper",
                         "scrape_configs": self.metrics_jobs(),
-                        "remote_write": prometheus_endpoints,
+                        "remote_write": self._prometheus_endpoints(),
                     }
                 ],
             },
             "logs": self._loki_config,
+            "traces": self._tempo_config,
         }
         return config
 
@@ -661,8 +776,6 @@ class GrafanaAgentCharm(CharmBase):
 
         # Align the "job" name with those of prometheus_scrape
         job_name = f"juju_{juju_model}_{juju_model_uuid}_{juju_application}_self-monitoring"
-
-        prometheus_endpoints, _ = self._enrich_endpoints()
 
         conf = {
             "agent": {
@@ -705,10 +818,88 @@ class GrafanaAgentCharm(CharmBase):
                     },
                 ],
             },
-            "prometheus_remote_write": prometheus_endpoints,
+            "prometheus_remote_write": self._prometheus_endpoints(),
             **self._additional_integrations,
         }
         return conf
+
+    @property
+    def _tracing_receivers(self) -> Dict[str, Union[Any, List[Any]]]:
+        """Receivers configuration for tracing.
+
+        Returns:
+            a dict with the receivers config.
+        """
+        receivers_set = self._requested_tracing_protocols
+
+        if not receivers_set:
+            logger.warning("No tempo receivers enabled: grafana-agent cannot ingest traces.")
+            return {}
+
+        if self.cert.enabled:
+            base_receiver_config: Dict[str, Union[str, Dict]] = {
+                "tls": {
+                    "ca_file": str(self._ca_path),
+                    "cert_file": str(self._cert_path),
+                    "key_file": str(self._key_path),
+                    "min_version": "",
+                }
+            }
+        else:
+            base_receiver_config = {}
+
+        def _receiver_config(protocol: str):
+            endpoint = "0.0.0.0:" + str(self._tracing_receivers_ports[protocol])  # type: ignore
+            receiver_config = base_receiver_config.copy()
+            receiver_config["endpoint"] = endpoint
+            return receiver_config
+
+        config = {}
+
+        if "zipkin" in receivers_set:
+            config["zipkin"] = _receiver_config("zipkin")
+
+        otlp_config = {}
+        if "otlp_http" in receivers_set:
+            otlp_config["http"] = _receiver_config("otlp_http")
+        if "otlp_grpc" in receivers_set:
+            otlp_config["grpc"] = _receiver_config("otlp_grpc")
+        if otlp_config:
+            config["otlp"] = {"protocols": otlp_config}
+
+        jaeger_config = {}
+        if "jaeger_thrift_http" in receivers_set:
+            jaeger_config["thrift_http"] = _receiver_config("jaeger_thrift_http")
+        if "jaeger_grpc" in receivers_set:
+            jaeger_config["grpc"] = _receiver_config("jaeger_grpc")
+        if jaeger_config:
+            config["jaeger"] = {"protocols": jaeger_config}
+
+        return config
+
+    @property
+    def _tempo_config(self) -> Dict[str, Union[Any, List[Any]]]:
+        """The tracing section of the config.
+
+        Returns:
+            a dict with the tracing config.
+        """
+        endpoints = self._tempo_endpoints()
+        receivers = self._tracing_receivers
+
+        if not receivers:
+            # pushing a config with an empty receivers section will cause gagent to error out
+            return {}
+
+        return {
+            "configs": [
+                {
+                    "name": "tempo",
+                    "remote_write": endpoints,
+                    "receivers": receivers,
+                }
+            ]
+        }
 
     @property
     def _loki_config(self) -> Dict[str, Union[Any, List[Any]]]:
@@ -717,14 +908,12 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with Loki config
         """
-        _, loki_endpoints = self._enrich_endpoints()
-
         configs = []
         if self._loki_consumer.loki_endpoints:
             configs.append(
                 {
                     "name": "push_api_server",
-                    "clients": loki_endpoints,
+                    "clients": self._loki_endpoints(),
                     "scrape_configs": [
                         {
                             "job_name": "loki",
@@ -821,7 +1010,7 @@ class GrafanaAgentCharm(CharmBase):
         return result.group(1)
 
     def _update_ca(self) -> None:
-        """Updates the CA cert on disk from cert_manager."""
+        """Updates the CA cert on disk from CertHandler."""
         if (not self.cert.enabled) or (not self.cert.ca_cert):
             try:
                 self.read_file(self._ca_path)

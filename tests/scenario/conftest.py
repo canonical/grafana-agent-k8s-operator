@@ -1,19 +1,14 @@
 import shutil
-from pathlib import Path, PosixPath
+from pathlib import Path
 
 import pytest
 
-from tests.scenario.helpers import CHARM_ROOT
-
-
-class Vroot(PosixPath):
-    def clean(self) -> None:
-        shutil.rmtree(self)
-        shutil.copytree(CHARM_ROOT / "src", self / "src")
+CHARM_ROOT = Path(__file__).parent.parent.parent
 
 
 @pytest.fixture
 def vroot(tmp_path) -> Path:
-    vroot = Vroot(str(tmp_path.absolute()))
-    vroot.clean()
-    return vroot
+    root = Path(str(tmp_path.absolute()))
+    shutil.rmtree(root)
+    shutil.copytree(CHARM_ROOT / "src", root / "src")
+    return root

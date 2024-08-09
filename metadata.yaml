@@ -64,6 +64,8 @@ requires:
     limit: 1
 
 provides:
+  tracing-provider:
+    interface: tracing
   logging-provider:
     interface: loki_push_api
   grafana-dashboards-provider:
