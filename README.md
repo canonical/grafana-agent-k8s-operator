@@ -32,7 +32,7 @@ for further detail.
 
 ## Usage
 
-Create a Juju model for your operators, say "cos"
+Create a Juju model for your operators, say "cos":
 
 ```bash
 juju add-model cos
