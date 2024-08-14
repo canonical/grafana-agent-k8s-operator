@@ -77,4 +77,4 @@ More detailed information about these relations can be found in [Charmhub docs p
 
 ## OCI Images
 
-This charm by default uses the `latest` release of the [grafana-agent](http://ghcr.io/canonical/grafana-agent)
+This charm by default uses the latest minor release of the [grafana-agent](https://hub.docker.com/r/ubuntu/grafana-agent).
