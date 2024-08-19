@@ -1,9 +1,10 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import charm
 from ops import BlockedStatus, UnknownStatus, pebble
 from scenario import Container, Context, ExecOutput, State
+
+import charm
 
 
 def test_install(vroot):

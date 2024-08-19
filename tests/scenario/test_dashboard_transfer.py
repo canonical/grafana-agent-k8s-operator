@@ -2,9 +2,10 @@
 # See LICENSE file for licensing details.
 import json
 
-from charm import GrafanaAgentK8sCharm
 from cosl import GrafanaDashboard
 from scenario import Container, Context, Relation, State
+
+from charm import GrafanaAgentK8sCharm
 
 
 def encode_as_dashboard(dct: dict):
