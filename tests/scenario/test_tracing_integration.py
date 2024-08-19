@@ -3,11 +3,12 @@ from unittest.mock import patch
 import pytest
 import scenario
 import yaml
-from charm import GrafanaAgentK8sCharm
 from charms.tempo_k8s.v1.charm_tracing import charm_tracing_disabled
 from charms.tempo_k8s.v2.tracing import Receiver, TracingProviderAppData, TracingRequirerAppData
-from grafana_agent import CONFIG_PATH
 from ops import pebble
+
+from charm import GrafanaAgentK8sCharm
+from grafana_agent import CONFIG_PATH
 
 
 @pytest.fixture
