@@ -6,7 +6,7 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
 LIBID = "e6f580481c1b4388aa4d2cdf412a47fa"
 LIBAPI = 0
-LIBPATCH = 5
+LIBPATCH = 6
 
 DEFAULT_RELATION_NAME = "grafana-cloud-config"
 
@@ -53,15 +53,9 @@ class GrafanaCloudConfigRequirer(Object):
             self.framework.observe(event, self._on_relation_broken)
 
     def _on_relation_changed(self, event):
-        if not self._charm.unit.is_leader():
-            return
-
         self.on.cloud_config_available.emit()  # pyright: ignore
 
     def _on_relation_broken(self, event):
-        if not self._charm.unit.is_leader():
-            return
-
         self.on.cloud_config_revoked.emit()  # pyright: ignore
     
     def _is_not_empty(self, s):
@@ -130,7 +124,7 @@ class GrafanaCloudConfigRequirer(Object):
         """Return the prometheus endpoint dict."""
         if not self.prometheus_ready:
             return {}
-
+        
         endpoint = {}
         endpoint["url"] = self.prometheus_url
         if self.credentials:
