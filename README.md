@@ -52,7 +52,7 @@ juju destroy-model -y cos --no-wait --force --destroy-storage
 
 ## Relations
 
-Currently supported relations are:
+Currently, supported relations are:
 
 ```yaml
 requires:
