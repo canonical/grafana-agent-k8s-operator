@@ -72,7 +72,7 @@ provides:
     interface: loki_push_api
 ```
 
-More detailed information about these relations can be found in [Charmhub docs page](https://charmhub.io/grafana-agent-k8s/docs/relations).
+More detailed information about these relations can be found in the [Charmhub docs page](https://charmhub.io/grafana-agent-k8s/docs/relations).
 
 
 ## OCI Images
