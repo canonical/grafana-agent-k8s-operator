@@ -19,34 +19,33 @@ from charm import GrafanaAgentK8sCharm
 # to include the new identifier/location.
 @pytest.fixture
 def interface_tester(interface_tester: InterfaceTester):
-    with patch("charm.KubernetesServicePatch"):
-        with charm_tracing_disabled():
-            interface_tester.configure(
-                charm_type=GrafanaAgentK8sCharm,
-                state_template=State(
-                    leader=True,
-                    containers=[
-                        Container(
-                            name="agent",
-                            can_connect=True,
-                            layers={
-                                "foo": Layer(
-                                    {
-                                        "summary": "foo",
-                                        "description": "bar",
-                                        "services": {
-                                            "agent": {
-                                                "startup": "enabled",
-                                                "current": "active",
-                                                "name": "agent",
-                                            },
+    with charm_tracing_disabled():
+        interface_tester.configure(
+            charm_type=GrafanaAgentK8sCharm,
+            state_template=State(
+                leader=True,
+                containers=[
+                    Container(
+                        name="agent",
+                        can_connect=True,
+                        layers={
+                            "foo": Layer(
+                                {
+                                    "summary": "foo",
+                                    "description": "bar",
+                                    "services": {
+                                        "agent": {
+                                            "startup": "enabled",
+                                            "current": "active",
+                                            "name": "agent",
                                         },
-                                        "checks": {},
-                                    }
-                                )
-                            },
-                        )
-                    ],
-                ),
-            )
-            yield interface_tester
+                                    },
+                                    "checks": {},
+                                }
+                            )
+                        },
+                    )
+                ],
+            ),
+        )
+        yield interface_tester
