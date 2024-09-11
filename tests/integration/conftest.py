@@ -64,8 +64,19 @@ def copy_libraries_into_test_charm():
 @timed_memoizer
 async def grafana_agent_charm(ops_test: OpsTest):
     """Loki charm used for integration testing."""
-    charm = await ops_test.build_charm(".")
-    return charm
+    count = 0
+    # Intermittent issue where charmcraft fails to build the charm for an unknown reason.
+    # Retry building the charm
+    while True:
+        try:
+            charm = await ops_test.build_charm(".")
+            return charm
+        except RuntimeError:
+            logger.warning("Failed to build grafana agent. Trying again!")
+            count += 1
+
+            if count == 3:
+                raise
 
 
 @pytest.fixture(scope="module")
