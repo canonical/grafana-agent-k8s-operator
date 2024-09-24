@@ -40,3 +40,13 @@ options:
       even if there is no integration currently requesting it.
     type: boolean
     default: false
+  # TODO still think on the configuration properties names here: they need to be descriptive
+  charm_tracing_sampling_percent:
+    type: float
+    default: 100.0
+  workload_tracing_sampling_percent:
+    type: float
+    default: 1.0
+  error_traces_sampling_percent:
+    type: float
+    default: 100.0

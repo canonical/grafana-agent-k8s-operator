@@ -913,6 +913,17 @@ class GrafanaAgentCharm(CharmBase):
         return config
 
     @property
+    def _tracing_sampling(self) -> Dict[str, Any]:
+        return {"policies": [
+            {
+                "name": "test-policy",
+                "type": "probabilistic",
+                "probabilistic": {"sampling_percentage": self.config.get("workload_tracing_sampling_percent")}
+            },
+        ]}
+
+
+    @property
     def _tempo_config(self) -> Dict[str, Union[Any, List[Any]]]:
         """The tracing section of the config.
 
@@ -921,6 +932,7 @@ class GrafanaAgentCharm(CharmBase):
         """
         endpoints = self._tempo_endpoints_with_tls()
         receivers = self._tracing_receivers
+        sampling = self._tracing_sampling
 
         if not receivers:
             # pushing a config with an empty receivers section will cause gagent to error out
@@ -932,6 +944,7 @@ class GrafanaAgentCharm(CharmBase):
                     "name": "tempo",
                     "remote_write": endpoints,
                     "receivers": receivers,
+                    "tail_sampling": sampling,
                 }
             ]
         }
