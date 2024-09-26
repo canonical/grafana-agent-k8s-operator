@@ -4,10 +4,9 @@
 import unittest
 from unittest.mock import patch
 
+from charm import GrafanaAgentK8sCharm as GrafanaAgentCharm
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
-
-from charm import GrafanaAgentK8sCharm as GrafanaAgentCharm
 
 
 class TestRelationStatus(unittest.TestCase):

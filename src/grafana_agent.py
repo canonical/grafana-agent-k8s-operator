@@ -914,13 +914,75 @@ class GrafanaAgentCharm(CharmBase):
 
     @property
     def _tracing_sampling(self) -> Dict[str, Any]:
-        return {"policies": [
-            {
-                "name": "test-policy",
-                "type": "probabilistic",
-                "probabilistic": {"sampling_percentage": self.config.get("workload_tracing_sampling_percent")}
-            },
-        ]}
+        return {
+            "policies": [
+                {
+                    "name": "error-traces-policy",
+                    "type": "and",
+                    "and": {
+                        "and_sub_policy": [
+                            {
+                                "name": "trace-status-policy",
+                                "type": "status_code",
+                                "status_code": { "status_codes": ["ERROR"]},
+                            },
+                            {
+                                "name": "probabilistic-policy",
+                                "type": "probabilistic",
+                                "probabilistic": {
+                                    "sampling_percentage": self.config.get("error_traces_sampling_percentage")},
+                            },
+                        ]
+                    }
+                },
+                {
+                    "name": "charm-traces-policy",
+                    "type": "and",
+                    "and": {
+                        "and_sub_policy": [
+                            {
+                                "name": "service-name-policy",
+                                "type": "string_attribute",
+                                "string_attribute": {
+                                    "key": "service.name",
+                                    "values": [".+-charm"],
+                                    "enabled_regex_matching": True,
+                                }
+                            },
+                            {
+                                "name": "probabilistic-policy",
+                                "type": "probabilistic",
+                                "probabilistic": {"sampling_percentage": self.config.get("charm_traces_sampling_percentage")},
+                            },
+                        ]
+                    }
+                },
+                {
+                    "name": "workload-traces-policy",
+                    "type": "and",
+                    "and": {
+                        "and_sub_policy": [
+                            {
+                                "name": "service-name-policy",
+                                "type": "string_attribute",
+                                "string_attribute": {
+                                    "key": "service.name",
+                                    "values": [".+-charm"],
+                                    "enabled_regex_matching": True,
+                                    "invert_match": True,
+                                }
+                            },
+                            {
+                                "name": "probabilistic-policy",
+                                "type": "probabilistic",
+                                "probabilistic": {
+                                    "sampling_percentage": self.config.get("workload_traces_sampling_percentage")},
+                            },
+                        ]
+                    }
+                },
+            ]
+        }
 
 
     @property

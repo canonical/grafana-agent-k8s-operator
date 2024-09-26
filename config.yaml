@@ -40,13 +40,24 @@ options:
       even if there is no integration currently requesting it.
     type: boolean
     default: false
-  # TODO still think on the configuration properties names here: they need to be descriptive
-  charm_tracing_sampling_percent:
+  charm_traces_sampling_percentage:
+    description: >
+      This property defines the percentage of charm traces that are sent to tracing backend.
+      Setting it to 100 would mean all charm traces are kept, setting to 0 means charm traces
+      aren't sent to tracing backend at all.
     type: float
     default: 100.0
-  workload_tracing_sampling_percent:
+  workload_traces_sampling_percentage:
+    description: >
+      This property defines the percentage of workload traces that are sent to tracing backend.
+      Setting it to 100 would mean all workload traces are kept, setting to 0 means workload traces
+      aren't sent to tracing backend at all.
     type: float
     default: 1.0
-  error_traces_sampling_percent:
+  error_traces_sampling_percentage:
+    description: >
+      This property defines the percentage of error traces (regardless of the type) that are sent to tracing backend.
+      Setting it to 100 would mean all error traces are kept, setting to 0 means error traces
+      aren't sent to tracing backend at all.
     type: float
     default: 100.0

@@ -14,10 +14,9 @@ from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from cosl import GrafanaDashboard
+from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
 from ops.pebble import Layer
-
-from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
 
