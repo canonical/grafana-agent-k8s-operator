@@ -924,16 +924,19 @@ class GrafanaAgentCharm(CharmBase):
                             {
                                 "name": "trace-status-policy",
                                 "type": "status_code",
-                                "status_code": { "status_codes": ["ERROR"]},
+                                "status_code": {"status_codes": ["ERROR"]},
                             },
                             {
                                 "name": "probabilistic-policy",
                                 "type": "probabilistic",
                                 "probabilistic": {
-                                    "sampling_percentage": self.config.get("error_traces_sampling_percentage")},
+                                    "sampling_percentage": self.config.get(
+                                        "error_traces_sampling_percentage"
+                                    )
+                                },
                             },
                         ]
-                    }
+                    },
                 },
                 {
                     "name": "charm-traces-policy",
@@ -947,15 +950,19 @@ class GrafanaAgentCharm(CharmBase):
                                     "key": "service.name",
                                     "values": [".+-charm"],
                                     "enabled_regex_matching": True,
-                                }
+                                },
                             },
                             {
                                 "name": "probabilistic-policy",
                                 "type": "probabilistic",
-                                "probabilistic": {"sampling_percentage": self.config.get("charm_traces_sampling_percentage")},
+                                "probabilistic": {
+                                    "sampling_percentage": self.config.get(
+                                        "charm_traces_sampling_percentage"
+                                    )
+                                },
                             },
                         ]
-                    }
+                    },
                 },
                 {
                     "name": "workload-traces-policy",
@@ -970,20 +977,22 @@ class GrafanaAgentCharm(CharmBase):
                                     "values": [".+-charm"],
                                     "enabled_regex_matching": True,
                                     "invert_match": True,
-                                }
+                                },
                             },
                             {
                                 "name": "probabilistic-policy",
                                 "type": "probabilistic",
                                 "probabilistic": {
-                                    "sampling_percentage": self.config.get("workload_traces_sampling_percentage")},
+                                    "sampling_percentage": self.config.get(
+                                        "workload_traces_sampling_percentage"
+                                    )
+                                },
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
-
 
     @property
     def _tempo_config(self) -> Dict[str, Union[Any, List[Any]]]:

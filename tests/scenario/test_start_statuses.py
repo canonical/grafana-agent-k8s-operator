@@ -3,9 +3,10 @@
 import dataclasses
 from pathlib import Path
 
-from charm import GrafanaAgentK8sCharm
 from ops import pebble
 from scenario import Container, Context, ExecOutput, State
+
+from charm import GrafanaAgentK8sCharm
 
 CHARM_ROOT = Path(__file__).parent.parent.parent
 

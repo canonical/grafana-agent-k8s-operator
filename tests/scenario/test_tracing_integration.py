@@ -3,11 +3,12 @@ from unittest.mock import patch
 import pytest
 import scenario
 import yaml
-from charm import GrafanaAgentK8sCharm
 from charms.tempo_k8s.v1.charm_tracing import charm_tracing_disabled
 from charms.tempo_k8s.v2.tracing import Receiver, TracingProviderAppData, TracingRequirerAppData
-from grafana_agent import CONFIG_PATH
 from ops import pebble
+
+from charm import GrafanaAgentK8sCharm
+from grafana_agent import CONFIG_PATH
 
 
 @pytest.fixture
@@ -192,7 +193,9 @@ def test_tracing_sampling_config_is_present(ctx, base_state):
     assert gagent_config.exists()
     yml = yaml.safe_load(gagent_config.read_text())
 
-    expected_policy = _expected_policy(error_sampling=100.0, charm_traces_sampling=100.0, workload_sampling=1.0)
+    expected_policy = _expected_policy(
+        error_sampling=100.0, charm_traces_sampling=100.0, workload_sampling=1.0
+    )
 
     assert yml["traces"]["configs"][0]["tail_sampling"] == expected_policy
 
@@ -216,12 +219,14 @@ def test_tracing_sampling_config_is_updated_with_juju_config(ctx, base_state):
     expected_workload_sampling = 13.4
     expected_error_sampling = 42.0
 
-    state = base_state.replace(relations=[tracing, tracing_provider],
-                               config={
-                                   "charm_traces_sampling_percentage": expected_charm_sampling,
-                                   "workload_traces_sampling_percentage": expected_workload_sampling,
-                                   "error_traces_sampling_percentage": expected_error_sampling
-                               })
+    state = base_state.replace(
+        relations=[tracing, tracing_provider],
+        config={
+            "charm_traces_sampling_percentage": expected_charm_sampling,
+            "workload_traces_sampling_percentage": expected_workload_sampling,
+            "error_traces_sampling_percentage": expected_error_sampling,
+        },
+    )
     # WHEN we process any setup event for the relation
     state_out = ctx.run(tracing.changed_event, state)
 
@@ -233,7 +238,11 @@ def test_tracing_sampling_config_is_updated_with_juju_config(ctx, base_state):
     assert gagent_config.exists()
     yml = yaml.safe_load(gagent_config.read_text())
 
-    expected_policy = _expected_policy(error_sampling=expected_error_sampling, charm_traces_sampling=expected_charm_sampling, workload_sampling=expected_workload_sampling)
+    expected_policy = _expected_policy(
+        error_sampling=expected_error_sampling,
+        charm_traces_sampling=expected_charm_sampling,
+        workload_sampling=expected_workload_sampling,
+    )
 
     assert yml["traces"]["configs"][0]["tail_sampling"] == expected_policy
 
@@ -254,11 +263,10 @@ def _expected_policy(error_sampling, charm_traces_sampling, workload_sampling):
                         {
                             "name": "probabilistic-policy",
                             "type": "probabilistic",
-                            "probabilistic": {
-                                "sampling_percentage": error_sampling},
+                            "probabilistic": {"sampling_percentage": error_sampling},
                         },
                     ]
-                }
+                },
             },
             {
                 "name": "charm-traces-policy",
@@ -272,7 +280,7 @@ def _expected_policy(error_sampling, charm_traces_sampling, workload_sampling):
                                 "key": "service.name",
                                 "values": [".+-charm"],
                                 "enabled_regex_matching": True,
-                            }
+                            },
                         },
                         {
                             "name": "probabilistic-policy",
@@ -280,7 +288,7 @@ def _expected_policy(error_sampling, charm_traces_sampling, workload_sampling):
                             "probabilistic": {"sampling_percentage": charm_traces_sampling},
                         },
                     ]
-                }
+                },
             },
             {
                 "name": "workload-traces-policy",
@@ -295,16 +303,15 @@ def _expected_policy(error_sampling, charm_traces_sampling, workload_sampling):
                                 "values": [".+-charm"],
                                 "enabled_regex_matching": True,
                                 "invert_match": True,
-                            }
+                            },
                         },
                         {
                             "name": "probabilistic-policy",
                             "type": "probabilistic",
-                            "probabilistic": {
-                                "sampling_percentage": workload_sampling},
+                            "probabilistic": {"sampling_percentage": workload_sampling},
                         },
                     ]
-                }
+                },
             },
         ]
     }
