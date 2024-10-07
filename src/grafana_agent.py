@@ -914,6 +914,10 @@ class GrafanaAgentCharm(CharmBase):
 
     @property
     def _tracing_sampling(self) -> Dict[str, Any]:
+        # policies, as defined by tail sampling processor definition:
+        # https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor
+        # each of them is evaluated separately and processor decides whether to pass the trace through or not
+        # see the description of tail sampling processor above for the full decision tree
         return {
             "policies": [
                 {
@@ -925,13 +929,15 @@ class GrafanaAgentCharm(CharmBase):
                                 "name": "trace-status-policy",
                                 "type": "status_code",
                                 "status_code": {"status_codes": ["ERROR"]},
+                                # status_code processor is using span_status property of spans within a trace
+                                # see https://opentelemetry.io/docs/concepts/signals/traces/#span-status for reference
                             },
                             {
                                 "name": "probabilistic-policy",
                                 "type": "probabilistic",
                                 "probabilistic": {
                                     "sampling_percentage": self.config.get(
-                                        "error_traces_sampling_percentage"
+                                        "tracing_sample_rate_error"
                                     )
                                 },
                             },
@@ -957,7 +963,7 @@ class GrafanaAgentCharm(CharmBase):
                                 "type": "probabilistic",
                                 "probabilistic": {
                                     "sampling_percentage": self.config.get(
-                                        "charm_traces_sampling_percentage"
+                                        "tracing_sample_rate_charm"
                                     )
                                 },
                             },
@@ -984,7 +990,7 @@ class GrafanaAgentCharm(CharmBase):
                                 "type": "probabilistic",
                                 "probabilistic": {
                                     "sampling_percentage": self.config.get(
-                                        "workload_traces_sampling_percentage"
+                                        "tracing_sample_rate_workload"
                                     )
                                 },
                             },

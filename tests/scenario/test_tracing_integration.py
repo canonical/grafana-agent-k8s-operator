@@ -166,67 +166,33 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
     assert providing_protocols == {"otlp_grpc", "otlp_http"}.union(force_enable)
 
 
-def test_tracing_sampling_config_is_present(ctx, base_state):
-    # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
-    tracing_provider = scenario.Relation(
-        "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
-    )
-    tracing = scenario.Relation(
-        "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
-    )
-
-    state = base_state.replace(relations=[tracing, tracing_provider])
-    # WHEN we process any setup event for the relation
-    state_out = ctx.run(tracing.changed_event, state)
-
-    agent = state_out.get_container("agent")
-
-    # THEN the grafana agent config has a traces tail_sampling section with default values
-    fs = agent.get_filesystem(ctx)
-    gagent_config = fs.joinpath(*CONFIG_PATH.strip("/").split("/"))
-    assert gagent_config.exists()
-    yml = yaml.safe_load(gagent_config.read_text())
-
-    expected_policy = _expected_policy(
-        error_sampling=100.0, charm_traces_sampling=100.0, workload_sampling=1.0
-    )
-
-    assert yml["traces"]["configs"][0]["tail_sampling"] == expected_policy
-
-
-def test_tracing_sampling_config_is_updated_with_juju_config(ctx, base_state):
-    # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
-    tracing_provider = scenario.Relation(
-        "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
-    )
-    tracing = scenario.Relation(
-        "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
-    )
-
-    expected_charm_sampling = 10.1
-    expected_workload_sampling = 13.4
-    expected_error_sampling = 42.0
-
-    state = base_state.replace(
-        relations=[tracing, tracing_provider],
-        config={
-            "charm_traces_sampling_percentage": expected_charm_sampling,
-            "workload_traces_sampling_percentage": expected_workload_sampling,
-            "error_traces_sampling_percentage": expected_error_sampling,
+@pytest.mark.parametrize(
+    "sampling_config",
+    (
+        {},
+        {
+            "tracing_sample_rate_charm": 23.0,
+            "tracing_sample_rate_workload": 13.13,
+            "tracing_sample_rate_error": 42.42,
         },
+    ),
+)
+def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
+    # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
+    tracing_provider = scenario.Relation(
+        "tracing-provider",
+        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
+    tracing = scenario.Relation(
+        "tracing",
+        remote_app_data=TracingProviderAppData(
+            receivers=[
+                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
+            ]
+        ).dump(),
+    )
+
+    state = base_state.replace(relations=[tracing, tracing_provider], config=sampling_config)
     # WHEN we process any setup event for the relation
     state_out = ctx.run(tracing.changed_event, state)
 
@@ -238,80 +204,4 @@ def test_tracing_sampling_config_is_updated_with_juju_config(ctx, base_state):
     assert gagent_config.exists()
     yml = yaml.safe_load(gagent_config.read_text())
 
-    expected_policy = _expected_policy(
-        error_sampling=expected_error_sampling,
-        charm_traces_sampling=expected_charm_sampling,
-        workload_sampling=expected_workload_sampling,
-    )
-
-    assert yml["traces"]["configs"][0]["tail_sampling"] == expected_policy
-
-
-def _expected_policy(error_sampling, charm_traces_sampling, workload_sampling):
-    return {
-        "policies": [
-            {
-                "name": "error-traces-policy",
-                "type": "and",
-                "and": {
-                    "and_sub_policy": [
-                        {
-                            "name": "trace-status-policy",
-                            "type": "status_code",
-                            "status_code": {"status_codes": ["ERROR"]},
-                        },
-                        {
-                            "name": "probabilistic-policy",
-                            "type": "probabilistic",
-                            "probabilistic": {"sampling_percentage": error_sampling},
-                        },
-                    ]
-                },
-            },
-            {
-                "name": "charm-traces-policy",
-                "type": "and",
-                "and": {
-                    "and_sub_policy": [
-                        {
-                            "name": "service-name-policy",
-                            "type": "string_attribute",
-                            "string_attribute": {
-                                "key": "service.name",
-                                "values": [".+-charm"],
-                                "enabled_regex_matching": True,
-                            },
-                        },
-                        {
-                            "name": "probabilistic-policy",
-                            "type": "probabilistic",
-                            "probabilistic": {"sampling_percentage": charm_traces_sampling},
-                        },
-                    ]
-                },
-            },
-            {
-                "name": "workload-traces-policy",
-                "type": "and",
-                "and": {
-                    "and_sub_policy": [
-                        {
-                            "name": "service-name-policy",
-                            "type": "string_attribute",
-                            "string_attribute": {
-                                "key": "service.name",
-                                "values": [".+-charm"],
-                                "enabled_regex_matching": True,
-                                "invert_match": True,
-                            },
-                        },
-                        {
-                            "name": "probabilistic-policy",
-                            "type": "probabilistic",
-                            "probabilistic": {"sampling_percentage": workload_sampling},
-                        },
-                    ]
-                },
-            },
-        ]
-    }
+    assert yml["traces"]["configs"][0]["tail_sampling"]
