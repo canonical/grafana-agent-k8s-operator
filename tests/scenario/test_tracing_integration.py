@@ -164,3 +164,44 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
     # but we provide all
     providing_protocols = {r.protocol.name for r in tracing_provider_out.receivers}
     assert providing_protocols == {"otlp_grpc", "otlp_http"}.union(force_enable)
+
+
+@pytest.mark.parametrize(
+    "sampling_config",
+    (
+        {},
+        {
+            "tracing_sample_rate_charm": 23.0,
+            "tracing_sample_rate_workload": 13.13,
+            "tracing_sample_rate_error": 42.42,
+        },
+    ),
+)
+def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
+    # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
+    tracing_provider = scenario.Relation(
+        "tracing-provider",
+        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+    )
+    tracing = scenario.Relation(
+        "tracing",
+        remote_app_data=TracingProviderAppData(
+            receivers=[
+                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
+            ]
+        ).dump(),
+    )
+
+    state = base_state.replace(relations=[tracing, tracing_provider], config=sampling_config)
+    # WHEN we process any setup event for the relation
+    state_out = ctx.run(tracing.changed_event, state)
+
+    agent = state_out.get_container("agent")
+
+    # THEN the grafana agent config has a traces tail_sampling section with default values
+    fs = agent.get_filesystem(ctx)
+    gagent_config = fs.joinpath(*CONFIG_PATH.strip("/").split("/"))
+    assert gagent_config.exists()
+    yml = yaml.safe_load(gagent_config.read_text())
+
+    assert yml["traces"]["configs"][0]["tail_sampling"]

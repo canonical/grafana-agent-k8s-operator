@@ -913,6 +913,94 @@ class GrafanaAgentCharm(CharmBase):
         return config
 
     @property
+    def _tracing_sampling(self) -> Dict[str, Any]:
+        # policies, as defined by tail sampling processor definition:
+        # https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor
+        # each of them is evaluated separately and processor decides whether to pass the trace through or not
+        # see the description of tail sampling processor above for the full decision tree
+        return {
+            "policies": [
+                {
+                    "name": "error-traces-policy",
+                    "type": "and",
+                    "and": {
+                        "and_sub_policy": [
+                            {
+                                "name": "trace-status-policy",
+                                "type": "status_code",
+                                "status_code": {"status_codes": ["ERROR"]},
+                                # status_code processor is using span_status property of spans within a trace
+                                # see https://opentelemetry.io/docs/concepts/signals/traces/#span-status for reference
+                            },
+                            {
+                                "name": "probabilistic-policy",
+                                "type": "probabilistic",
+                                "probabilistic": {
+                                    "sampling_percentage": self.config.get(
+                                        "tracing_sample_rate_error"
+                                    )
+                                },
+                            },
+                        ]
+                    },
+                },
+                {
+                    "name": "charm-traces-policy",
+                    "type": "and",
+                    "and": {
+                        "and_sub_policy": [
+                            {
+                                "name": "service-name-policy",
+                                "type": "string_attribute",
+                                "string_attribute": {
+                                    "key": "service.name",
+                                    "values": [".+-charm"],
+                                    "enabled_regex_matching": True,
+                                },
+                            },
+                            {
+                                "name": "probabilistic-policy",
+                                "type": "probabilistic",
+                                "probabilistic": {
+                                    "sampling_percentage": self.config.get(
+                                        "tracing_sample_rate_charm"
+                                    )
+                                },
+                            },
+                        ]
+                    },
+                },
+                {
+                    "name": "workload-traces-policy",
+                    "type": "and",
+                    "and": {
+                        "and_sub_policy": [
+                            {
+                                "name": "service-name-policy",
+                                "type": "string_attribute",
+                                "string_attribute": {
+                                    "key": "service.name",
+                                    "values": [".+-charm"],
+                                    "enabled_regex_matching": True,
+                                    "invert_match": True,
+                                },
+                            },
+                            {
+                                "name": "probabilistic-policy",
+                                "type": "probabilistic",
+                                "probabilistic": {
+                                    "sampling_percentage": self.config.get(
+                                        "tracing_sample_rate_workload"
+                                    )
+                                },
+                            },
+                        ]
+                    },
+                },
+            ]
+        }
+
+    @property
     def _tempo_config(self) -> Dict[str, Union[Any, List[Any]]]:
         """The tracing section of the config.
 
@@ -921,6 +1009,7 @@ class GrafanaAgentCharm(CharmBase):
         """
         endpoints = self._tempo_endpoints_with_tls()
         receivers = self._tracing_receivers
+        sampling = self._tracing_sampling
 
         if not receivers:
             # pushing a config with an empty receivers section will cause gagent to error out
@@ -932,6 +1021,7 @@ class GrafanaAgentCharm(CharmBase):
                     "name": "tempo",
                     "remote_write": endpoints,
                     "receivers": receivers,
+                    "tail_sampling": sampling,
                 }
             ]
         }
