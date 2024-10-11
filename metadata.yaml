@@ -33,7 +33,7 @@ containers:
 resources:
   agent-image:
     type: oci-image
-    upstream-source: ubuntu/grafana-agent:0.35.2-22.04_stable
+    upstream-source: ubuntu/grafana-agent:0.40.4-22.04_stable
     description: OCI image for Grafana Agent
 
 requires:
@@ -59,8 +59,13 @@ requires:
     interface: certificate_transfer
     description: |
       Obtain TLS information (certificate, ca, chain) from another charm.
+  tracing:
+    interface: tracing
+    limit: 1
 
 provides:
+  tracing-provider:
+    interface: tracing
   logging-provider:
     interface: loki_push_api
   grafana-dashboards-provider:

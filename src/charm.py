@@ -10,22 +10,31 @@ import pathlib
 from typing import Any, Dict, List, Union
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from cosl import GrafanaDashboard
-from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 from ops.main import main
 from ops.pebble import Layer
+
+from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 
 logger = logging.getLogger(__name__)
 
 SCRAPE_RELATION_NAME = "metrics-endpoint"
 
 
+@trace_charm(
+    # implemented in GrafanaAgentCharm
+    tracing_endpoint="_tracing_endpoint",
+    server_cert="_server_ca_cert_path",
+    extra_types=(
+        GrafanaAgentCharm,
+        LokiPushApiProvider,
+        MetricsEndpointConsumer,
+        GrafanaDashboard,
+    ),
+)
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     """K8s version of the Grafana Agent charm."""
 
@@ -38,6 +47,10 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             {"logging-consumer"},  # or
             {"grafana-cloud-config"},
         ],
+        "tracing-provider": [  # must be paired with:
+            {"tracing"},  # or
+            {"grafana-cloud-config"},
+        ],
         "grafana-dashboards-consumer": [  # must be paired with:
             {"grafana-dashboards-provider"},  # or
             {"grafana-cloud-config"},
@@ -47,34 +60,28 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+        self.unit.set_ports(self._http_listen_port, self._grpc_listen_port)
 
-        self.service_patch = KubernetesServicePatch(
-            self,
-            [
-                ServicePort(self._http_listen_port, name=f"{self.app.name}-http-listen-port"),
-                ServicePort(self._grpc_listen_port, name=f"{self.app.name}-grpc-listen-port"),
-            ],
-        )
         self._scrape = MetricsEndpointConsumer(self)
-        self.framework.observe(
-            self._scrape.on.targets_changed,  # pyright: ignore
-            self.on_scrape_targets_changed,
-        )
-
         self._loki_provider = LokiPushApiProvider(
             self, relation_name="logging-provider", port=self._http_listen_port
         )
-
         self.framework.observe(
             self._loki_provider.on.loki_push_api_alert_rules_changed,  # pyright: ignore
             self._on_loki_push_api_alert_rules_changed,
         )
-
+        self.framework.observe(
+            self._scrape.on.targets_changed,  # pyright: ignore
+            self.on_scrape_targets_changed,
+        )
         self.framework.observe(
             self.on["grafana-dashboards-consumer"].relation_changed,
             self._on_dashboards_changed,
         )
-
+        self.framework.observe(
+            self.on["grafana-dashboards-consumer"].relation_broken,
+            self._on_dashboards_changed,
+        )
         self.framework.observe(
             self.on.agent_pebble_ready,  # pyright: ignore
             self._on_agent_pebble_ready,
@@ -162,11 +169,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         return self._loki_provider.alerts
 
     @property
-    def is_k8s(self) -> bool:
-        """Is this a k8s charm."""
-        return True
-
-    @property
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         return self._container.can_connect()
@@ -235,7 +237,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         Args:
             cmd: Command to be run.
         """
-        self._container.exec(cmd)
+        self._container.exec(cmd).wait()
 
 
 if __name__ == "__main__":

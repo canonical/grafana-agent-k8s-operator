@@ -83,7 +83,6 @@ CERTS_RELATION_DATA = """[{"certificate": "-----BEGIN CERTIFICATE-----foobarcert
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
@@ -185,6 +184,7 @@ class TestScrapeConfiguration(unittest.TestCase):
             },
             "server": {"log_level": "info"},
             "logs": {},
+            "traces": {},
         }
 
         config = yaml.safe_load(agent_container.pull("/etc/grafana-agent.yaml").read())
@@ -192,7 +192,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.assertEqual(
             DeepDiff(expected_config, self.harness.charm._generate_config(), ignore_order=True), {}
         )
-        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
+        self.assertIsInstance(self.harness.model.unit.status, ActiveStatus)
 
         # Test scale down
         self.harness.remove_relation_unit(rel_id, "prometheus/1")

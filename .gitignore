@@ -8,3 +8,4 @@ __pycache__/
 .idea/
 tests/integration/*-tester/lib/
 .env
+cos-tool*

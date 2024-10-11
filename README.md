@@ -1,4 +1,4 @@
-# Grafana Agent Charmed Operator for Kubernetes
+# Grafana Agent Charmed Operator for Kubernetes 
 
 [![Charmhub Badge](https://charmhub.io/grafana-agent-k8s/badge.svg)](https://charmhub.io/grafana-agent-k8s)
 [![Release Edge](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/grafana-agent-k8s-operator/actions/workflows/release.yaml)
@@ -32,7 +32,7 @@ for further detail.
 
 ## Usage
 
-Create a Juju model for your operators, say "cos"
+Create a Juju model for your operators, say "cos":
 
 ```bash
 juju add-model cos
@@ -52,7 +52,7 @@ juju destroy-model -y cos --no-wait --force --destroy-storage
 
 ## Relations
 
-Currently supported relations are:
+Currently, supported relations are:
 
 ```yaml
 requires:
@@ -72,9 +72,9 @@ provides:
     interface: loki_push_api
 ```
 
-More detailed information about these relations can be found in [Charmhub docs page](https://charmhub.io/grafana-agent-k8s/docs/relations).
+More detailed information about these relations can be found in the [Charmhub docs page](https://charmhub.io/grafana-agent-k8s/docs/relations).
 
 
 ## OCI Images
 
-This charm by default uses the `latest` release of the [grafana-agent](http://ghcr.io/canonical/grafana-agent)
+This charm by default uses the latest (minor) release of the [grafana-agent](https://hub.docker.com/r/ubuntu/grafana-agent).

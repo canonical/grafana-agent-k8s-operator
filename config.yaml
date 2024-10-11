@@ -10,3 +10,57 @@ options:
       Loki).
     type: boolean
     default: false
+  always_enable_zipkin:
+    description: > 
+      Force-enable the receiver for the 'zipkin' protocol in Grafana Agent, 
+      even if there is no integration currently requesting it.
+    type: boolean
+    default: false
+  always_enable_otlp_grpc:
+    description: > 
+      Force-enable the receiver for the 'otlp_grpc' protocol in Grafana Agent, 
+      even if there is no integration currently requesting it.
+    type: boolean
+    default: false
+  always_enable_otlp_http:
+    description: > 
+      Force-enable the receiver for the 'otlp_http' protocol in Grafana Agent, 
+      even if there is no integration currently requesting it.
+    type: boolean
+    default: false
+  always_enable_jaeger_grpc:
+    description: > 
+      Force-enable the receiver for the 'jaeger_grpc' protocol in Grafana Agent, 
+      even if there is no integration currently requesting it.
+    type: boolean
+    default: false
+  always_enable_jaeger_thrift_http:
+    description: >
+      Force-enable the receiver for the 'jaeger_thrift_http' protocol in Grafana Agent, 
+      even if there is no integration currently requesting it.
+    type: boolean
+    default: false
+  tracing_sample_rate_charm:
+    description: >
+      This property defines the percentage of charm traces that are sent to the tracing backend.
+      Setting it to 100 would mean all charm traces are kept, setting to 0 means charm traces
+      aren't sent to the tracing backend at all. Anything outside of 0-100 range will be normalised 
+      to this range by Grafana Agent.
+    type: float
+    default: 100.0
+  tracing_sample_rate_workload:
+    description: >
+      This property defines the percentage of workload traces that are sent to the tracing backend.
+      Setting it to 100 would mean all workload traces are kept, setting to 0 means workload traces
+      aren't sent to the tracing backend at all. Anything outside of 0-100 range will be normalised 
+      to this range by Grafana Agent.
+    type: float
+    default: 1.0
+  tracing_sample_rate_error:
+    description: >
+      This property defines the percentage of error traces (from all sources) that are sent to the tracing backend.
+      Setting it to 100 would mean all error traces are kept, setting to 0 means error traces
+      aren't sent to the tracing backend at all. Anything outside of 0-100 range will be normalised 
+      to this range by Grafana Agent.
+    type: float
+    default: 100.0

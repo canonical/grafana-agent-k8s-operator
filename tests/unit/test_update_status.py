@@ -4,13 +4,12 @@
 import unittest
 from unittest.mock import patch
 
-from charm import GrafanaAgentK8sCharm as GrafanaAgentCharm
 from ops.testing import Harness
 
+from charm import GrafanaAgentK8sCharm as GrafanaAgentCharm
 
-@patch("charm.KubernetesServicePatch", lambda *_, **__: None)
+
 class TestUpdateStatus(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda *_, **__: None)
     def setUp(self, *unused):
         patcher = patch.object(GrafanaAgentCharm, "_agent_version", property(lambda *_: "0.0.0"))
         self.mock_version = patcher.start()
