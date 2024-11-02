@@ -759,6 +759,8 @@ class GrafanaAgentCharm(CharmBase):
         if self.cert.enabled:
             args.append("-server.http.enable-tls")
             args.append("-server.grpc.enable-tls")
+        if self.config["disable_reporting"]:
+            args.append("-disable-reporting")
         return " ".join(args)
 
     def _generate_config(self) -> Dict[str, Any]:
