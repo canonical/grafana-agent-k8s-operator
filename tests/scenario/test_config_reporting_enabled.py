@@ -15,7 +15,7 @@ def test_reporting_enabled(ctx):
     out = ctx.run(ctx.on.config_changed(), state)
 
     # THEN the service layer does NOT include the "-disable-reporting" arg
-    assert "-disable-reporting" not in out.get_container("agent").layers.services["agent"].to_dict().command
+    assert "-disable-reporting" not in out.get_container("agent").layers["agent"].services["agent"].command
 
 
 def test_reporting_disabled(ctx):
@@ -25,4 +25,4 @@ def test_reporting_disabled(ctx):
     out = ctx.run(ctx.on.config_changed(), state)
 
     # THEN the service layer INCLUDES the "-disable-reporting" arg
-    assert "-disable-reporting" in out.get_container("agent").layers.services["agent"].to_dict().command
+    assert "-disable-reporting" in out.get_container("agent").layers["agent"].services["agent"].command

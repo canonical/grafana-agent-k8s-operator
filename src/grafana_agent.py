@@ -148,6 +148,7 @@ class GrafanaAgentCharm(CharmBase):
 
         for rules in [self.loki_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
+                rules.src.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
         self._remote_write = PrometheusRemoteWriteConsumer(
