@@ -70,4 +70,4 @@ options:
       
       Ref: https://grafana.com/docs/agent/latest/static/configuration/flags/#report-information-usage
     type: boolean
-    default: false
+    default: true
