@@ -34,7 +34,7 @@ any point in time by calling the
 `TracingEndpointRequirer.request_protocols(*protocol:str, relation:Optional[Relation])` method.
 Using this method also allows you to use per-relation protocols.
 
-Units of requirer charms obtain the tempo endpoint to which they will push their traces by calling
+Units of provider charms obtain the tempo endpoint to which they will push their traces by calling
 `TracingEndpointRequirer.get_endpoint(protocol: str)`, where `protocol` is, for example:
 - `otlp_grpc`
 - `otlp_http`
@@ -44,10 +44,7 @@ Units of requirer charms obtain the tempo endpoint to which they will push their
 If the `protocol` is not in the list of protocols that the charm requested at endpoint set-up time,
 the library will raise an error.
 
-We recommend that you scale up your tracing provider and relate it to an ingress so that your tracing requests
-go through the ingress and get load balanced across all units. Otherwise, if the provider's leader goes down, your tracing goes down.
-
-## Provider Library Usage
+## Requirer Library Usage
 
 The `TracingEndpointProvider` object may be used by charms to manage relations with their
 trace sources. For this purposes a Tempo-like charm needs to do two things
@@ -110,7 +107,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 2
 
 PYDEPS = ["pydantic"]
 
