@@ -112,6 +112,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         return f"/bin/agent {self._cli_args()}"
 
     def is_command_changed(self) -> bool:
+        """Compare the current command we'd issue with the one in the pebble layer."""
         return self._container.get_plan().services[self._name].command == self._command()
 
     def _on_dashboards_changed(self, _event) -> None:
