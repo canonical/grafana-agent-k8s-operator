@@ -1,29 +1,29 @@
 from unittest.mock import patch
 
 import pytest
-import scenario
 import yaml
 from charms.tempo_k8s.v1.charm_tracing import charm_tracing_disabled
 from charms.tempo_k8s.v2.tracing import Receiver, TracingProviderAppData, TracingRequirerAppData
 from ops import pebble
+from ops.testing import Context, State, Container, Relation
 
 from charm import GrafanaAgentK8sCharm
 from grafana_agent import CONFIG_PATH
 
 
 @pytest.fixture
-def ctx(vroot):
+def ctx():
     with charm_tracing_disabled():
         with patch("socket.getfqdn", new=lambda: "localhost"):
-            yield scenario.Context(GrafanaAgentK8sCharm, charm_root=vroot)
+            yield Context(GrafanaAgentK8sCharm)
 
 
 @pytest.fixture
 def base_state():
-    yield scenario.State(
+    yield State(
         leader=True,
         containers=[
-            scenario.Container(
+            Container(
                 "agent",
                 can_connect=True,
                 # set it to inactive so we can detect when an event has caused it to start
@@ -35,14 +35,14 @@ def base_state():
 
 def test_tracing_relation(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint
-    tracing = scenario.Relation(
+    tracing = Relation(
         "tracing-provider",
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
 
     state = base_state.replace(relations=[tracing])
     # WHEN we process any setup event for the relation
-    state_out = ctx.run(tracing.changed_event, state)
+    state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
     agent = state_out.get_container("agent")
 
@@ -58,11 +58,11 @@ def test_tracing_relation(ctx, base_state):
 
 def test_tracing_relations_in_and_out(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
-    tracing_provider = scenario.Relation(
+    tracing_provider = Relation(
         "tracing-provider",
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
-    tracing = scenario.Relation(
+    tracing = Relation(
         "tracing",
         remote_app_data=TracingProviderAppData(
             receivers=[
@@ -73,7 +73,7 @@ def test_tracing_relations_in_and_out(ctx, base_state):
 
     state = base_state.replace(relations=[tracing, tracing_provider])
     # WHEN we process any setup event for the relation
-    state_out = ctx.run(tracing.changed_event, state)
+    state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
     agent = state_out.get_container("agent")
 
@@ -89,11 +89,11 @@ def test_tracing_relations_in_and_out(ctx, base_state):
 
 def test_tracing_relation_passthrough(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
-    tracing_provider = scenario.Relation(
+    tracing_provider = Relation(
         "tracing-provider",
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
-    tracing = scenario.Relation(
+    tracing = Relation(
         "tracing",
         remote_app_data=TracingProviderAppData(
             receivers=[
@@ -104,7 +104,7 @@ def test_tracing_relation_passthrough(ctx, base_state):
 
     state = base_state.replace(relations=[tracing, tracing_provider])
     # WHEN we process any setup event for the relation
-    state_out = ctx.run(tracing.changed_event, state)
+    state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
     # THEN we act as a tracing provider for 'tracing-provider', and as requirer for 'tracing'
     tracing_out = TracingRequirerAppData.load(state_out.get_relations("tracing")[0].local_app_data)
@@ -132,11 +132,11 @@ def test_tracing_relation_passthrough(ctx, base_state):
 )
 def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_enable):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
-    tracing_provider = scenario.Relation(
+    tracing_provider = Relation(
         "tracing-provider",
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
-    tracing = scenario.Relation(
+    tracing = Relation(
         "tracing",
         remote_app_data=TracingProviderAppData(
             receivers=[
@@ -151,7 +151,7 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
         relations=[tracing, tracing_provider],
     )
     # WHEN we process any setup event for the relation
-    state_out = ctx.run(tracing.changed_event, state)
+    state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
     # THEN we act as a tracing provider for 'tracing-provider', and as requirer for 'tracing'
     tracing_out = TracingRequirerAppData.load(state_out.get_relations("tracing")[0].local_app_data)
@@ -179,11 +179,11 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
 )
 def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
-    tracing_provider = scenario.Relation(
+    tracing_provider = Relation(
         "tracing-provider",
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
-    tracing = scenario.Relation(
+    tracing = Relation(
         "tracing",
         remote_app_data=TracingProviderAppData(
             receivers=[
@@ -194,7 +194,7 @@ def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
 
     state = base_state.replace(relations=[tracing, tracing_provider], config=sampling_config)
     # WHEN we process any setup event for the relation
-    state_out = ctx.run(tracing.changed_event, state)
+    state_out = ctx.run(ctx.ok.relation_changed(tracing), state)
 
     agent = state_out.get_container("agent")
 

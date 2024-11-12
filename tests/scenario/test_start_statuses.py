@@ -4,11 +4,9 @@ import dataclasses
 from pathlib import Path
 
 from ops import pebble
-from scenario import Container, Context, ExecOutput, State
+from ops.testing import Container, Context, Exec, State, UnknownStatus
 
 from charm import GrafanaAgentK8sCharm
-
-CHARM_ROOT = Path(__file__).parent.parent.parent
 
 
 @dataclasses.dataclass
@@ -21,36 +19,24 @@ def _subp_run_mock(*a, **kw):
     return _MockProc(0)
 
 
-def test_install(vroot):
-    ctx = Context(
-        charm_type=GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
-    out = ctx.run(state=State(), event="install")
-    assert out.unit_status == ("unknown", "")
+def test_install(ctx):
+    out = ctx.run(ctx.on.install(), state=State())
+    assert out.unit_status == UnknownStatus()
 
 
-def test_start(vroot):
-    ctx = Context(
-        charm_type=GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
-    out = ctx.run(state=State(), event="start")
+def test_start(ctx):
+    out = ctx.run(ctx.on.start(), state=State())
     assert out.unit_status.name == "unknown"
 
 
-def test_charm_start_with_container(vroot):
+def test_charm_start_with_container(ctx):
     agent = Container(
         name="agent",
         can_connect=True,
-        exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
+        execs={Exec(["/bin/agent", "-version"], return_code=0, stdout="42.42")},
     )
 
-    ctx = Context(
-        charm_type=GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
-    out = ctx.run(state=State(containers=[agent]), event=agent.pebble_ready_event)
+    out = ctx.run(ctx.on.pebble_ready(agent), state=State(containers=[agent]))
 
     assert out.unit_status.name == "blocked"
     agent_out = out.get_container("agent")
