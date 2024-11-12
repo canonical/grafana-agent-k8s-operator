@@ -98,15 +98,21 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
                 "summary": "agent layer",
                 "description": "pebble config layer for Grafana Agent",
                 "services": {
-                    "agent": {
+                    self._name: {
                         "override": "replace",
                         "summary": "agent",
-                        "command": f"/bin/agent {self._cli_args()}",
+                        "command": self._command(),
                         "startup": "enabled",
                     },
                 },
             },
         )
+
+    def _command(self) -> str:
+        return f"/bin/agent {self._cli_args()}"
+
+    def is_command_changed(self) -> bool:
+        return self._container.get_plan().services[self._name].command == self._command()
 
     def _on_dashboards_changed(self, _event) -> None:
         logger.info("updating dashboards")

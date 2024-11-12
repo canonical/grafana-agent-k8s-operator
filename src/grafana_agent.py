@@ -446,6 +446,10 @@ class GrafanaAgentCharm(CharmBase):
         """Return the positions directory."""
         raise NotImplementedError("Please override the positions_dir method")
 
+    def is_command_changed(self) -> bool:
+        """Return True if the command used to start the agent is different from what it would be now."""
+        raise NotImplementedError("Please override the command method")
+
     def run(self, cmd: List[str]):
         """Run cmd on the workload.
 
@@ -635,7 +639,7 @@ class GrafanaAgentCharm(CharmBase):
             # File does not yet exist? Processing a deferred event?
             old_config = None
 
-        if config == old_config:
+        if config == old_config and not self.is_command_changed():
             # Nothing changed, possibly new installation. Move on.
             self.status.update_config = None
             return
