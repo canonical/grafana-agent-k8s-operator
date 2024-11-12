@@ -3,7 +3,7 @@ terraform {
   required_providers {
     juju = {
       source  = "juju/juju"
-      version = "~> 0.15"
+      version = "~> 0.14"
     }
   }
 }
