@@ -9,3 +9,13 @@ __pycache__/
 tests/integration/*-tester/lib/
 .env
 cos-tool*
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+crash.log
+.terraform/
+terraform.tfvars
+terraform.tfvars.json
