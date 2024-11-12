@@ -5,7 +5,7 @@ import yaml
 from charms.tempo_k8s.v1.charm_tracing import charm_tracing_disabled
 from charms.tempo_k8s.v2.tracing import Receiver, TracingProviderAppData, TracingRequirerAppData
 from ops import pebble
-from ops.testing import Context, State, Container, Relation
+from ops.testing import Container, Context, Relation, State
 
 from charm import GrafanaAgentK8sCharm
 from grafana_agent import CONFIG_PATH

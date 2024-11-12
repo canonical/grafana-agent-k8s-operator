@@ -3,9 +3,7 @@
 import json
 
 from cosl import GrafanaDashboard
-from ops.testing import Container, Context, Relation, State
-
-from charm import GrafanaAgentK8sCharm
+from ops.testing import Container, Relation, State
 
 
 def encode_as_dashboard(dct: dict):

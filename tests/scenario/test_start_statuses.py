@@ -1,12 +1,9 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 import dataclasses
-from pathlib import Path
 
 from ops import pebble
-from ops.testing import Container, Context, Exec, State, UnknownStatus
-
-from charm import GrafanaAgentK8sCharm
+from ops.testing import Container, Exec, State, UnknownStatus
 
 
 @dataclasses.dataclass

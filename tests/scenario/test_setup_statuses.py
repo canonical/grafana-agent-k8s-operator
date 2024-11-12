@@ -2,9 +2,7 @@
 # See LICENSE file for licensing details.
 
 from ops import BlockedStatus, UnknownStatus, pebble
-from ops.testing import Container, Context, State, Exec
-
-import charm
+from ops.testing import Container, Exec, State
 
 
 def test_install(ctx):

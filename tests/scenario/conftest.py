@@ -1,8 +1,7 @@
+import pytest
 from ops.testing import Context
 
 from charm import GrafanaAgentK8sCharm
-
-import pytest
 
 
 @pytest.fixture
