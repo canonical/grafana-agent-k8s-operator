@@ -113,7 +113,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def is_command_changed(self) -> bool:
         """Compare the current command we'd issue with the one in the pebble layer."""
-        return self._container.get_plan().services[self._name].command != self._command()
+        if svc := self._container.get_plan().services.get(self._name):
+            return svc.command != self._command()
+        return True
 
     def _on_dashboards_changed(self, _event) -> None:
         logger.info("updating dashboards")
