@@ -64,7 +64,10 @@ options:
       to this range by Grafana Agent.
     type: float
     default: 100.0
-  disable_reporting:
-    description: Disable reporting of enabled feature flags to Grafana.
+  reporting_enabled:
+    description: |
+      Toggle reporting of usage info to grafana, such as enabled feature flags.
+      
+      Ref: https://grafana.com/docs/agent/latest/static/configuration/flags/#report-information-usage
     type: boolean
     default: false
