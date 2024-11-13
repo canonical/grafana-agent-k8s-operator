@@ -20,7 +20,7 @@ ignore-words-list = "assertIn"
 # Linting tools configuration
 [tool.ruff]
 line-length = 99
-exclude = ["__pycache__", "*.egg_info"]
+exclude = ["__pycache__", "*.egg_info", "prometheus-tester", "loki-tester"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
