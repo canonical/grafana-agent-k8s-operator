@@ -92,6 +92,8 @@ class GrafanaAgentCharm(CharmBase):
     _key_path = "/tmp/agent/grafana-agent.key"
     _ca_path = "/usr/local/share/ca-certificates/grafana-agent-operator.crt"
     _ca_folder_path = "/usr/local/share/ca-certificates"
+    # We have a `limit: 1` on the cloud integrator relation so we expect only one such cert.
+    _cloud_ca_path = "/usr/local/share/ca-certificates/cloud-integrator.crt"
 
     # mapping from tempo-supported receivers to the receiver ports to be opened on the grafana-agent host
     _tracing_receivers_ports: Dict[ReceiverProtocol, int] = {
@@ -349,6 +351,12 @@ class GrafanaAgentCharm(CharmBase):
 
     def _on_cloud_config_available(self, _) -> None:
         logger.info("cloud config available")
+        # Write CA from cloud config
+        if self._cloud.tls_ca_ready:
+            self.write_file(self._cloud_ca_path, self._cloud.tls_ca)
+        else:
+            self._delete_file_if_exists(self._cloud_ca_path)
+        self.run(["update-ca-certificates", "--fresh"])
         self._update_config()
         self._update_tracing_provider()
 
@@ -1034,7 +1042,7 @@ class GrafanaAgentCharm(CharmBase):
             a dict with Loki config
         """
         configs = []
-        if self._loki_consumer.loki_endpoints:
+        if self._loki_consumer.loki_endpoints or self._cloud.loki_ready:
             configs.append(
                 {
                     "name": "push_api_server",
