@@ -1,3 +1,4 @@
+import dataclasses
 from unittest.mock import patch
 
 import pytest
@@ -27,7 +28,7 @@ def base_state():
                 "agent",
                 can_connect=True,
                 # set it to inactive so we can detect when an event has caused it to start
-                service_status={"agent": pebble.ServiceStatus.INACTIVE},
+                service_statuses={"agent": pebble.ServiceStatus.INACTIVE},
             )
         ],
     )
@@ -40,7 +41,7 @@ def test_tracing_relation(ctx, base_state):
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
     )
 
-    state = base_state.replace(relations=[tracing])
+    state = dataclasses.replace(base_state, relations=[tracing])
     # WHEN we process any setup event for the relation
     state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
@@ -71,7 +72,7 @@ def test_tracing_relations_in_and_out(ctx, base_state):
         ).dump(),
     )
 
-    state = base_state.replace(relations=[tracing, tracing_provider])
+    state = dataclasses.replace(base_state, relations=[tracing, tracing_provider])
     # WHEN we process any setup event for the relation
     state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
@@ -102,7 +103,7 @@ def test_tracing_relation_passthrough(ctx, base_state):
         ).dump(),
     )
 
-    state = base_state.replace(relations=[tracing, tracing_provider])
+    state = dataclasses.replace(base_state, relations=[tracing, tracing_provider])
     # WHEN we process any setup event for the relation
     state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
@@ -146,7 +147,7 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
     )
 
     # AND given we're configured to always enable some protocols
-    state = base_state.replace(
+    state = dataclasses.replace(base_state,
         config={f"always_enable_{proto}": True for proto in force_enable},
         relations=[tracing, tracing_provider],
     )
@@ -192,9 +193,9 @@ def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
         ).dump(),
     )
 
-    state = base_state.replace(relations=[tracing, tracing_provider], config=sampling_config)
+    state = dataclasses.replace(base_state, relations=[tracing, tracing_provider], config=sampling_config)
     # WHEN we process any setup event for the relation
-    state_out = ctx.run(ctx.ok.relation_changed(tracing), state)
+    state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
     agent = state_out.get_container("agent")
 
