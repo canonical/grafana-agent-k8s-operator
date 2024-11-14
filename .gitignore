@@ -10,3 +10,12 @@ tests/integration/*-tester/lib/
 .env
 cos-tool*
 *.egg-info
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+crash.log
+.terraform/
+terraform.tfvars
+terraform.tfvars.json
