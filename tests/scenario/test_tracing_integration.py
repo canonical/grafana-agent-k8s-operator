@@ -147,7 +147,8 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
     )
 
     # AND given we're configured to always enable some protocols
-    state = dataclasses.replace(base_state,
+    state = dataclasses.replace(
+        base_state,
         config={f"always_enable_{proto}": True for proto in force_enable},
         relations=[tracing, tracing_provider],
     )
@@ -193,7 +194,9 @@ def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
         ).dump(),
     )
 
-    state = dataclasses.replace(base_state, relations=[tracing, tracing_provider], config=sampling_config)
+    state = dataclasses.replace(
+        base_state, relations=[tracing, tracing_provider], config=sampling_config
+    )
     # WHEN we process any setup event for the relation
     state_out = ctx.run(ctx.on.relation_changed(tracing), state)
 
