@@ -2,42 +2,28 @@
 # See LICENSE file for licensing details.
 
 from ops import BlockedStatus, UnknownStatus, pebble
-from scenario import Container, Context, ExecOutput, State
-
-import charm
+from ops.testing import Container, Exec, State
 
 
-def test_install(vroot):
-    context = Context(
-        charm.GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
-    out = context.run("install", State())
+def test_install(ctx):
+    out = ctx.run(ctx.on.install(), State())
     assert out.unit_status == UnknownStatus()
 
 
-def test_start(vroot):
-    context = Context(
-        charm.GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
-    out = context.run("start", State())
+def test_start(ctx):
+    out = ctx.run(ctx.on.start(), State())
     assert out.unit_status == UnknownStatus()
 
 
-def test_charm_start_with_container(vroot):
+def test_charm_start_with_container(ctx):
     agent = Container(
         name="agent",
         can_connect=True,
-        exec_mock={("/bin/agent", "-version"): ExecOutput(stdout="42.42")},
+        execs={Exec(["/bin/agent", "-version"], return_code=0, stdout="42.42")},
     )
 
-    context = Context(
-        charm.GrafanaAgentK8sCharm,
-        charm_root=vroot,
-    )
     state = State(containers=[agent])
-    out = context.run(agent.pebble_ready_event, state)
+    out = ctx.run(ctx.on.pebble_ready(agent), state)
 
     assert out.unit_status == BlockedStatus(
         "Missing incoming ('requires') relation: metrics-endpoint|logging-provider|tracing-provider|grafana-dashboards-consumer"

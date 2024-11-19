@@ -150,6 +150,7 @@ class GrafanaAgentCharm(CharmBase):
 
         for rules in [self.loki_rules_paths, self.dashboard_paths]:
             if not os.path.isdir(rules.dest):
+                rules.src.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
         self._remote_write = PrometheusRemoteWriteConsumer(
@@ -453,6 +454,10 @@ class GrafanaAgentCharm(CharmBase):
         """Return the positions directory."""
         raise NotImplementedError("Please override the positions_dir method")
 
+    def is_command_changed(self) -> bool:
+        """Return True if the command used to start the agent is different from what it would be now."""
+        raise NotImplementedError("Please override the command method")
+
     def run(self, cmd: List[str]):
         """Run cmd on the workload.
 
@@ -642,7 +647,7 @@ class GrafanaAgentCharm(CharmBase):
             # File does not yet exist? Processing a deferred event?
             old_config = None
 
-        if config == old_config:
+        if config == old_config and not self.is_command_changed():
             # Nothing changed, possibly new installation. Move on.
             self.status.update_config = None
             return
@@ -767,6 +772,8 @@ class GrafanaAgentCharm(CharmBase):
         if self.cert.enabled:
             args.append("-server.http.enable-tls")
             args.append("-server.grpc.enable-tls")
+        if not self.config["reporting_enabled"]:
+            args.append("-disable-reporting")
         return " ".join(args)
 
     def _generate_config(self) -> Dict[str, Any]:
