@@ -318,7 +318,7 @@ LIBAPI = 3
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 23
+LIBPATCH = 20
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -1902,20 +1902,10 @@ class TLSCertificatesRequiresV3(Object):
                     )
                 else:
                     try:
-                        secret = self.model.get_secret(label=f"{LIBID}-{csr_in_sha256_hex}")
                         logger.debug(
                             "Setting secret with label %s", f"{LIBID}-{csr_in_sha256_hex}"
                         )
-                        # Juju < 3.6 will create a new revision even if the content is the same
-                        if (
-                            secret.get_content(refresh=True).get("certificate", "")
-                            == certificate.certificate
-                        ):
-                            logger.debug(
-                                "Secret %s with correct certificate already exists",
-                                f"{LIBID}-{csr_in_sha256_hex}",
-                            )
-                            continue
+                        secret = self.model.get_secret(label=f"{LIBID}-{csr_in_sha256_hex}")
                         secret.set_content(
                             {"certificate": certificate.certificate, "csr": certificate.csr}
                         )
@@ -1996,19 +1986,11 @@ class TLSCertificatesRequiresV3(Object):
         provider_certificate = self._find_certificate_in_relation_data(csr)
         if not provider_certificate:
             # A secret expired but we did not find matching certificate. Cleaning up
-            logger.warning(
-                "Failed to find matching certificate for csr, cleaning up secret %s",
-                event.secret.label,
-            )
             event.secret.remove_all_revisions()
             return
 
         if not provider_certificate.expiry_time:
             # A secret expired but matching certificate is invalid. Cleaning up
-            logger.warning(
-                "Certificate matching csr is invalid, cleaning up secret %s",
-                event.secret.label,
-            )
             event.secret.remove_all_revisions()
             return
 
@@ -2041,18 +2023,14 @@ class TLSCertificatesRequiresV3(Object):
             return provider_certificate
         return None
 
-    def _get_csr_from_secret(self, secret: Secret) -> Union[str, None]:
+    def _get_csr_from_secret(self, secret: Secret) -> str:
         """Extract the CSR from the secret label or content.
 
         This function is a workaround to maintain backwards compatibility
         and fix the issue reported in
         https://github.com/canonical/tls-certificates-interface/issues/228
         """
-        try:
-            content = secret.get_content(refresh=True)
-        except SecretNotFoundError:
-            return None
-        if not (csr := content.get("csr", None)):
+        if not (csr := secret.get_content().get("csr", "")):
             # In versions <14 of the Lib we were storing the CSR in the label of the secret
             # The CSR now is stored int the content of the secret, which was a breaking change
             # Here we get the CSR if the secret was created by an app using libpatch 14 or lower
