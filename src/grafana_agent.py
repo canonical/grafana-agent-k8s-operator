@@ -33,7 +33,7 @@ from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
-from charms.tempo_k8s.v2.tracing import (
+from charms.tempo_coordinator_k8s.v0.tracing import (
     ReceiverProtocol,
     TracingEndpointProvider,
     TracingEndpointRequirer,

@@ -3,8 +3,12 @@ from unittest.mock import patch
 
 import pytest
 import yaml
-from charms.tempo_k8s.v1.charm_tracing import charm_tracing_disabled
-from charms.tempo_k8s.v2.tracing import Receiver, TracingProviderAppData, TracingRequirerAppData
+from charms.tempo_coordinator_k8s.v0.charm_tracing import charm_tracing_disabled
+from charms.tempo_coordinator_k8s.v0.tracing import (
+    Receiver,
+    TracingProviderAppData,
+    TracingRequirerAppData,
+)
 from ops import pebble
 from ops.testing import Container, Context, Relation, State
 
