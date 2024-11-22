@@ -32,7 +32,7 @@ parts:
     - pkg-config
     - rustc
     - cargo
-  charm-binary-python-packages:
+    charm-binary-python-packages:
       # Install PyYAML from binary and avoid building it from sources. This way, we can use PyYAML with C-optimized lib.
       # With the C-optimized lib, serialization in ops is 20x faster.
       - PyYAML
