@@ -13,7 +13,7 @@ import yaml
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from cosl import GrafanaDashboard
+from cosl import LZMABase64
 from ops.main import main
 from ops.pebble import Layer
 
@@ -32,7 +32,7 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
         GrafanaAgentCharm,
         LokiPushApiProvider,
         MetricsEndpointConsumer,
-        GrafanaDashboard,
+        LZMABase64,
     ),
 )
 class GrafanaAgentK8sCharm(GrafanaAgentCharm):
@@ -156,9 +156,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             if "templates" not in dashboards:
                 continue
             for template in dashboards["templates"]:
-                content = GrafanaDashboard(
+                content = json.loads(LZMABase64.decompress(
                     dashboards["templates"][template].get("content")
-                )._deserialize()
+                ))
                 entry = {
                     "charm": dashboards["templates"][template].get("charm", "charm_name"),
                     "relation_id": rel.id,
