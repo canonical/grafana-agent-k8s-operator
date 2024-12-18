@@ -288,10 +288,13 @@ class GrafanaAgentCharm(CharmBase):
         )
 
     def _update_tracing_provider(self):
+        requested_tracing_protocols = (
+            self._requested_tracing_protocols if self._tracing.is_ready() else []
+        )
         self._tracing_provider.publish_receivers(
             tuple(
                 (protocol, self._get_tracing_receiver_url(protocol))
-                for protocol in self._requested_tracing_protocols
+                for protocol in requested_tracing_protocols
             )
         )
 
@@ -880,6 +883,14 @@ class GrafanaAgentCharm(CharmBase):
         Returns:
             a dict with the receivers config.
         """
+        if not self._tracing.is_ready():
+            # we need to guard against the "upstream" tracing backend relation as grafana-agent fails to start
+            # if we don't provide the tracing endpoint to send data to.
+            logger.warning(
+                "Tracing backend is not connected yet: grafana-agent cannot ingest traces."
+            )
+            return {}
+
         receivers_set = self._requested_tracing_protocols
 
         if not receivers_set:
