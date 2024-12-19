@@ -288,6 +288,8 @@ class GrafanaAgentCharm(CharmBase):
         )
 
     def _update_tracing_provider(self):
+        # If the "upstream" tracing is not ready, we don't want to publish the receivers.
+        # Otherwise, charms that integrate over `tracing` would start sending traces to an endpoint that isn't open.
         requested_tracing_protocols = (
             self._requested_tracing_protocols if self._tracing.is_ready() else []
         )
@@ -884,8 +886,6 @@ class GrafanaAgentCharm(CharmBase):
             a dict with the receivers config.
         """
         if not self._tracing.is_ready():
-            # we need to guard against the "upstream" tracing backend relation as grafana-agent fails to start
-            # if we don't provide the tracing endpoint to send data to.
             logger.warning(
                 "Tracing backend is not connected yet: grafana-agent cannot ingest traces."
             )
