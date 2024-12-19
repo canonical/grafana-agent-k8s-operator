@@ -40,6 +40,37 @@ def base_state():
 
 def test_tracing_relation(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint
+    tracing_provider = Relation(
+        "tracing-provider",
+        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+    )
+    tracing = Relation(
+        "tracing",
+        remote_app_data=TracingProviderAppData(
+            receivers=[
+                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
+            ]
+        ).dump(),
+    )
+
+    state = dataclasses.replace(base_state, relations=[tracing, tracing_provider])
+    # WHEN we process any setup event for the relation
+    state_out = ctx.run(ctx.on.relation_changed(tracing_provider), state)
+
+    agent = state_out.get_container("agent")
+
+    # THEN the agent has started
+    assert agent.services["agent"].is_running()
+    # AND the grafana agent config has a traces config section
+    fs = agent.get_filesystem(ctx)
+    gagent_config = fs.joinpath(*CONFIG_PATH.strip("/").split("/"))
+    assert gagent_config.exists()
+    yml = yaml.safe_load(gagent_config.read_text())
+    assert yml["traces"]["configs"][0], yml.get("traces", "<no traces config>")
+
+
+def test_tracing_provider_without_tracing(ctx, base_state):
+    # GIVEN a tracing relation over the tracing-provider endpoint
     tracing = Relation(
         "tracing-provider",
         remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
@@ -53,12 +84,12 @@ def test_tracing_relation(ctx, base_state):
 
     # THEN the agent has started
     assert agent.services["agent"].is_running()
-    # AND the grafana agent config has a traces config section
+    # AND the grafana agent config has an empty traces config section
     fs = agent.get_filesystem(ctx)
     gagent_config = fs.joinpath(*CONFIG_PATH.strip("/").split("/"))
     assert gagent_config.exists()
     yml = yaml.safe_load(gagent_config.read_text())
-    assert yml["traces"]["configs"][0], yml.get("traces", "<no traces config>")
+    assert yml["traces"] == {}
 
 
 def test_tracing_relations_in_and_out(ctx, base_state):
