@@ -327,6 +327,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.assertEqual({}, self.harness.charm._loki_config)
 
     def test_loki_config_with_tls(self):
+        self.harness.handle_exec("agent", ["update-ca-certificates"], result=0)
         rel_id = self.harness.add_relation("certificates", "certs")
         self.harness.add_relation_unit(rel_id, "certs/0")
         self.harness.update_relation_data(rel_id, "certs", {"certificates": CERTS_RELATION_DATA})
