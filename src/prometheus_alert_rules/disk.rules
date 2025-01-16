@@ -20,7 +20,7 @@ groups:
         The 6-hour-ahead prediction is made as a linear regression from the last 60 minutes of data.
   - alert: HostDiskSpace
     # some fstype are excluded because they are not relevant; see https://github.com/canonical/grafana-agent-k8s-operator/pull/340 for details
-    expr: used_disk_space{fstype!~"fuse\.lxcfs|fuse\.snapfuse", mountpoint!~"/run.*|/proc|/dev"} > 90
+    expr: used_disk_space{fstype!~"fuse\\.lxcfs|fuse\\.snapfuse", mountpoint!~"/run.*|/proc|/dev"} > 90
     for: 0m
     labels:
       severity: critical
