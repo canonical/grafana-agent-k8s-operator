@@ -156,9 +156,9 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             if "templates" not in dashboards:
                 continue
             for template in dashboards["templates"]:
-                content = json.loads(LZMABase64.decompress(
-                    dashboards["templates"][template].get("content")
-                ))
+                content = json.loads(
+                    LZMABase64.decompress(dashboards["templates"][template].get("content"))
+                )
                 entry = {
                     "charm": dashboards["templates"][template].get("charm", "charm_name"),
                     "relation_id": rel.id,

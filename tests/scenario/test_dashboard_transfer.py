@@ -42,4 +42,4 @@ def test_dashboard_propagation(ctx):
         dash = mgr.charm.dashboards[0]
         assert dash["charm"] == expected["charm"]
         assert dash["title"] == expected["title"]
-        assert dash["content"] == expected["content"]._deserialize()
+        assert dash["content"] == json.loads(LZMABase64.decompress(expected["content"]))
