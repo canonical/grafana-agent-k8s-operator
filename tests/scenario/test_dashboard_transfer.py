@@ -2,12 +2,12 @@
 # See LICENSE file for licensing details.
 import json
 
-from cosl import GrafanaDashboard
+from cosl import LZMABase64
 from ops.testing import Container, Relation, State
 
 
 def encode_as_dashboard(dct: dict):
-    return GrafanaDashboard._serialize(json.dumps(dct).encode("utf-8"))
+    return LZMABase64.compress(json.dumps(dct))
 
 
 def test_dashboard_propagation(ctx):
@@ -42,4 +42,4 @@ def test_dashboard_propagation(ctx):
         dash = mgr.charm.dashboards[0]
         assert dash["charm"] == expected["charm"]
         assert dash["title"] == expected["title"]
-        assert dash["content"] == expected["content"]._deserialize()
+        assert dash["content"] == json.loads(LZMABase64.decompress(expected["content"]))
