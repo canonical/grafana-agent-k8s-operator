@@ -4,6 +4,7 @@
 # See LICENSE file for licensing details.
 
 """A  juju charm for Grafana Agent on Kubernetes."""
+
 import json
 import logging
 import pathlib
@@ -61,6 +62,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self.unit.set_ports(self._http_listen_port, self._grpc_listen_port)
+        self._forward_alert_rules = self.config["forward_alert_rules"]
 
         self._scrape = MetricsEndpointConsumer(self)
         self._loki_provider = LokiPushApiProvider(
@@ -145,7 +147,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def metrics_rules(self) -> Dict[str, Any]:
         """Return a list of metrics rules."""
-        return self._scrape.alerts
+        return self._scrape.alerts if self._forward_alert_rules else {}
 
     @property
     def dashboards(self) -> list:
@@ -175,7 +177,7 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
 
     def logs_rules(self) -> Dict[str, Any]:
         """Return a list of logging rules."""
-        return self._loki_provider.alerts
+        return self._loki_provider.alerts if self._forward_alert_rules else {}
 
     @property
     def is_ready(self):

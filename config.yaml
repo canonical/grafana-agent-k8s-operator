@@ -71,3 +71,8 @@ options:
       Ref: https://grafana.com/docs/agent/latest/static/configuration/flags/#report-information-usage
     type: boolean
     default: true
+  forward_alert_rules:
+    description: >
+      Toggle forwarding of alert rules.
+    type: boolean
+    default: true

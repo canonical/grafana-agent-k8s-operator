@@ -13,7 +13,7 @@ import subprocess
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Union, get_args
+from typing import Any, Callable, Dict, List, Optional, Set, Union, cast, get_args
 
 import yaml
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -154,12 +154,20 @@ class GrafanaAgentCharm(CharmBase):
                 rules.src.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
+        self._forward_alert_rules = cast(bool, self.config["forward_alert_rules"])
         self._remote_write = PrometheusRemoteWriteConsumer(
-            self, alert_rules_path=self.metrics_rules_paths.dest
+            self,
+            alert_rules_path=self.metrics_rules_paths.dest,
+            forward_alert_rules=self._forward_alert_rules,
+            refresh_event=[self.on.config_changed],
         )
 
         self._loki_consumer = LokiPushApiConsumer(
-            self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
+            self,
+            relation_name="logging-consumer",
+            alert_rules_path=self.loki_rules_paths.dest,
+            forward_alert_rules=self._forward_alert_rules,
+            refresh_event=[self.on.config_changed],
         )
 
         self._grafana_dashboards_provider = GrafanaDashboardProvider(
