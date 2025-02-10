@@ -13,7 +13,7 @@ import subprocess
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Union, get_args
+from typing import Any, Callable, Dict, List, Optional, Set, Union, cast, get_args
 
 import yaml
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -154,12 +154,20 @@ class GrafanaAgentCharm(CharmBase):
                 rules.src.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
+        self._forward_alert_rules = cast(bool, self.config["forward_alert_rules"])
         self._remote_write = PrometheusRemoteWriteConsumer(
-            self, alert_rules_path=self.metrics_rules_paths.dest
+            self,
+            alert_rules_path=self.metrics_rules_paths.dest,
+            forward_alert_rules=self._forward_alert_rules,
+            refresh_event=[self.on.config_changed],
         )
 
         self._loki_consumer = LokiPushApiConsumer(
-            self, relation_name="logging-consumer", alert_rules_path=self.loki_rules_paths.dest
+            self,
+            relation_name="logging-consumer",
+            alert_rules_path=self.loki_rules_paths.dest,
+            forward_alert_rules=self._forward_alert_rules,
+            refresh_event=[self.on.config_changed],
         )
 
         self._grafana_dashboards_provider = GrafanaDashboardProvider(
@@ -683,9 +691,7 @@ class GrafanaAgentCharm(CharmBase):
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
-        self._grafana_dashboards_provider._reinitialize_dashboard_data(
-            inject_dropdowns=False
-        )  # noqa
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)  # noqa
         self._update_status()
 
     def _enhance_endpoints_with_tls(self, endpoints) -> List[Dict[str, Any]]:
@@ -1084,12 +1090,12 @@ class GrafanaAgentCharm(CharmBase):
             for config in configs:
                 for scrape_config in config.get("scrape_configs", []):
                     if scrape_config.get("loki_push_api"):
-                        scrape_config["loki_push_api"]["server"][
-                            "http_tls_config"
-                        ] = self.tls_config
-                        scrape_config["loki_push_api"]["server"][
-                            "grpc_tls_config"
-                        ] = self.tls_config
+                        scrape_config["loki_push_api"]["server"]["http_tls_config"] = (
+                            self.tls_config
+                        )
+                        scrape_config["loki_push_api"]["server"]["grpc_tls_config"] = (
+                            self.tls_config
+                        )
 
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
