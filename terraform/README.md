@@ -21,6 +21,7 @@ The module offers the following configurable inputs:
 | `model_name`| string | Name of the model that the charm is deployed on |  |
 | `revision`| number | Revision number of the charm name | null |
 | `units`| number | Number of units to deploy | 1 |
+| `grafana_data-storage-size`| number | Number of units to deploy | 1 |
 
 ### Outputs
 Upon applied, the module exports the following outputs:

@@ -40,3 +40,9 @@ variable "units" {
   type        = number
   default     = 1
 }
+
+variable "grafana_data-storage-size" {
+  description = "Grafana agent charm: set the size of the data volume. The default is 1 GB."
+  type        = number
+  default     = 1
+}
