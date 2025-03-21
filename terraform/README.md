@@ -12,7 +12,7 @@ This module requires a `juju` model to be available. Refer to the [usage section
 ### Inputs
 The module offers the following configurable inputs:
 
-| Name | Type | Description | Required |
+| Name | Type | Description | Default |
 | - | - | - | - |
 | `app_name`| string | Application name | mimir-worker |
 | `channel`| string | Channel that the charm is deployed from | latest/edge |
@@ -21,7 +21,7 @@ The module offers the following configurable inputs:
 | `model_name`| string | Name of the model that the charm is deployed on |  |
 | `revision`| number | Revision number of the charm name | null |
 | `units`| number | Number of units to deploy | 1 |
-| `grafana_data-storage-size`| number | Number of units to deploy | 1 |
+| `grafana_data_storage_size`| number | Size of the data volume | 1GB |
 
 ### Outputs
 Upon applied, the module exports the following outputs:
