@@ -12,7 +12,7 @@ import yaml
 from helpers import loki_rules, oci_image, prometheus_rules
 
 logger = logging.getLogger(__name__)
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 agent_name = "agent"
 loki_name = "loki"
