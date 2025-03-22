@@ -1,24 +1,26 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+name: grafana-agent-k8s
 type: charm
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "22.04"
-      architectures: ["amd64"]
-    run-on:
-    - name: "ubuntu"
-      channel: "22.04"
-      architectures: ["amd64"]
-  - build-on:
-    - name: "ubuntu"
-      channel: "22.04"
-      architectures: ["arm64"]
-    run-on:
-    - name: "ubuntu"
-      channel: "22.04"
-      architectures: ["arm64"]
+assumes:
+  - k8s-api
+
+description: |
+  Grafana Agent for Kubernetes cluster
+summary: |
+  Grafana Agent is a telemetry collector for sending metrics, logs, and trace data to the opinionated Grafana observability stack.
+
+links:
+  documentation: https://discourse.charmhub.io/t/grafana-agent-k8s-docs-index/5605
+  website: https://charmhub.io/grafana-agent-k8s
+  source: https://github.com/canonical/grafana-agent-k8s-operator
+  issues: https://github.com/canonical/grafana-agent-k8s-operator/issues
+
+platforms:
+  ubuntu@22.04:amd64:
+  ubuntu@22.04:arm64:
+
 parts:
   charm:
     build-packages:
@@ -38,9 +40,141 @@ parts:
       - PyYAML
   cos-tool:
     plugin: dump
-    source: .
-    build-packages:
-      - curl
-    override-pull: |
-      curl -L -O https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_TARGET_ARCH}
-      chmod 775 cos-tool-*
+    source: https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}
+    source-type: file
+    permissions:
+      - path: cos-tool-${CRAFT_ARCH_BUILD_FOR}
+        mode: "755"
+
+containers:
+  agent:
+    resource: agent-image
+    mounts:
+      - storage: data
+        location: /tmp/agent/data
+
+resources:
+  agent-image:
+    type: oci-image
+    upstream-source: ubuntu/grafana-agent:0.40.4-22.04_stable
+    description: OCI image for Grafana Agent
+
+requires:
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Certificate for the grafana agent server (API endpoint is served on :12345 by default)
+      to use to authenticate to clients, and the CA certificate of the signing CA.
+      We currently assume that the same CA signs all scrape targets.
+  send-remote-write:
+    interface: prometheus_remote_write
+  metrics-endpoint:
+    interface: prometheus_scrape
+  logging-consumer:
+    interface: loki_push_api
+  grafana-dashboards-consumer:
+    interface: grafana_dashboard
+  grafana-cloud-config:
+    interface: grafana_cloud_config
+    limit: 1
+  receive-ca-cert:
+    interface: certificate_transfer
+    description: |
+      Obtain TLS information (certificate, ca, chain) from another charm.
+  tracing:
+    interface: tracing
+    limit: 1
+
+provides:
+  tracing-provider:
+    interface: tracing
+  logging-provider:
+    interface: loki_push_api
+  grafana-dashboards-provider:
+    interface: grafana_dashboard
+
+peers:
+  peers:
+    interface: grafana_agent_replica
+
+storage:
+  data:
+    type: filesystem
+
+config:
+  options:
+    tls_insecure_skip_verify:
+      description: |
+        Flag to skip the verification for insecure TLS.
+        If "true", self-signed certs can be seamlessly used; this setting
+        will be applied to all of the Agent configurations (Prometheus,
+        Loki).
+      type: boolean
+      default: false
+    always_enable_zipkin:
+      description: >
+        Force-enable the receiver for the 'zipkin' protocol in Grafana Agent, 
+        even if there is no integration currently requesting it.
+      type: boolean
+      default: false
+    always_enable_otlp_grpc:
+      description: >
+        Force-enable the receiver for the 'otlp_grpc' protocol in Grafana Agent, 
+        even if there is no integration currently requesting it.
+      type: boolean
+      default: false
+    always_enable_otlp_http:
+      description: >
+        Force-enable the receiver for the 'otlp_http' protocol in Grafana Agent, 
+        even if there is no integration currently requesting it.
+      type: boolean
+      default: false
+    always_enable_jaeger_grpc:
+      description: >
+        Force-enable the receiver for the 'jaeger_grpc' protocol in Grafana Agent, 
+        even if there is no integration currently requesting it.
+      type: boolean
+      default: false
+    always_enable_jaeger_thrift_http:
+      description: >
+        Force-enable the receiver for the 'jaeger_thrift_http' protocol in Grafana Agent, 
+        even if there is no integration currently requesting it.
+      type: boolean
+      default: false
+    tracing_sample_rate_charm:
+      description: >
+        This property defines the percentage of charm traces that are sent to the tracing backend.
+        Setting it to 100 would mean all charm traces are kept, setting to 0 means charm traces
+        aren't sent to the tracing backend at all. Anything outside of 0-100 range will be normalised 
+        to this range by Grafana Agent.
+      type: float
+      default: 100.0
+    tracing_sample_rate_workload:
+      description: >
+        This property defines the percentage of workload traces that are sent to the tracing backend.
+        Setting it to 100 would mean all workload traces are kept, setting to 0 means workload traces
+        aren't sent to the tracing backend at all. Anything outside of 0-100 range will be normalised 
+        to this range by Grafana Agent.
+      type: float
+      default: 1.0
+    tracing_sample_rate_error:
+      description: >
+        This property defines the percentage of error traces (from all sources) that are sent to the tracing backend.
+        Setting it to 100 would mean all error traces are kept, setting to 0 means error traces
+        aren't sent to the tracing backend at all. Anything outside of 0-100 range will be normalised 
+        to this range by Grafana Agent.
+      type: float
+      default: 100.0
+    reporting_enabled:
+      description: |
+        Toggle reporting of usage info to grafana, such as enabled feature flags.
+
+        Ref: https://grafana.com/docs/agent/latest/static/configuration/flags/#report-information-usage
+      type: boolean
+      default: true
+    forward_alert_rules:
+      description: >
+        Toggle forwarding of alert rules.
+      type: boolean
+      default: true
