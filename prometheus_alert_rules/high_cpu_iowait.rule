@@ -1,8 +1,0 @@
-alert: HostCpuHighIowait
-expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100 > 10
-for: 0m
-labels:
-  severity: warning
-annotations:
-  summary: Host CPU high iowait (instance {{ $labels.instance }})
-  description: "CPU iowait > 10%. A high iowait means that you are disk or network bound.\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
