@@ -6,6 +6,7 @@
 
 import logging
 from multiprocessing import Queue
+from typing import Optional
 
 import logging_loki  # type: ignore
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
@@ -38,7 +39,7 @@ class LokiTesterCharm(CharmBase):
         self.topology = JujuTopology.from_charm(self)
         self.unit.status = ActiveStatus()
 
-    def _setup_logging(self, handlers_init: dict = None) -> None:
+    def _setup_logging(self, handlers_init: Optional[dict] = None) -> None:
         """Ensure logging is configured correctly.
 
         A dict of "wanted" loggers is passed in, and the list of current loggers known to

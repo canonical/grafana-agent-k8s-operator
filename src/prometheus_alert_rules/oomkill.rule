@@ -1,8 +1,11 @@
-alert: HostOomKillDetected
-expr: increase(node_vmstat_oom_kill[1m]) > 0
-for: 0m
-labels:
-  severity: warning
-annotations:
-  summary: Host OOM kill detected (instance {{ $labels.instance }})
-  description: "OOM kill detected\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+groups:
+- name: HostOomKillDetected
+  rules:
+  - alert: HostOomKillDetected
+    expr: increase(node_vmstat_oom_kill[1m]) > 0
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host OOM kill detected (instance {{ $labels.instance }})
+      description: "OOM kill detected\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"

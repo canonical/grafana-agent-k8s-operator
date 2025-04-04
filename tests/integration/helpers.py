@@ -132,6 +132,7 @@ async def unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
     Returns:
         unit address as a string
     """
+    assert ops_test.model
     status = await ops_test.model.get_status()
     return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
 
@@ -212,11 +213,10 @@ async def unit_password(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
     Returns:
         admin password as a string
     """
-    action = (
-        await ops_test.model.applications[app_name]
-        .units[unit_num]
-        .run_action("get-admin-password")
-    )
+    assert ops_test.model
+    application = ops_test.model.applications[app_name]
+    assert application
+    action = await application.units[unit_num].run_action("get-admin-password")
     action = await action.wait()
     return action.results["admin-password"]
 

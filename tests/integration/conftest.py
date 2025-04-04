@@ -6,6 +6,7 @@ import os
 import shutil
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from pytest_operator.plugin import OpsTest
@@ -63,20 +64,12 @@ def copy_libraries_into_test_charm():
 @pytest.fixture(scope="module")
 @timed_memoizer
 async def grafana_agent_charm(ops_test: OpsTest):
-    """Loki charm used for integration testing."""
-    count = 0
-    # Intermittent issue where charmcraft fails to build the charm for an unknown reason.
-    # Retry building the charm
-    while True:
-        try:
-            charm = await ops_test.build_charm(".")
-            return charm
-        except RuntimeError:
-            logger.warning("Failed to build grafana agent. Trying again!")
-            count += 1
+    """Grafana agent charm used for integration testing."""
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
 
-            if count == 3:
-                raise
+    charm = await ops_test.build_charm(".")
+    return charm
 
 
 @pytest.fixture(scope="module")
