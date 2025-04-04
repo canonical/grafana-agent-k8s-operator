@@ -1,0 +1,76 @@
+groups:
+- name: HostDisk
+  rules:
+  - record: used_disk_space
+    expr: |
+      100 * (1 - (
+        node_filesystem_free_bytes / node_filesystem_size_bytes)
+      )
+  - alert: HostDiskSpaceFillsUp
+    expr: predict_linear(used_disk_space{mountpoint=~"/"}[6h], 6*60*60) > 90
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "[Prediction] Host filesystem '{{ $labels.mountpoint }}' is using {{ $value | printf \"%.0f\" }}% of the total space (instance {{ $labels.instance }})"
+      description: >-
+        Host filesystem '{{ $labels.mountpoint }}' usage can potentially reach {{ $value | printf "%.0f" }}% of the total space.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+        The 6-hour-ahead prediction is made as a linear regression from the last 60 minutes of data.
+  - alert: HostDiskSpace
+    # some fstype are excluded because they are not relevant; see https://github.com/canonical/grafana-agent-k8s-operator/pull/340 for details
+    expr: used_disk_space{fstype!~"fuse\\.lxcfs|fuse\\.snapfuse", mountpoint!~"/run.*|/proc|/dev"} > 90
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: Host filesystem '{{ $labels.mountpoint }}' is using {{ $value | printf "%.0f" }}% of the total space (instance {{ $labels.instance }})
+      description: >-
+        Host filesystem '{{ $labels.mountpoint }}' is using {{ $value | printf "%.0f" }}% of the total space.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+  - alert: HostReadonlyFilesystem
+    expr: node_filesystem_readonly{mountpoint!~"/snap/.*|/sys/fs/cgroup/.*"} > 0
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host filesystem '{{ $labels.mountpoint }}' is readonly (instance {{ $labels.instance }})
+      description: >-
+        Host filesystem '{{ $labels.mountpoint }}' is readonly.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+  - alert: HostXFSError
+    expr: node_filesystem_device_error{fstype="xfs"} > 0
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: XFS error found for device '{{ $labels.device }}' (instance {{ $labels.instance }})
+      description: >-
+         XFS error found for device '{{ $labels.device }}'.
+           VALUE = {{ $value }}
+           LABELS = {{ $labels }}
+  - alert: HostHighDiskReadRate
+    expr: irate(node_disk_read_bytes_total[2m]) / 1024 / 1024 > 50
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host high disk '{{ $labels.device }}' read rate (instance {{ $labels.instance }})
+      description: >-
+        Host disk '{{ $labels.device }}' is probably reading too much data ({{ $value | printf "%.0f" }} > 50 MB/s) for last 5m.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}
+  - alert: HostHighDiskWriteRate
+    expr: irate(node_disk_written_bytes_total[2m]) / 1024 / 1024 > 50
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Host high disk '{{ $labels.device }}' write rate (instance {{ $labels.instance }})
+      description: >-
+        Host disk '{{ $labels.device }}' is probably writing too much data ({{ $value | printf "%.0f" }} > 50 MB/s) for last 5m.
+          VALUE = {{ $value }}
+          LABELS = {{ $labels }}

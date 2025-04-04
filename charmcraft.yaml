@@ -22,22 +22,17 @@ platforms:
   ubuntu@22.04:arm64:
 
 parts:
+  # Install PyYAML from binary and avoid building it from sources. This way, we can use PyYAML with C-optimized lib.
+  # With the C-optimized lib, serialization in ops is 20x faster.
+  # TODO: check if this is using C-optimized pyyaml now
   charm:
-    build-packages:
-    - git
-
-    # The following are needed for tls-certificates-interface
-    - build-essential
-    - python3-dev
-    - libffi-dev
-    - libssl-dev
-    - pkg-config
-    - rustc
-    - cargo
-    charm-binary-python-packages:
-      # Install PyYAML from binary and avoid building it from sources. This way, we can use PyYAML with C-optimized lib.
-      # With the C-optimized lib, serialization in ops is 20x faster.
-      - PyYAML
+    source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
+    override-build: |
+      craftctl default
+      git describe --always > $CRAFT_PART_INSTALL/version
   cos-tool:
     plugin: dump
     source: https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}
@@ -62,6 +57,7 @@ resources:
 requires:
   certificates:
     interface: tls-certificates
+    optional: true
     limit: 1
     description: |
       Certificate for the grafana agent server (API endpoint is served on :12345 by default)
@@ -69,30 +65,53 @@ requires:
       We currently assume that the same CA signs all scrape targets.
   send-remote-write:
     interface: prometheus_remote_write
+    optional: true
+    desccription: |
+      Send the metrics gathered by grafana agent to a 
+      Prometheus-remote-write-compatible endpoint.
   metrics-endpoint:
     interface: prometheus_scrape
+    optional: true
+    description: Integration to receive metrics from other charms.
   logging-consumer:
     interface: loki_push_api
+    optional: true
+    description: Integration to send logs to a charmed Loki instance.
   grafana-dashboards-consumer:
     interface: grafana_dashboard
+    optional: true
+    description: Integration to receive dashboards from other charms.
   grafana-cloud-config:
     interface: grafana_cloud_config
+    optional: true
     limit: 1
+    description: Forward telemetry to another Observability stack (Grafana, COS, etc.).
   receive-ca-cert:
     interface: certificate_transfer
+    optional: true
     description: |
       Obtain TLS information (certificate, ca, chain) from another charm.
   tracing:
     interface: tracing
     limit: 1
+    optional: true
+    description: Integration to send traces to a charmed Tempo instance.
 
 provides:
   tracing-provider:
     interface: tracing
+    optional: true
+    description: Integration to receive traces from other charms.
   logging-provider:
     interface: loki_push_api
+    optional: true
+    description: Integration to receive logs from other charms.
   grafana-dashboards-provider:
     interface: grafana_dashboard
+    optional: true
+    description: |
+      Forwards the built-in Grafana dashboard(s) and the gathered ones to a
+      charmed Grafana instance.
 
 peers:
   peers:
