@@ -7,7 +7,10 @@ import logging
 from pathlib import Path
 
 import pytest
+import sh
 import yaml
+
+# pyright: reportAttributeAccessIssue = false
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
@@ -21,7 +24,8 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
     """
     # build and deploy charm from local source folder
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
-    await ops_test.model.deploy(grafana_agent_charm, resources=resources, application_name="agent")
+    resources_arg = f"agent-image={resources['agent-image']}"
+    sh.juju.deploy(grafana_agent_charm, "agent", model=ops_test.model.name, resource=resources_arg)
 
     await ops_test.model.wait_for_idle(
         apps=["agent"], status="blocked", timeout=300, idle_period=30
@@ -30,10 +34,12 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
 
 
 async def test_relates_to_loki(ops_test):
-    await ops_test.model.deploy("loki-k8s", channel="edge", application_name="loki", trust=True)
-    await ops_test.model.add_relation("loki", "agent:logging-consumer")
+    sh.juju.deploy("loki-k8s", "loki", model=ops_test.model.name, channel="edge", trust=True)
+    sh.juju.relate("loki", "agent:logging-consumer", model=ops_test.model.name)
 
     await ops_test.model.wait_for_idle(
-        apps=["agent"], status="blocked", timeout=300  # Missing incoming ('requires') relation
+        apps=["agent"],
+        status="blocked",
+        timeout=300,  # Missing incoming ('requires') relation
     )
     await ops_test.model.wait_for_idle(apps=["loki"], status="active", timeout=300)
