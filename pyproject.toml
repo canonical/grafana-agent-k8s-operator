@@ -25,7 +25,7 @@ dev = [
   "ruff",
   "codespell",
   # Static
-  "pyright",
+  "pyright<1.1.399", # 1.1.399 vendors typeshed that dropped Python 3.8 support
   # Unit
   "pytest",
   "pytest-subtests",
@@ -41,7 +41,7 @@ dev = [
   "pytest-operator",
   "prometheus-client",
   "prometheus-api-client",
-  "aiohttp",
+  "aiohttp!=3.11.13",  # Yanked
   "asyncstdlib",
   "sh",
 ]
