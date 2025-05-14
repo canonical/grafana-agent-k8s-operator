@@ -18,8 +18,8 @@ links:
   issues: https://github.com/canonical/grafana-agent-k8s-operator/issues
 
 platforms:
-  ubuntu@22.04:amd64:
-  ubuntu@22.04:arm64:
+  ubuntu@24.04:amd64:
+  ubuntu@24.04:arm64:
 
 parts:
   # Install PyYAML from binary and avoid building it from sources. This way, we can use PyYAML with C-optimized lib.
