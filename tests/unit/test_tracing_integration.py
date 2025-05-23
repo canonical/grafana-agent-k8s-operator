@@ -5,9 +5,11 @@ import pytest
 import yaml
 from charms.tempo_coordinator_k8s.v0.charm_tracing import charm_tracing_disabled
 from charms.tempo_coordinator_k8s.v0.tracing import (
+    ProtocolType,
     Receiver,
     TracingProviderAppData,
     TracingRequirerAppData,
+    TransportProtocolType,
 )
 from ops import pebble
 from ops.testing import Container, Context, Relation, State
@@ -42,15 +44,22 @@ def test_tracing_relation(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint
     tracing_provider = Relation(
         "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+        remote_app_data=dict(TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump()),
     )
     tracing = Relation(
         "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
+        remote_app_data=dict(
+            TracingProviderAppData(
+                receivers=[
+                    Receiver(
+                        protocol=ProtocolType(
+                            name="otlp_grpc", type=TransportProtocolType("grpc")
+                        ),
+                        url="http:foo.com:1111",
+                    )
+                ]
+            ).dump()
+        ),
     )
 
     state = dataclasses.replace(base_state, relations=[tracing, tracing_provider])
@@ -73,7 +82,7 @@ def test_tracing_provider_without_tracing(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint
     tracing = Relation(
         "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+        remote_app_data=dict(TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump()),
     )
 
     state = dataclasses.replace(base_state, relations=[tracing])
@@ -96,15 +105,22 @@ def test_tracing_relations_in_and_out(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
     tracing_provider = Relation(
         "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+        remote_app_data=dict(TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump()),
     )
     tracing = Relation(
         "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
+        remote_app_data=dict(
+            TracingProviderAppData(
+                receivers=[
+                    Receiver(
+                        protocol=ProtocolType(
+                            name="otlp_grpc", type=TransportProtocolType("grpc")
+                        ),
+                        url="http:foo.com:1111",
+                    )
+                ]
+            ).dump()
+        ),
     )
 
     state = dataclasses.replace(base_state, relations=[tracing, tracing_provider])
@@ -127,15 +143,22 @@ def test_tracing_relation_passthrough(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
     tracing_provider = Relation(
         "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+        remote_app_data=dict(TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump()),
     )
     tracing = Relation(
         "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
+        remote_app_data=dict(
+            TracingProviderAppData(
+                receivers=[
+                    Receiver(
+                        protocol=ProtocolType(
+                            name="otlp_grpc", type=TransportProtocolType("grpc")
+                        ),
+                        url="http:foo.com:1111",
+                    )
+                ]
+            ).dump()
+        ),
     )
 
     state = dataclasses.replace(base_state, relations=[tracing, tracing_provider])
@@ -170,15 +193,22 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
     tracing_provider = Relation(
         "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+        remote_app_data=dict(TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump()),
     )
     tracing = Relation(
         "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
+        remote_app_data=dict(
+            TracingProviderAppData(
+                receivers=[
+                    Receiver(
+                        protocol=ProtocolType(
+                            name="otlp_grpc", type=TransportProtocolType("grpc")
+                        ),
+                        url="http:foo.com:1111",
+                    )
+                ]
+            ).dump()
+        ),
     )
 
     # AND given we're configured to always enable some protocols
@@ -218,15 +248,22 @@ def test_tracing_sampling_config_is_present(ctx, base_state, sampling_config):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
     tracing_provider = Relation(
         "tracing-provider",
-        remote_app_data=TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump(),
+        remote_app_data=dict(TracingRequirerAppData(receivers=["otlp_http", "otlp_grpc"]).dump()),
     )
     tracing = Relation(
         "tracing",
-        remote_app_data=TracingProviderAppData(
-            receivers=[
-                Receiver(protocol={"name": "otlp_grpc", "type": "grpc"}, url="http:foo.com:1111")
-            ]
-        ).dump(),
+        remote_app_data=dict(
+            TracingProviderAppData(
+                receivers=[
+                    Receiver(
+                        protocol=ProtocolType(
+                            name="otlp_grpc", type=TransportProtocolType("grpc")
+                        ),
+                        url="http:foo.com:1111",
+                    )
+                ]
+            ).dump()
+        ),
     )
 
     state = dataclasses.replace(

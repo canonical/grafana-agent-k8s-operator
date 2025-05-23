@@ -3,13 +3,15 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
 from pathlib import Path
 
 import pytest
+import sh
 import yaml
 from helpers import loki_rules, oci_image, prometheus_rules
+
+# pyright: reportAttributeAccessIssue = false
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
@@ -28,8 +30,9 @@ async def test_deploy(ops_test, grafana_agent_charm):
     Assert on the unit status before any relations/configurations take place.
     """
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
-    await ops_test.model.deploy(
-        grafana_agent_charm, resources=resources, application_name=agent_name
+    resources_arg = f"agent-image={resources['agent-image']}"
+    sh.juju.deploy(
+        grafana_agent_charm, agent_name, model=ops_test.model.name, resource=resources_arg
     )
 
     # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
@@ -42,27 +45,34 @@ async def test_deploy(ops_test, grafana_agent_charm):
 
 
 async def test_relate_to_external_apps(ops_test):
-    await asyncio.gather(
-        ops_test.model.deploy("loki-k8s", channel="edge", application_name=loki_name, trust=True),
-        ops_test.model.deploy(
-            "prometheus-k8s", channel="edge", application_name=prometheus_name, trust=True
-        ),
+    sh.juju.deploy("loki-k8s", loki_name, model=ops_test.model.name, channel="edge", trust=True)
+    sh.juju.deploy(
+        "prometheus-k8s",
+        prometheus_name,
+        model=ops_test.model.name,
+        channel="edge",
+        trust=True,
     )
-    await asyncio.gather(
-        ops_test.model.add_relation(f"{loki_name}:logging", agent_name),
-        ops_test.model.add_relation(f"{prometheus_name}:receive-remote-write", agent_name),
+    sh.juju.relate(f"{loki_name}:logging", agent_name, model=ops_test.model.name)
+    sh.juju.relate(
+        f"{prometheus_name}:receive-remote-write",
+        agent_name,
+        model=ops_test.model.name,
     )
+
     await ops_test.model.wait_for_idle(
         apps=[loki_name, prometheus_name], status="active", timeout=300
     )
     await ops_test.model.wait_for_idle(
-        apps=[agent_name], status="blocked", timeout=300  # Missing incoming ('requires') relation
+        apps=[agent_name],
+        status="blocked",
+        timeout=300,  # Missing incoming ('requires') relation
     )
 
 
 async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_charm):
-    await ops_test.model.deploy(loki_tester_charm, application_name=loki_tester_name)
-    await ops_test.model.add_relation(agent_name, loki_tester_name)
+    sh.juju.deploy(loki_tester_charm, loki_tester_name, model=ops_test.model.name)
+    sh.juju.relate(agent_name, loki_tester_name, model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
         apps=[loki_tester_name, agent_name], status="active", timeout=300
     )
@@ -72,16 +82,13 @@ async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_char
 
 
 async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus_tester_charm):
-    await ops_test.model.deploy(
+    sh.juju.deploy(
         prometheus_tester_charm,
-        resources={
-            "prometheus-tester-image": oci_image(
-                "./tests/integration/prometheus-tester/metadata.yaml", "prometheus-tester-image"
-            )
-        },
-        application_name=prometheus_tester_name,
+        prometheus_tester_name,
+        model=ops_test.model.name,
+        resource=f"prometheus-tester-image={oci_image('./tests/integration/prometheus-tester/metadata.yaml', 'prometheus-tester-image')}",
     )
-    await ops_test.model.add_relation(agent_name, prometheus_tester_name)
+    sh.juju.relate(agent_name, prometheus_tester_name, model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
         apps=[prometheus_tester_name, agent_name], status="active", timeout=300
     )

@@ -6,12 +6,13 @@
 
 import logging
 from pathlib import Path
+import typing
 
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus
-from ops.pebble import ChangeError, ExecError, Layer
+from ops.pebble import ChangeError, ExecError, Layer, LayerDict
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class PrometheusTesterCharm(CharmBase):
             }
         ]
         self.prometheus = MetricsEndpointProvider(
-            self, jobs=jobs, alert_rules_path=self.model.config["alert-rules-path"]
+            self, jobs=jobs, alert_rules_path=typing.cast(str, self.model.config["alert-rules-path"])
         )
         self.framework.observe(
             self.on.prometheus_tester_pebble_ready, self._on_prometheus_tester_pebble_ready
@@ -78,7 +79,7 @@ class PrometheusTesterCharm(CharmBase):
 
     def _tester_pebble_layer(self):
         """Generate Prometheus tester pebble layer."""
-        layer_spec = {
+        layer_spec: LayerDict = {
             "summary": "prometheus tester",
             "description": "a test data generator for Prometheus",
             "services": {
@@ -111,8 +112,9 @@ class PrometheusTesterCharm(CharmBase):
             logger.error(
                 "Failed to install prometheus client: exited with code %d. Stderr:", e.exit_code
             )
-            for line in e.stderr.splitlines():
-                logger.error("    %s", line)
+            if e.stderr:
+                for line in e.stderr.splitlines():
+                    logger.error("    %s", line)
             self.unit.status = BlockedStatus("Failed to install prometheus client (see debug-log)")
 
         except ChangeError as e:

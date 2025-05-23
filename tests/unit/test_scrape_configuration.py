@@ -20,7 +20,7 @@ from charm import (  # isort: skip <- needed because charm.py does not always ex
     GrafanaAgentK8sCharm,
 )
 
-ops.testing.SIMULATE_CAN_CONNECT = True
+ops.testing.SIMULATE_CAN_CONNECT = True  # type: ignore
 
 SAMPLE_UUID = "20ed9535-c14a-4ec9-a250-fd7a6414feb5"
 
@@ -333,7 +333,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.harness.update_relation_data(rel_id, "certs", {"certificates": CERTS_RELATION_DATA})
         configs = self.harness.charm._loki_config
         for config in configs:
-            for scrape_config in config.get("scrape_configs", []):
+            for scrape_config in config.get("scrape_configs", []):  # pyright: ignore
                 if scrape_config.get("loki_push_api"):
                     self.assertIn("http_tls_config", scrape_config["loki_push_api"]["server"])
                     self.assertIn("grpc_tls_config", scrape_config["loki_push_api"]["server"])

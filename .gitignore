@@ -19,3 +19,9 @@ crash.log
 .terraform/
 terraform.tfvars
 terraform.tfvars.json
+
+# Extra from unit tests
+/prometheus_alert_rules
+/loki_alert_rules
+/grafana_dashboards
+
