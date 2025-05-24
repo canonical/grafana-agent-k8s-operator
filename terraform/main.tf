@@ -7,7 +7,7 @@ resource "juju_application" "grafana_agent" {
     channel  = var.channel
     revision = var.revision
   }
-  units  = var.units
-  config = var.config
+  units              = var.units
+  config             = var.config
   storage_directives = var.storage
 }
