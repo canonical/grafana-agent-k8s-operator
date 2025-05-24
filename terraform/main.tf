@@ -9,7 +9,5 @@ resource "juju_application" "grafana_agent" {
   }
   units  = var.units
   config = var.config
-  storage_directives = {
-    data = "${var.grafana_data-storage-size},kubernetes"
-  }
+  storage_directives = var.storage
 }
