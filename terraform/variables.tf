@@ -42,7 +42,7 @@ variable "units" {
 }
 
 variable "storage" {
-  description = "Map of storage used by the application. Juju allocates 1 GB by default if not provided."
+  description = "Map of storage used by the application, which defaults to 1 GB, allocated by Juju."
   type        = map(string)
   default     = {}
 }
