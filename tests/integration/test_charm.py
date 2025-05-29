@@ -25,12 +25,27 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
     # build and deploy charm from local source folder
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     resources_arg = f"agent-image={resources['agent-image']}"
-    sh.juju.deploy(grafana_agent_charm, "agent", model=ops_test.model.name, resource=resources_arg)
+    sh.juju.deploy(grafana_agent_charm, "agent", model=ops_test.model.name, resource=resources_arg, trust=True)
 
     await ops_test.model.wait_for_idle(
         apps=["agent"], status="blocked", timeout=300, idle_period=30
     )
     assert ops_test.model.applications["agent"].units[0].workload_status == "blocked"
+
+
+async def test_config_cpu_memory(ops_test):
+    assert sh.juju.config.agent("cpu").strip("\n") == ""
+    assert sh.juju.config.agent("memory").strip("\n") == ""
+
+    sh.juju.config.agent("cpu=500m")
+    sh.juju.config.agent("memory=256Mi")
+
+    await ops_test.model.wait_for_idle(
+        apps=["agent"], status="blocked", timeout=300, idle_period=30
+    )
+
+    assert sh.juju.config.agent("cpu").strip("\n") == "500m"
+    assert sh.juju.config.agent("memory").strip("\n") == "256Mi"
 
 
 async def test_relates_to_loki(ops_test):
