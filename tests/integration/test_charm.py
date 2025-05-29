@@ -34,18 +34,19 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
 
 
 async def test_config_cpu_memory(ops_test):
-    assert sh.juju.config.agent("cpu").strip("\n") == ""
-    assert sh.juju.config.agent("memory").strip("\n") == ""
+    model = ops_test.model.name
+    assert sh.juju.config.agent("cpu", "-m", model).strip("\n") == ""
+    assert sh.juju.config.agent("memory", "-m", model).strip("\n") == ""
 
-    sh.juju.config.agent("cpu=500m")
-    sh.juju.config.agent("memory=256Mi")
+    sh.juju.config.agent("cpu=500m", "-m", model)
+    sh.juju.config.agent("memory=256Mi", "-m", model)
 
     await ops_test.model.wait_for_idle(
         apps=["agent"], status="blocked", timeout=300, idle_period=30
     )
 
-    assert sh.juju.config.agent("cpu").strip("\n") == "500m"
-    assert sh.juju.config.agent("memory").strip("\n") == "256Mi"
+    assert sh.juju.config.agent("cpu", "-m", model).strip("\n") == "500m"
+    assert sh.juju.config.agent("memory", "-m", model).strip("\n") == "256Mi"
 
 
 async def test_relates_to_loki(ops_test):
