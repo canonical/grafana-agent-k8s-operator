@@ -30,6 +30,11 @@ from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
+from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
+    K8sResourcePatchFailedEvent,
+    KubernetesComputeResourcesPatch,
+    adjust_resource_requirements,
+)
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
@@ -155,6 +160,12 @@ class GrafanaAgentCharm(CharmBase):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
         self._forward_alert_rules = cast(bool, self.config["forward_alert_rules"])
+
+        self.resources_patch = KubernetesComputeResourcesPatch(
+            self,
+            self._name,
+            resource_reqs_func=self._resource_reqs_from_config,
+        )
         self._remote_write = PrometheusRemoteWriteConsumer(
             self,
             alert_rules_path=self.metrics_rules_paths.dest,
@@ -258,6 +269,7 @@ class GrafanaAgentCharm(CharmBase):
             self._on_cert_transfer_removed,
         )
 
+        self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
         # Register status observers
         for incoming, outgoings in self.mandatory_relation_pairs.items():
             self.framework.observe(self.on[incoming].relation_joined, self._update_status)
@@ -308,6 +320,14 @@ class GrafanaAgentCharm(CharmBase):
                 for protocol in requested_tracing_protocols
             )
         )
+
+    def _resource_reqs_from_config(self):
+        limits = {
+            "cpu": self.model.config.get("cpu"),
+            "memory": self.model.config.get("memory"),
+        }
+        requests = {"cpu": "0.25", "memory": "200Mi"}
+        return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_cert_changed(self, _event):
         """Event handler for cert change."""
@@ -554,6 +574,11 @@ class GrafanaAgentCharm(CharmBase):
                 logger.debug("updated dashboard file %s", f.name)
 
         reload_func()
+
+
+    def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
+        self.status.update_config = BlockedStatus(cast(str, event.message))
+        self._update_status()
 
     def on_scrape_targets_changed(self, _event) -> None:
         """Event handler for the scrape targets changed event."""

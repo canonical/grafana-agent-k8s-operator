@@ -1,20 +1,22 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+from helpers import k8s_resource_multipatch
 from ops import BlockedStatus, UnknownStatus, pebble
 from ops.testing import Container, Exec, State
 
 
+@k8s_resource_multipatch
 def test_install(ctx):
     out = ctx.run(ctx.on.install(), State())
     assert out.unit_status == UnknownStatus()
 
-
+@k8s_resource_multipatch
 def test_start(ctx):
     out = ctx.run(ctx.on.start(), State())
     assert out.unit_status == UnknownStatus()
 
-
+@k8s_resource_multipatch
 def test_charm_start_with_container(ctx):
     agent = Container(
         name="agent",

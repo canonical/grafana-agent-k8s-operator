@@ -12,6 +12,9 @@ from typing import Any, Dict, List, Union
 
 import yaml
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
+from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
+    KubernetesComputeResourcesPatch,
+)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointConsumer
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from cosl import LZMABase64
@@ -31,6 +34,7 @@ SCRAPE_RELATION_NAME = "metrics-endpoint"
     server_cert="_server_ca_cert_path",
     extra_types=(
         GrafanaAgentCharm,
+        KubernetesComputeResourcesPatch,
         LokiPushApiProvider,
         MetricsEndpointConsumer,
         LZMABase64,

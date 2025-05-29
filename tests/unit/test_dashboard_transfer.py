@@ -3,6 +3,7 @@
 import json
 
 from cosl import LZMABase64
+from helpers import k8s_resource_multipatch
 from ops.testing import Container, Relation, State
 
 
@@ -10,6 +11,7 @@ def encode_as_dashboard(dct: dict):
     return LZMABase64.compress(json.dumps(dct))
 
 
+@k8s_resource_multipatch
 def test_dashboard_propagation(ctx):
     # This test verifies that if the charm receives a dashboard via the requirer databag,
     # it is correctly transferred to the provider databag.
