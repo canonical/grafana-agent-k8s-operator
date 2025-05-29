@@ -1,7 +1,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 class FakeProcessVersionCheck:
@@ -18,3 +18,9 @@ k8s_resource_multipatch = patch.multiple(
     _patch=lambda *a, **kw: True,
     is_ready=lambda *a, **kw: True,
 )
+
+
+def patch_lightkube_client(func):
+    """Decorator that patches GenericSyncClient to avoid real access to Kubernetes."""
+    return patch("lightkube.core.client.GenericSyncClient", new=MagicMock())(func)
+

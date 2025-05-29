@@ -11,7 +11,7 @@ from charms.tempo_coordinator_k8s.v0.tracing import (
     TracingRequirerAppData,
     TransportProtocolType,
 )
-from helpers import k8s_resource_multipatch
+from helpers import k8s_resource_multipatch, patch_lightkube_client
 from ops import pebble
 from ops.testing import Container, Context, Relation, State
 
@@ -41,6 +41,7 @@ def base_state():
     )
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_tracing_relation(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint
@@ -80,6 +81,7 @@ def test_tracing_relation(ctx, base_state):
     assert yml["traces"]["configs"][0], yml.get("traces", "<no traces config>")
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_tracing_provider_without_tracing(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint
@@ -104,6 +106,7 @@ def test_tracing_provider_without_tracing(ctx, base_state):
     assert yml["traces"] == {}
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_tracing_relations_in_and_out(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
@@ -143,6 +146,7 @@ def test_tracing_relations_in_and_out(ctx, base_state):
     assert yml["traces"]
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_tracing_relation_passthrough(ctx, base_state):
     # GIVEN a tracing relation over the tracing-provider endpoint and one over tracing
@@ -186,6 +190,7 @@ def test_tracing_relation_passthrough(ctx, base_state):
     assert otlp_http_provider_def.url == "http://localhost:4318"
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 @pytest.mark.parametrize(
     "force_enable",
@@ -239,6 +244,7 @@ def test_tracing_relation_passthrough_with_force_enable(ctx, base_state, force_e
     assert providing_protocols == {"otlp_grpc", "otlp_http"}.union(force_enable)
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 @pytest.mark.parametrize(
     "sampling_config",

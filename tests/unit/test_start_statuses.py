@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 import dataclasses
 
-from helpers import k8s_resource_multipatch
+from helpers import k8s_resource_multipatch, patch_lightkube_client
 from ops import pebble
 from ops.testing import Container, Exec, State, UnknownStatus
 
@@ -17,18 +17,21 @@ def _subp_run_mock(*a, **kw):
     return _MockProc(0)
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_install(ctx):
     out = ctx.run(ctx.on.install(), state=State())
     assert out.unit_status == UnknownStatus()
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_start(ctx):
     out = ctx.run(ctx.on.start(), state=State())
     assert out.unit_status.name == "unknown"
 
 
+@patch_lightkube_client
 @k8s_resource_multipatch
 def test_charm_start_with_container(ctx):
     agent = Container(
