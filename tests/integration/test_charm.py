@@ -9,12 +9,16 @@ from pathlib import Path
 import pytest
 import sh
 import yaml
+from helpers import get_podspec
+from lightkube.utils.quantity import equals_canonically
 
 # pyright: reportAttributeAccessIssue = false
 
 logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
+default_limits = None
+default_requests = {"cpu": "0.25", "memory": "200Mi"}
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test, grafana_agent_charm):
@@ -34,19 +38,14 @@ async def test_build_and_deploy(ops_test, grafana_agent_charm):
 
 
 async def test_config_cpu_memory(ops_test):
-    model = ops_test.model.name
-    assert sh.juju.config.agent("cpu", "-m", model).strip("\n") == ""
-    assert sh.juju.config.agent("memory", "-m", model).strip("\n") == ""
+    assert ops_test.model
+    await ops_test.model.applications["agent"].reset_config(["cpu", "memory"])
+    await ops_test.model.wait_for_idle(timeout=300)
 
-    sh.juju.config.agent("cpu=500m", "-m", model)
-    sh.juju.config.agent("memory=256Mi", "-m", model)
-
-    await ops_test.model.wait_for_idle(
-        apps=["agent"], status="blocked", timeout=300, idle_period=30
-    )
-
-    assert sh.juju.config.agent("cpu", "-m", model).strip("\n") == "500m"
-    assert sh.juju.config.agent("memory", "-m", model).strip("\n") == "256Mi"
+    podspec = get_podspec(ops_test, "agent", "agent")
+    assert podspec.resources
+    assert equals_canonically(podspec.resources.limits, default_limits)
+    assert equals_canonically(podspec.resources.requests, default_requests)
 
 
 async def test_relates_to_loki(ops_test):

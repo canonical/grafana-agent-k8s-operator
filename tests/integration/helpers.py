@@ -13,6 +13,8 @@ from typing import List
 import yaml
 from asyncstdlib import functools
 from grafana import Grafana
+from lightkube import Client
+from lightkube.resources.core_v1 import Pod
 from prometheus import Prometheus
 from pytest_operator.plugin import OpsTest
 
@@ -287,3 +289,12 @@ def uk8s_group() -> str:
         # Strictly confined microk8s
         uk8s_group = "snap_microk8s"
     return uk8s_group
+
+
+def get_podspec(ops_test: OpsTest, app_name: str, container_name: str):
+    assert ops_test.model_name
+    client = Client()
+    pod = client.get(Pod, name=f"{app_name}-0", namespace=ops_test.model_name)
+    assert pod.spec
+    podspec = next(iter(filter(lambda ctr: ctr.name == container_name, pod.spec.containers)))
+    return podspec
