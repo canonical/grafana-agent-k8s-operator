@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import yaml
-from helpers import FakeProcessVersionCheck
+from helpers import FakeProcessVersionCheck, k8s_resource_multipatch, patch_lightkube_client
 from ops.model import Container
 from ops.testing import Harness
 
@@ -98,6 +98,8 @@ LOKI_ALERT_RULES = {
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertIngestion(unittest.TestCase):
+    @patch_lightkube_client
+    @k8s_resource_multipatch
     @patch("grafana_agent.GrafanaAgentCharm.charm_dir", pathlib.Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())

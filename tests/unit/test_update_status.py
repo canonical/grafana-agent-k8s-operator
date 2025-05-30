@@ -4,12 +4,15 @@
 import unittest
 from unittest.mock import patch
 
+from helpers import k8s_resource_multipatch, patch_lightkube_client
 from ops.testing import Harness
 
 from charm import GrafanaAgentK8sCharm as GrafanaAgentCharm
 
 
 class TestUpdateStatus(unittest.TestCase):
+    @patch_lightkube_client
+    @k8s_resource_multipatch
     def setUp(self, *unused):
         patcher = patch.object(GrafanaAgentCharm, "_agent_version", property(lambda *_: "0.0.0"))
         self.mock_version = patcher.start()

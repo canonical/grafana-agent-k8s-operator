@@ -1,8 +1,11 @@
+from helpers import k8s_resource_multipatch, patch_lightkube_client
 from ops.testing import Container, State
 
 containers = [Container(name="agent", can_connect=True)]
 
 
+@patch_lightkube_client
+@k8s_resource_multipatch
 def test_reporting_enabled(ctx):
     # GIVEN the "reporting_enabled" config option is set to True
     state = State(leader=True, config={"reporting_enabled": True}, containers=containers)
@@ -17,6 +20,8 @@ def test_reporting_enabled(ctx):
     )
 
 
+@patch_lightkube_client
+@k8s_resource_multipatch
 def test_reporting_disabled(ctx):
     # GIVEN the "reporting_enabled" config option is set to False
     state = State(leader=True, config={"reporting_enabled": False}, containers=containers)

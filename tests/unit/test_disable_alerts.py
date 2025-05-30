@@ -3,11 +3,14 @@
 
 
 import pytest
+from helpers import k8s_resource_multipatch, patch_lightkube_client
 from ops.testing import Container, Context, Relation, State
 
 import charm
 
 
+@patch_lightkube_client
+@k8s_resource_multipatch
 @pytest.mark.parametrize("forwarding", (True, False))
 def test_forward_alert_rules(forwarding):
     # GIVEN these relations

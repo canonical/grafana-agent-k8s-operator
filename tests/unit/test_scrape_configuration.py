@@ -12,7 +12,7 @@ import ops.testing
 import responses
 import yaml
 from deepdiff import DeepDiff  # type: ignore
-from helpers import FakeProcessVersionCheck
+from helpers import FakeProcessVersionCheck, k8s_resource_multipatch, patch_lightkube_client
 from ops.model import ActiveStatus, Container
 from ops.testing import Harness
 
@@ -83,6 +83,8 @@ CERTS_RELATION_DATA = """[{"certificate": "-----BEGIN CERTIFICATE-----foobarcert
 @patch.object(Container, "restart", new=lambda x, y: True)
 @patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestScrapeConfiguration(unittest.TestCase):
+    @patch_lightkube_client
+    @k8s_resource_multipatch
     @patch("grafana_agent.GrafanaAgentCharm.charm_dir", Path("/"))
     @patch("grafana_agent.METRICS_RULES_SRC_PATH", tempfile.mkdtemp())
     @patch("grafana_agent.METRICS_RULES_DEST_PATH", tempfile.mkdtemp())
