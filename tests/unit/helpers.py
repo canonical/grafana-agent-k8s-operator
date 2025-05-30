@@ -13,7 +13,7 @@ class FakeProcessVersionCheck:
 
 
 k8s_resource_multipatch = patch.multiple(
-    "charm.KubernetesComputeResourcesPatch",
+    "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch",
     _namespace="test-namespace",
     _patch=lambda *a, **kw: True,
     is_ready=lambda *a, **kw: True,
