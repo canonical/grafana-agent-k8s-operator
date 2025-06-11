@@ -19,7 +19,7 @@ The module offers the following configurable inputs:
 | `constraints`| string | Constraints for the Juju deployment|  |
 | `model`| string | Reference to an existing model resource or data source for the model to deploy to |  |
 | `revision`| number | Revision number of the charm |  |
-| `storage`| map(string) | Map of storage used by the application, which defaults to 1 GB, allocated by Juju. | {} |
+| `storage_directives`| map(string) | Map of storage used by the application, which defaults to 1 GB, allocated by Juju. | {} |
 | `units`| number | Unit count/scale | 1 |
 
 ### Outputs
@@ -28,7 +28,8 @@ Upon application, the module exports the following outputs:
 | Name | Type | Description |
 | - | - | - |
 | `app_name`| string | Name of the deployed application |
-| `endpoints`| map(string) | Map of all `provides` and `requires` endpoints |
+| `requires`| map(string) | Map of all `requires` endpoints |
+| `provides`| map(string) | Map of all `provides` endpoints |
 
 ## Usage
 
