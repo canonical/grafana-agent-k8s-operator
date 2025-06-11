@@ -2,8 +2,9 @@ output "app_name" {
   value = juju_application.grafana_agent.name
 }
 
-output "requires" {
+output "endpoints" {
   value = {
+    # Requires
     certificates                = "certificates",
     send_remote_write           = "send-remote-write",
     metrics_endpoint            = "metrics-endpoint",
@@ -12,11 +13,7 @@ output "requires" {
     grafana_cloud_config        = "grafana-cloud-config",
     receive_ca_cert             = "receive-ca-cert",
     tracing                     = "tracing",
-  }
-}
-
-output "provides" {
-  value = {
+    # Provides
     tracing_provider            = "tracing-provider",
     logging_provider            = "logging-provider",
     grafana_dashboards_provider = "grafana-dashboards-provider",
