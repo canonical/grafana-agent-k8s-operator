@@ -25,11 +25,10 @@ The module offers the following configurable inputs:
 ### Outputs
 Upon application, the module exports the following outputs:
 
-| Name | Type | Description |
-| - | - | - |
-| `app_name`| string | Name of the deployed application |
-| `requires`| map(string) | Map of all `requires` endpoints |
-| `provides`| map(string) | Map of all `provides` endpoints |
+| Name | Description |
+| - | - |
+| `app_name`|  Application name |
+| `endpoints`|  Map of `requires` and `provides` endpoints |
 
 ## Usage
 
