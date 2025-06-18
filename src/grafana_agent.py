@@ -575,7 +575,6 @@ class GrafanaAgentCharm(CharmBase):
 
         reload_func()
 
-
     def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.status.update_config = BlockedStatus(cast(str, event.message))
         self._update_status()
@@ -716,9 +715,7 @@ class GrafanaAgentCharm(CharmBase):
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
-        self._grafana_dashboards_provider._reinitialize_dashboard_data(
-            inject_dropdowns=False
-        )  # noqa
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)  # noqa
         self._update_status()
 
     def _enhance_endpoints_with_tls(self, endpoints) -> List[Dict[str, Any]]:
@@ -727,6 +724,19 @@ class GrafanaAgentCharm(CharmBase):
                 "insecure_skip_verify": self.model.config.get("tls_insecure_skip_verify")
             }
         return endpoints
+
+    def _deduplicate_endpoints(self, endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Deduplicate endpoints based on their URL."""
+        seen_urls = set()
+        deduped = []
+
+        for endpoint in endpoints:
+            url = endpoint.get("url")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                deduped.append(endpoint)
+
+        return deduped
 
     def _prometheus_endpoints_with_tls(self) -> List[Dict[str, Any]]:
         """Add TLS information to Prometheus endpoints.
@@ -745,7 +755,10 @@ class GrafanaAgentCharm(CharmBase):
                 }
             prometheus_endpoints.append(prometheus_endpoint)
 
-        return self._enhance_endpoints_with_tls(prometheus_endpoints)
+        # Deduplicate endpoints to prevent crashes in grafana-agent
+        deduped_endpoints = self._deduplicate_endpoints(prometheus_endpoints)
+
+        return self._enhance_endpoints_with_tls(deduped_endpoints)
 
     def _loki_endpoints_with_tls(self) -> List[Dict[str, Any]]:
         """Add TLS information to Loki endpoints.
@@ -1117,12 +1130,12 @@ class GrafanaAgentCharm(CharmBase):
             for config in configs:
                 for scrape_config in config.get("scrape_configs", []):
                     if scrape_config.get("loki_push_api"):
-                        scrape_config["loki_push_api"]["server"][
-                            "http_tls_config"
-                        ] = self.tls_config
-                        scrape_config["loki_push_api"]["server"][
-                            "grpc_tls_config"
-                        ] = self.tls_config
+                        scrape_config["loki_push_api"]["server"]["http_tls_config"] = (
+                            self.tls_config
+                        )
+                        scrape_config["loki_push_api"]["server"]["grpc_tls_config"] = (
+                            self.tls_config
+                        )
 
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
