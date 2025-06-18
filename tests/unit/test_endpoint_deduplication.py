@@ -5,7 +5,7 @@ import json
 
 import yaml
 from helpers import k8s_resource_multipatch, patch_lightkube_client
-from ops.testing import Container, Context, Relation, State, Exec
+from ops.testing import Container, Context, Exec, Relation, State
 
 from charm import GrafanaAgentK8sCharm
 from grafana_agent import CONFIG_PATH
