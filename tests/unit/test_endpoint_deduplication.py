@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import json
@@ -12,13 +12,13 @@ from grafana_agent import CONFIG_PATH
 
 def test_prometheus_endpoints_deduplication():
     # GIVEN a set of duplicate Prometheus endpoints
-    REMOTE_WRITE_URL = "http://traefik.ip/cos-mimir/api/v1/push"
+    remote_write_url = "http://traefik.ip/cos-mimir/api/v1/push"
     mimir_relation = Relation(
         "send-remote-write",
         remote_units_data={
-            0: {"remote_write": json.dumps({"url": REMOTE_WRITE_URL})},
-            1: {"remote_write": json.dumps({"url": REMOTE_WRITE_URL})},
-            2: {"remote_write": json.dumps({"url": REMOTE_WRITE_URL})},
+            0: {"remote_write": json.dumps({"url": remote_write_url})},
+            1: {"remote_write": json.dumps({"url": remote_write_url})},
+            2: {"remote_write": json.dumps({"url": remote_write_url})},
         },
     )
     state = State(
@@ -50,8 +50,8 @@ def test_prometheus_endpoints_deduplication():
         metrics_config = yml["metrics"]["configs"][0]
         assert metrics_config["name"] == "agent_scraper"
         assert len(metrics_config["remote_write"]) == 1
-        assert metrics_config["remote_write"][0]["url"] == REMOTE_WRITE_URL
+        assert metrics_config["remote_write"][0]["url"] == remote_write_url
         # check endpoints are deduplicated in the integrations section
         integrations_config = yml["integrations"]
         assert len(integrations_config["prometheus_remote_write"]) == 1
-        assert integrations_config["prometheus_remote_write"][0]["url"] == REMOTE_WRITE_URL
+        assert integrations_config["prometheus_remote_write"][0]["url"] == remote_write_url
