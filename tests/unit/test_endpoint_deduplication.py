@@ -4,12 +4,15 @@
 import json
 
 import yaml
-from ops.testing import Container, Context, Relation, State
+from helpers import k8s_resource_multipatch, patch_lightkube_client
+from ops.testing import Container, Context, Relation, State, Exec
 
 from charm import GrafanaAgentK8sCharm
 from grafana_agent import CONFIG_PATH
 
 
+@patch_lightkube_client
+@k8s_resource_multipatch
 def test_prometheus_endpoints_deduplication():
     # GIVEN a set of duplicate Prometheus endpoints
     remote_write_url = "http://traefik.ip/cos-mimir/api/v1/push"
@@ -21,9 +24,14 @@ def test_prometheus_endpoints_deduplication():
             2: {"remote_write": json.dumps({"url": remote_write_url})},
         },
     )
+    agent_container = Container(
+        name="agent",
+        can_connect=True,
+        execs={Exec(["/bin/agent", "-version"], return_code=0, stdout="0.0.0")},
+    )
     state = State(
         leader=True,
-        containers={Container(name="agent", can_connect=True)},
+        containers={agent_container},
         relations=[
             mimir_relation,
         ],
@@ -35,7 +43,7 @@ def test_prometheus_endpoints_deduplication():
     # WHEN the charm processes endpoints with duplicates
     ctx = Context(charm_type=GrafanaAgentK8sCharm)
 
-    output_state = ctx.run(ctx.on.config_changed(), state)
+    output_state = ctx.run(ctx.on.pebble_ready(agent_container), state)
     agent = output_state.get_container("agent")
 
     # THEN the agent has started
