@@ -211,3 +211,8 @@ config:
         automatically deduced from it).
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
+    extra_alert_labels:
+      description: >
+        Comma separated key-value pairs of labels to be added to all alerts.
+        This could be useful for differentiating between staging and production environments.
+      type: string
