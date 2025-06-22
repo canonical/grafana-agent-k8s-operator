@@ -26,12 +26,10 @@ def patch_charm_paths():
 
     rules_dest = tempfile.mkdtemp()
 
-    with (
-        patch("grafana_agent.GrafanaAgentCharm.charm_dir", base),
-        patch("grafana_agent.METRICS_RULES_SRC_PATH", "src/prometheus_alert_rules"),
-        patch("grafana_agent.METRICS_RULES_DEST_PATH", rules_dest),
-    ):
-        yield
+    with patch("grafana_agent.GrafanaAgentCharm.charm_dir", base):
+        with patch("grafana_agent.METRICS_RULES_SRC_PATH", "src/prometheus_alert_rules"):
+            with patch("grafana_agent.METRICS_RULES_DEST_PATH", rules_dest):
+                yield
 
 @pytest.fixture(autouse=True)
 def patch_buffer_file_for_charm_tracing(tmp_path):
