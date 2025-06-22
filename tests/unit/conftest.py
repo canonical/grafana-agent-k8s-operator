@@ -22,8 +22,7 @@ def patch_charm_paths():
     rules_src = base / "src" / "prometheus_alert_rules"
     rules_src.mkdir(parents=True)
 
-    # Add a dummy file inside
-    (rules_src / "dummy.rule").write_text("groups: []")
+    (rules_src / "sample.rule").write_text("groups: []")
 
     rules_dest = tempfile.mkdtemp()
 
