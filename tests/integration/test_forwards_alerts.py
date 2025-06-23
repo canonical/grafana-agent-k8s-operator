@@ -45,12 +45,12 @@ async def test_deploy(ops_test, grafana_agent_charm):
 
 
 async def test_relate_to_external_apps(ops_test):
-    sh.juju.deploy("loki-k8s", loki_name, model=ops_test.model.name, channel="edge", trust=True)
+    sh.juju.deploy("loki-k8s", loki_name, model=ops_test.model.name, channel="2/edge", trust=True)
     sh.juju.deploy(
         "prometheus-k8s",
         prometheus_name,
         model=ops_test.model.name,
-        channel="edge",
+        channel="2/edge",
         trust=True,
     )
     sh.juju.relate(f"{loki_name}:logging", agent_name, model=ops_test.model.name)
