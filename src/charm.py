@@ -5,6 +5,7 @@
 
 """A  juju charm for Grafana Agent on Kubernetes."""
 
+import copy
 import json
 import logging
 import pathlib
@@ -57,11 +58,13 @@ def key_value_pair_string_to_dict(key_value_pair: str) -> dict:
 
 def inject_extra_labels_to_alert_rules(rules: dict, extra_alert_labels: dict) -> dict:
     """Inject extra alert labels into alert labels."""
-    for _, item in rules.items():
-        for groups in item.get("groups", []):
-            for rule in groups.get("rules", []):
+    """Return a copy of the rules dict with extra labels injected."""
+    result = copy.deepcopy(rules)
+    for item in result.values():
+        for group in item.get("groups", []):
+            for rule in group.get("rules", []):
                 rule.setdefault("labels", {}).update(extra_alert_labels)
-    return rules
+    return result
 
 
 @trace_charm(
