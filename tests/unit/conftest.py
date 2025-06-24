@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +13,23 @@ from charm import GrafanaAgentK8sCharm
 def ctx():
     yield Context(GrafanaAgentK8sCharm)
 
+
+@pytest.fixture(autouse=True)
+def patch_charm_paths():
+    base = Path(tempfile.mkdtemp())
+
+    # Create src/prometheus_alert_rules inside base dir
+    rules_src = base / "src" / "prometheus_alert_rules"
+    rules_src.mkdir(parents=True)
+
+    (rules_src / "sample.rule").write_text("groups: []")
+
+    rules_dest = tempfile.mkdtemp()
+
+    with patch("grafana_agent.GrafanaAgentCharm.charm_dir", base):
+        with patch("grafana_agent.METRICS_RULES_SRC_PATH", "src/prometheus_alert_rules"):
+            with patch("grafana_agent.METRICS_RULES_DEST_PATH", rules_dest):
+                yield
 
 @pytest.fixture(autouse=True)
 def patch_buffer_file_for_charm_tracing(tmp_path):

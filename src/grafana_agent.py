@@ -380,6 +380,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def _on_config_changed(self, _event=None):
         """Rebuild the config."""
+        self._update_metrics_alerts()
         self._update_config()
         self._update_status()
         self._update_tracing_provider()
