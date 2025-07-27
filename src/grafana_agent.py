@@ -35,7 +35,6 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     KubernetesComputeResourcesPatch,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
@@ -46,6 +45,10 @@ from charms.tempo_coordinator_k8s.v0.tracing import (
     TransportProtocolType,
     charm_tracing_config,
     receiver_protocol_to_transport_protocol,
+)
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
 )
 from cosl import MandatoryRelationPairs
 from ops.charm import CharmBase
@@ -86,6 +89,13 @@ class CompoundStatus:
     update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
     validation_error: Optional[BlockedStatus] = None
 
+@dataclass
+class TLSConfig:
+    """TLS configuration received by the charm over the `certificates` relation."""
+
+    server_cert: str
+    ca_cert: str
+    private_key: str
 
 class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
@@ -131,6 +141,7 @@ class GrafanaAgentCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self._fqdn = socket.getfqdn()
 
         # Property to facilitate centralized status update
         self.status = CompoundStatus()
@@ -187,9 +198,17 @@ class GrafanaAgentCharm(CharmBase):
             dashboards_path=self.dashboard_paths.dest,
         )
 
-        self.cert = CertHandler(
-            self,
-            key="grafana-agent-cert",
+        self._csr_attributes = CertificateRequestAttributes(
+            # the `common_name` field is required but limited to 64 characters.
+            # since it's overridden by sans, we can use a short,
+            # constrained value like app name.
+            common_name=self.app.name,
+            sans_dns=frozenset((self._fqdn,)),
+        )
+        self._cert_requirer = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name="certificates",
+            certificate_requests=[self._csr_attributes],
         )
 
         self._tracing = TracingEndpointRequirer(
@@ -227,7 +246,7 @@ class GrafanaAgentCharm(CharmBase):
             self._tracing_provider.on.broken,  # pyright: ignore
             self._on_tracing_provider_broken,
         )
-        self.framework.observe(self.cert.on.cert_changed, self._on_cert_changed)  # pyright: ignore
+        self.framework.observe(self._cert_requirer.on.certificate_available, self._on_certificate_available)  # pyright: ignore
 
         self.framework.observe(
             self._cloud.on.cloud_config_available,  # pyright: ignore
@@ -289,8 +308,8 @@ class GrafanaAgentCharm(CharmBase):
 
         # assume we're doing this in-model, since this charm doesn't have ingress
         if receiver_protocol_to_transport_protocol[protocol] == TransportProtocolType.grpc:
-            return f"{socket.getfqdn()}:{self._tracing_receivers_ports[protocol]}"
-        return f"{scheme}://{socket.getfqdn()}:{self._tracing_receivers_ports[protocol]}"
+            return f"{self._fqdn}:{self._tracing_receivers_ports[protocol]}"
+        return f"{scheme}://{self._fqdn}:{self._tracing_receivers_ports[protocol]}"
 
     @property
     def _force_enabled_tracing_protocols(self) -> Set[ReceiverProtocol]:
@@ -329,8 +348,8 @@ class GrafanaAgentCharm(CharmBase):
         requests = {"cpu": "0.25", "memory": "200Mi"}
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
-    def _on_cert_changed(self, _event):
-        """Event handler for cert change."""
+    def _on_certificate_available(self, _event):
+        """Event handler for certificate available."""
         self._update_config()
         self._update_ca()
         self._update_status()
@@ -656,28 +675,7 @@ class GrafanaAgentCharm(CharmBase):
             return
 
         # Write TLS files
-        if self.cert.enabled:
-            if not (self.cert.server_cert and self.cert.private_key and self.cert.ca_cert):
-                self.status.update_config = WaitingStatus("Waiting for TLS certificate.")
-                self.stop()
-                return
-            self.write_file(self._cert_path, self.cert.server_cert)
-            self.write_file(self._key_path, self.cert.private_key)
-            self.write_file(self._ca_path, self.cert.ca_cert)
-
-            # push CA certificate to charm container
-            ca_cert_path = Path(self._ca_path)
-            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.cert.ca_cert)  # pyright: ignore
-            subprocess.run(["update-ca-certificates", "--fresh"], check=True)
-        else:
-            # Delete TLS related files if they exist
-            self._delete_file_if_exists(self._cert_path)
-            self._delete_file_if_exists(self._key_path)
-            self._delete_file_if_exists(self._ca_path)
-
-            # charm container CA cert
-            Path(self._ca_path).unlink(missing_ok=True)
+        self._update_certs()
 
         config = self._generate_config()
 
@@ -786,7 +784,7 @@ class GrafanaAgentCharm(CharmBase):
                     # cit: While Tempo and the Agent both can ingest in multiple formats,
                     #  the Agent only exports in OTLP gRPC and HTTP.
                     "endpoint": self._tracing.get_endpoint("otlp_grpc"),
-                    "insecure": False if self.cert.enabled else True,
+                    "insecure": False if self._tls_available else True,
                 }
             )
 
@@ -809,7 +807,7 @@ class GrafanaAgentCharm(CharmBase):
             The arguments as a string
         """
         args = [f"-config.file={CONFIG_PATH}"]
-        if self.cert.enabled:
+        if self._tls_available:
             args.append("-server.http.enable-tls")
             args.append("-server.grpc.enable-tls")
         if not self.config["reporting_enabled"]:
@@ -848,9 +846,9 @@ class GrafanaAgentCharm(CharmBase):
             The dict representing the config
         """
         server_config: Dict[str, Any] = {"log_level": "info"}
-        if self.cert.enabled:
-            server_config["http_tls_config"] = self.tls_config
-            server_config["grpc_tls_config"] = self.tls_config
+        if self._tls_available:
+            server_config["http_tls_config"] = self._dumped_tls_config
+            server_config["grpc_tls_config"] = self._dumped_tls_config
         return server_config
 
     @property
@@ -932,7 +930,7 @@ class GrafanaAgentCharm(CharmBase):
             logger.warning("No tempo receivers enabled: grafana-agent cannot ingest traces.")
             return {}
 
-        if self.cert.enabled:
+        if self._tls_available:
             base_receiver_config: Dict[str, Union[str, Dict]] = {
                 "tls": {
                     "ca_file": str(self._ca_path),
@@ -1114,16 +1112,16 @@ class GrafanaAgentCharm(CharmBase):
                 }
             )
 
-        if self.cert.enabled:
+        if self._tls_available:
             for config in configs:
                 for scrape_config in config.get("scrape_configs", []):
                     if scrape_config.get("loki_push_api"):
                         scrape_config["loki_push_api"]["server"][
                             "http_tls_config"
-                        ] = self.tls_config
+                        ] = self._dumped_tls_config
                         scrape_config["loki_push_api"]["server"][
                             "grpc_tls_config"
-                        ] = self.tls_config
+                        ] = self._dumped_tls_config
 
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
@@ -1136,12 +1134,45 @@ class GrafanaAgentCharm(CharmBase):
         )
 
     @property
-    def tls_config(self):
-        """Generates the TLS config."""
+    def _tls_config(self) -> Optional[TLSConfig]:
+        certificates, key = self._cert_requirer.get_assigned_certificate(
+            certificate_request=self._csr_attributes
+        )
+        if not (key and certificates):
+            return None
+        return TLSConfig(certificates.certificate.raw, certificates.ca.raw, key.raw)
+
+    @property
+    def _tls_available(self) -> bool:
+        return bool(self._tls_config)
+
+    @property
+    def _dumped_tls_config(self):
+        """The TLS config to be dumped to the workload config."""
         return {
             "cert_file": self._cert_path,
             "key_file": self._key_path,
         }
+
+    def _update_certs(self):
+        ca_cert_path = Path(self._ca_path)
+        if tls_config := self._tls_config:
+            self.write_file(self._cert_path, tls_config.server_cert)
+            self.write_file(self._key_path, tls_config.private_key)
+            self.write_file(self._ca_path, tls_config.ca_cert)
+
+            # push CA certificate to charm container
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(tls_config.ca_cert)  # pyright: ignore
+            subprocess.run(["update-ca-certificates", "--fresh"], check=True)
+        else:
+            # Delete TLS related files if they exist
+            self._delete_file_if_exists(self._cert_path)
+            self._delete_file_if_exists(self._key_path)
+            self._delete_file_if_exists(self._ca_path)
+
+            # charm container CA cert
+            ca_cert_path.unlink(missing_ok=True)
 
     @property
     def _instance_topology(self) -> Dict[str, str]:
@@ -1197,7 +1228,8 @@ class GrafanaAgentCharm(CharmBase):
 
     def _update_ca(self) -> None:
         """Updates the CA cert on disk from cert_manager."""
-        if (not self.cert.enabled) or (not self.cert.ca_cert):
+        tls_config = self._tls_config
+        if not tls_config:
             try:
                 self.read_file(self._ca_path)
             except (FileNotFoundError, PathError):
@@ -1205,5 +1237,5 @@ class GrafanaAgentCharm(CharmBase):
             else:
                 self.delete_file(self._ca_path)
         else:
-            self.write_file(self._ca_path, self.cert.ca_cert)
+            self.write_file(self._ca_path, tls_config.ca_cert)
         self.run(["update-ca-certificates", "--fresh"])

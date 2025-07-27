@@ -1,13 +1,45 @@
+# Learn more about charmcraft.yaml configuration at:
+# https://juju.is/docs/sdk/charmcraft-config
+name: prometheus-tester
 type: charm
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "20.04"
-    run-on:
-    - name: "ubuntu"
-      channel: "20.04"
+summary: |
+description: |
+  This charm generates test data which is ingested by the
+  Prometheus operator
+assumes:
+  - k8s-api
+
+platforms:
+  ubuntu@24.04:amd64:
+
+containers:
+  prometheus-tester:
+    resource: prometheus-tester-image
+
+resources:
+  prometheus-tester-image:
+    type: oci-image
+    description: upstream docker image for prometheus-tester
+    upstream-source: python:slim
+
 parts:
   charm:
-    charm-binary-python-packages: [cryptography, cosl, jsonschema]
-    build-packages:
-    - git
+    source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+
+config:
+  options:
+    scrape-interval:
+      default: 1s
+      description: "Prometheus job configuration for scrape interval"
+      type: string
+    alert-rules-path:
+      default: src/prometheus_alert_rules
+      description: "Path for alert rules passed to the Provider"
+      type: string

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Dict
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import ops.testing
 import responses
@@ -266,6 +266,7 @@ class TestScrapeConfiguration(unittest.TestCase):
         expected = "-config.file=/etc/grafana-agent.yaml"
         self.assertEqual(self.harness.charm._cli_args(), expected)
 
+    @patch("grafana_agent.GrafanaAgentCharm._tls_config", Mock(ca_cert="ca", server_cert="cert", private_key="key"))
     def test_cli_args_with_tls(self):
         rel_id = self.harness.add_relation("certificates", "certs")
         self.harness.add_relation_unit(rel_id, "certs/0")
@@ -328,11 +329,11 @@ class TestScrapeConfiguration(unittest.TestCase):
         self.harness.remove_relation(rel_id)
         self.assertEqual({}, self.harness.charm._loki_config)
 
+    @patch("grafana_agent.GrafanaAgentCharm._tls_config", Mock(ca_cert="ca", server_cert="cert", private_key="key"))
     def test_loki_config_with_tls(self):
         self.harness.handle_exec("agent", ["update-ca-certificates"], result=0)
         rel_id = self.harness.add_relation("certificates", "certs")
         self.harness.add_relation_unit(rel_id, "certs/0")
-        self.harness.update_relation_data(rel_id, "certs", {"certificates": CERTS_RELATION_DATA})
         configs = self.harness.charm._loki_config
         for config in configs:
             for scrape_config in config.get("scrape_configs", []):  # pyright: ignore
