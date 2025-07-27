@@ -86,7 +86,7 @@ async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus
         prometheus_tester_charm,
         prometheus_tester_name,
         model=ops_test.model.name,
-        resource=f"prometheus-tester-image={oci_image('./tests/integration/prometheus-tester/metadata.yaml', 'prometheus-tester-image')}",
+        resource=f"prometheus-tester-image={oci_image('./tests/integration/prometheus-tester/charmcraft.yaml', 'prometheus-tester-image')}",
     )
     sh.juju.relate(agent_name, prometheus_tester_name, model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
