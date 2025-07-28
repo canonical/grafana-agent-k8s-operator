@@ -164,6 +164,7 @@ class LokiTesterCharm(CharmBase):
             self.log("debug", "Successfully set Loki Logger")
 
     def log(self, level, msg):
+        """Log something."""
         try:
             getattr(self.logger, level)(msg)
             return True
