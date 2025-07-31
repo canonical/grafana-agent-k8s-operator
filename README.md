@@ -1,3 +1,10 @@
+> ### ℹ️ Deprecation notice
+> While this charm will continue to get security fixes and critical updates for the foreseeable future, it
+> is to be considered deprecated from a feature perspective. New deployments are instead adviced to use
+> the [OpenTelemetry collector for K8s](https://github.com/canonical/opentelemetry-collector-k8s-operator)
+
+---
+
 # Grafana Agent Charmed Operator for Kubernetes 
 
 [![Charmhub Badge](https://charmhub.io/grafana-agent-k8s/badge.svg)](https://charmhub.io/grafana-agent-k8s)
