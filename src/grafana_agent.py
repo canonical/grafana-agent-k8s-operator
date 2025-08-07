@@ -17,7 +17,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union, cast, get_ar
 
 import yaml
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
-    CertificateTransferRequires,
     CertificatesAvailableEvent,
     CertificatesRemovedEvent,
     CertificateTransferRequires,
