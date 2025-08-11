@@ -284,7 +284,7 @@ class GrafanaAgentCharm(CharmBase):
             self._on_cert_transfer_available,
         )
         self.framework.observe(
-            self.cert_transfer.on.certificate_removed,  # pyright: ignore
+            self.cert_transfer.on.certificates_removed,  # pyright: ignore
             self._on_cert_transfer_removed,
         )
 
