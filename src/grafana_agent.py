@@ -16,13 +16,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union, cast, get_args
 
 import yaml
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent as CertificateTransferAvailableEvent,
-)
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateRemovedEvent as CertificateTransferRemovedEvent,
-)
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificatesAvailableEvent,
+    CertificatesRemovedEvent,
     CertificateTransferRequires,
 )
 from charms.grafana_cloud_integrator.v0.cloud_config_requirer import (
@@ -89,6 +85,7 @@ class CompoundStatus:
     update_config: Optional[Union[BlockedStatus, WaitingStatus]] = None
     validation_error: Optional[BlockedStatus] = None
 
+
 @dataclass
 class TLSConfig:
     """TLS configuration received by the charm over the `certificates` relation."""
@@ -96,6 +93,7 @@ class TLSConfig:
     server_cert: str
     ca_cert: str
     private_key: str
+
 
 class GrafanaAgentCharm(CharmBase):
     """Grafana Agent Charm."""
@@ -246,7 +244,9 @@ class GrafanaAgentCharm(CharmBase):
             self._tracing_provider.on.broken,  # pyright: ignore
             self._on_tracing_provider_broken,
         )
-        self.framework.observe(self._cert_requirer.on.certificate_available, self._on_certificate_available)  # pyright: ignore
+        self.framework.observe(
+            self._cert_requirer.on.certificate_available, self._on_certificate_available
+        )  # pyright: ignore
 
         self.framework.observe(
             self._cloud.on.cloud_config_available,  # pyright: ignore
@@ -280,11 +280,11 @@ class GrafanaAgentCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
         self.framework.observe(
-            self.cert_transfer.on.certificate_available,  # pyright: ignore
+            self.cert_transfer.on.certificate_set_updated,  # pyright: ignore
             self._on_cert_transfer_available,
         )
         self.framework.observe(
-            self.cert_transfer.on.certificate_removed,  # pyright: ignore
+            self.cert_transfer.on.certificates_removed,  # pyright: ignore
             self._on_cert_transfer_removed,
         )
 
@@ -420,18 +420,21 @@ class GrafanaAgentCharm(CharmBase):
         self._update_config()
         self._update_tracing_provider()
 
-    def _on_cert_transfer_available(self, event: CertificateTransferAvailableEvent):
-        cert_filename = (
-            f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
-        )
-        self.write_file(cert_filename, event.ca)
+    def _on_cert_transfer_available(self, event: CertificatesAvailableEvent):
+        for i, cert in enumerate(event.certificates):
+            cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-{i}-ca.crt"
+            self.write_file(cert_filename, cert)
         self.run(["update-ca-certificates", "--fresh"])
 
-    def _on_cert_transfer_removed(self, event: CertificateTransferRemovedEvent):
-        cert_filename = (
-            f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-ca.crt"
-        )
-        self.delete_file(cert_filename)
+    def _on_cert_transfer_removed(self, event: CertificatesRemovedEvent):
+        certs_to_remove = [
+            filename
+            for filename in os.listdir(self._ca_folder_path)
+            if filename.startswith(f"receive-ca-cert-{self.model.uuid}-{event.relation_id}")
+        ]
+        for cert in certs_to_remove:
+            self.delete_file(cert)
+
         self.run(["update-ca-certificates", "--fresh"])
 
     # Abstract Methods
@@ -595,7 +598,6 @@ class GrafanaAgentCharm(CharmBase):
 
         reload_func()
 
-
     def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.status.update_config = BlockedStatus(cast(str, event.message))
         self._update_status()
@@ -715,9 +717,7 @@ class GrafanaAgentCharm(CharmBase):
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
-        self._grafana_dashboards_provider._reinitialize_dashboard_data(
-            inject_dropdowns=False
-        )  # noqa
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)  # noqa
         self._update_status()
 
     def _enhance_endpoints_with_tls(self, endpoints) -> List[Dict[str, Any]]:
@@ -1116,12 +1116,12 @@ class GrafanaAgentCharm(CharmBase):
             for config in configs:
                 for scrape_config in config.get("scrape_configs", []):
                     if scrape_config.get("loki_push_api"):
-                        scrape_config["loki_push_api"]["server"][
-                            "http_tls_config"
-                        ] = self._dumped_tls_config
-                        scrape_config["loki_push_api"]["server"][
-                            "grpc_tls_config"
-                        ] = self._dumped_tls_config
+                        scrape_config["loki_push_api"]["server"]["http_tls_config"] = (
+                            self._dumped_tls_config
+                        )
+                        scrape_config["loki_push_api"]["server"]["grpc_tls_config"] = (
+                            self._dumped_tls_config
+                        )
 
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
