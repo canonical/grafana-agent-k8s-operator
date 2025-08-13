@@ -65,6 +65,37 @@ DASHBOARDS_DEST_PATH = "grafana_dashboards"  # placeholder until we figure out t
 RulesMapping = namedtuple("RulesMapping", ["src", "dest"])
 
 
+def key_value_pair_string_to_dict(key_value_pair: str) -> dict:
+    """Transform a comma-separated key-value pairs into a dict."""
+    result = {}
+
+    for pair in key_value_pair.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+
+        if ":" in pair:
+            sep = ":"
+        elif "=" in pair:
+            sep = "="
+        else:
+            logger.error("Invalid pair without separator ':' or '=': '%s'", pair)
+            continue
+
+        key, value = map(str.strip, pair.split(sep, 1))
+
+        if not key:
+            logger.error("Empty key in pair: '%s'", pair)
+            continue
+        if not value:
+            logger.error("Empty value in pair: '%s'", pair)
+            continue
+
+        result[key] = value
+
+    return result
+
+
 class GrafanaAgentReloadError(Exception):
     """Custom exception to indicate that grafana agent config couldn't be reloaded."""
 
@@ -155,11 +186,15 @@ class GrafanaAgentCharm(CharmBase):
                 shutil.copytree(rules.src, rules.dest, dirs_exist_ok=True)
 
         self._forward_alert_rules = cast(bool, self.config["forward_alert_rules"])
+        extra_alert_labels = key_value_pair_string_to_dict(
+            cast(str, self.model.config.get("extra_alert_labels", ""))
+        )
         self._remote_write = PrometheusRemoteWriteConsumer(
             self,
             alert_rules_path=self.metrics_rules_paths.dest,
             forward_alert_rules=self._forward_alert_rules,
             refresh_event=[self.on.config_changed],
+            extra_alert_labels=extra_alert_labels,
         )
 
         self._loki_consumer = LokiPushApiConsumer(
@@ -691,9 +726,7 @@ class GrafanaAgentCharm(CharmBase):
     def _on_dashboard_status_changed(self, _event=None):
         """Re-initialize dashboards to forward."""
         # TODO: add constructor arg for `inject_dropdowns=False` instead of 'private' method?
-        self._grafana_dashboards_provider._reinitialize_dashboard_data(
-            inject_dropdowns=False
-        )  # noqa
+        self._grafana_dashboards_provider._reinitialize_dashboard_data(inject_dropdowns=False)  # noqa
         self._update_status()
 
     def _enhance_endpoints_with_tls(self, endpoints) -> List[Dict[str, Any]]:
@@ -1092,12 +1125,12 @@ class GrafanaAgentCharm(CharmBase):
             for config in configs:
                 for scrape_config in config.get("scrape_configs", []):
                     if scrape_config.get("loki_push_api"):
-                        scrape_config["loki_push_api"]["server"][
-                            "http_tls_config"
-                        ] = self.tls_config
-                        scrape_config["loki_push_api"]["server"][
-                            "grpc_tls_config"
-                        ] = self.tls_config
+                        scrape_config["loki_push_api"]["server"]["http_tls_config"] = (
+                            self.tls_config
+                        )
+                        scrape_config["loki_push_api"]["server"]["grpc_tls_config"] = (
+                            self.tls_config
+                        )
 
         configs.extend(self._additional_log_configs)  # type: ignore
         return (
