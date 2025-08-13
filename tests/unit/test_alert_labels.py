@@ -10,26 +10,28 @@ from ops.testing import Container, PeerRelation, Relation, State
 ConfigDict = Dict[str, Union[str, int, float, bool]]
 
 zinc_alerts = {
-    "alert_rules": json.dumps({
-        'groups': [
-            {
-                'name': 'alertgroup',
-                'rules': [
-                    {
-                        'alert': 'Missing',
-                        'expr': 'up == 0',
-                        'for': '0m',
-                        'labels': {
-                            'juju_model': 'my_model',
-                            'juju_model_uuid': '74a5690b-89c9-44dd-984b-f69f26a6b751',
-                            'juju_application': 'zinc',
-                            'juju_charm' : 'zinc-k8s',
-                        },
-                    }
-                ],
-            }
-        ]
-    })
+    "alert_rules": json.dumps(
+        {
+            "groups": [
+                {
+                    "name": "alertgroup",
+                    "rules": [
+                        {
+                            "alert": "Missing",
+                            "expr": "up == 0",
+                            "for": "0m",
+                            "labels": {
+                                "juju_model": "my_model",
+                                "juju_model_uuid": "74a5690b-89c9-44dd-984b-f69f26a6b751",
+                                "juju_application": "zinc",
+                                "juju_charm": "zinc-k8s",
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    )
 }
 
 containers = [Container(name="agent", can_connect=True)]
@@ -40,10 +42,14 @@ containers = [Container(name="agent", can_connect=True)]
 def test_extra_alerts_config(ctx):
     # GIVEN a new key-value pair of extra alerts labels, for instance:
     # juju config agent extra_alerts_labels="environment: PRODUCTION, zone=Mars"
-    config1: ConfigDict = {"extra_alert_labels": "environment: PRODUCTION, zone=Mars",}
+    config1: ConfigDict = {
+        "extra_alert_labels": "environment: PRODUCTION, zone=Mars",
+    }
 
     # THEN The extra_alert_labels MUST be added to the alert rules.
-    metrics_endpoint_relation = Relation("metrics-endpoint", remote_app_name="zinc", remote_app_data=zinc_alerts)
+    metrics_endpoint_relation = Relation(
+        "metrics-endpoint", remote_app_name="zinc", remote_app_data=zinc_alerts
+    )
     remote_write_relation = Relation("send-remote-write", remote_app_name="prometheus")
     state = State(
         leader=True,
@@ -53,7 +59,7 @@ def test_extra_alerts_config(ctx):
             PeerRelation("peers"),
         ],
         containers=containers,
-        config=config1, # type: ignore
+        config=config1,  # type: ignore
     )
     out_0 = ctx.run(ctx.on.relation_changed(relation=metrics_endpoint_relation), state)
     out_1 = ctx.run(
@@ -65,14 +71,13 @@ def test_extra_alerts_config(ctx):
 
     for group in alert_rules["groups"]:
         for rule in group["rules"]:
+            assert rule["labels"]["environment"] == "PRODUCTION"
+            assert rule["labels"]["zone"] == "Mars"
             if "grafana_agent_k8s_alertgroup_alerts" in group["name"]:
-                assert rule["labels"]["environment"] == "PRODUCTION"
-                assert rule["labels"]["zone"] == "Mars"
                 assert rule["labels"]["juju_application"] == "zinc"
                 assert rule["labels"]["juju_charm"] == "zinc-k8s"
                 assert rule["labels"]["juju_model"] == "my_model"
                 assert rule["labels"]["juju_model_uuid"] == "74a5690b-89c9-44dd-984b-f69f26a6b751"
-
 
     # GIVEN the config option for extra alert labels is unset
     config2: ConfigDict = {"extra_alert_labels": ""}
@@ -86,8 +91,8 @@ def test_extra_alerts_config(ctx):
     )
     out_2 = ctx.run(ctx.on.config_changed(), next_state)
     alert_rules_mod = json.loads(
-         out_2.get_relation(remote_write_relation.id).local_app_data["alert_rules"]
-     )
+        out_2.get_relation(remote_write_relation.id).local_app_data["alert_rules"]
+    )
 
     for group in alert_rules_mod["groups"]:
         for rule in group["rules"]:

@@ -5,11 +5,10 @@
 
 """A  juju charm for Grafana Agent on Kubernetes."""
 
-import copy
 import json
 import logging
 import pathlib
-from typing import Any, Dict, List, Union, cast
+from typing import Any, Dict, List, Union
 
 import yaml
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
@@ -24,47 +23,6 @@ from grafana_agent import CONFIG_PATH, GrafanaAgentCharm
 logger = logging.getLogger(__name__)
 
 SCRAPE_RELATION_NAME = "metrics-endpoint"
-
-
-def key_value_pair_string_to_dict(key_value_pair: str) -> dict:
-    """Transform a comma-separated key-value pairs into a dict."""
-    result = {}
-
-    for pair in key_value_pair.split(","):
-        pair = pair.strip()
-        if not pair:
-            continue
-
-        if ":" in pair:
-            sep = ":"
-        elif "=" in pair:
-            sep = "="
-        else:
-            logger.error("Invalid pair without separator ':' or '=': '%s'", pair)
-            continue
-
-        key, value = map(str.strip, pair.split(sep, 1))
-
-        if not key:
-            logger.error("Empty key in pair: '%s'", pair)
-            continue
-        if not value:
-            logger.error("Empty value in pair: '%s'", pair)
-            continue
-
-        result[key] = value
-
-    return result
-
-def inject_extra_labels_to_alert_rules(rules: dict, extra_alert_labels: dict) -> dict:
-    """Inject extra alert labels into alert labels."""
-    """Return a copy of the rules dict with extra labels injected."""
-    result = copy.deepcopy(rules)
-    for item in result.values():
-        for group in item.get("groups", []):
-            for rule in group.get("rules", []):
-                rule.setdefault("labels", {}).update(extra_alert_labels)
-    return result
 
 
 @trace_charm(
@@ -193,13 +151,8 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             return {}
 
         alert_rules = self._scrape.alerts
-        extra_alert_labels = key_value_pair_string_to_dict(cast(str, self.model.config.get("extra_alert_labels", "")))
-
-        if extra_alert_labels:
-            alert_rules = inject_extra_labels_to_alert_rules(alert_rules, extra_alert_labels)
 
         return alert_rules
-
 
     @property
     def dashboards(self) -> list:
