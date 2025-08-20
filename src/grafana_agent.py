@@ -203,6 +203,7 @@ class GrafanaAgentCharm(CharmBase):
             alert_rules_path=self.loki_rules_paths.dest,
             forward_alert_rules=self._forward_alert_rules,
             refresh_event=[self.on.config_changed],
+            extra_alert_labels=extra_alert_labels,
         )
 
         self._grafana_dashboards_provider = GrafanaDashboardProvider(
