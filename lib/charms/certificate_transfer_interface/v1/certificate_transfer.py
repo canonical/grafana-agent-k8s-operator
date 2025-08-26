@@ -124,7 +124,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 logger = logging.getLogger(__name__)
 
@@ -291,8 +291,8 @@ class ProviderApplicationData(DatabagModel):
     )
 
 
-class _Certificate(pydantic.BaseModel):
-    """Certificate model."""
+class ProviderUnitDataV0(DatabagModel):
+    """Provider Unit databag v0 model."""
 
     ca: str
     certificate: str
@@ -301,12 +301,6 @@ class _Certificate(pydantic.BaseModel):
         description="Version of the interface used in this databag",
         default=0,
     )
-
-
-class ProviderUnitDataV0(DatabagModel):
-    """Provider Unit databag v0 model."""
-
-    certificates: List[_Certificate] = []
 
 
 class RequirerApplicationData(DatabagModel):
@@ -456,8 +450,11 @@ class CertificateTransferProvides(Object):
                 )
 
             databag = relation.data[self.model.unit]
-            certificates = [_Certificate(ca=cert, certificate=cert, chain=[cert]) for cert in data]
-            ProviderUnitDataV0(certificates=certificates).dump(databag, True)
+            if data:
+                certificates = list(data)
+                ProviderUnitDataV0(
+                    ca=certificates[0], certificate=certificates[0], chain=certificates
+                ).dump(databag, True)
 
     def _get_relation_data(self, relation: Relation) -> Set[str]:
         """Get the given relation data."""
@@ -467,7 +464,10 @@ class CertificateTransferProvides(Object):
                 return ProviderApplicationData().load(databag).certificates
             else:
                 databag = relation.data[self.model.unit]
-                return {cert.ca for cert in ProviderUnitDataV0().load(databag).certificates}
+                certs = ProviderUnitDataV0.load(databag).chain
+                if certs is None:
+                    return set()
+                return set(certs)
         except DataValidationError as e:
             logger.error(
                 (
@@ -632,7 +632,10 @@ class CertificateTransferRequires(Object):
             certificates = ProviderApplicationData().load(databag).certificates
             if not certificates and relation.units:
                 databag = relation.data.get(relation.units.pop(), {})
-                return {cert.ca for cert in ProviderUnitDataV0().load(databag).certificates}
+                certs = ProviderUnitDataV0.load(databag).chain
+                if certs is None:
+                    return set()
+                return set(certs)
             return certificates
         except DataValidationError as e:
             logger.error(
