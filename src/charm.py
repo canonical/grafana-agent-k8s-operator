@@ -208,6 +208,20 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
         version_output, _ = self._container.exec(["/bin/agent", "-version"]).wait_output()
         return version_output
 
+    def list_files(self, path: str):
+        """Get a list of all files (and directories) at a path.
+
+        This method relies on the `Container.list_files()` method which accepts a path as string and returns a list of directory entries as pebble.FileInfo
+        Ref: https://github.com/canonical/operator/blob/ed173824fad4fbf2236120a263b0882feda413db/ops/model.py#L2894
+        We'll iterative over the found pebble.FileInfo paths and return the string path of each using pebble.FileInfo.path
+
+        Returns:
+            List of paths as string
+        """
+        paths = self._container.list_files(path)
+        logger.info("Paths are: %s", paths)
+        return [path.path for path in paths]
+
     def read_file(self, filepath: Union[str, pathlib.Path]):
         """Read a file's contents.
 
