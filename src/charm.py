@@ -219,7 +219,6 @@ class GrafanaAgentK8sCharm(GrafanaAgentCharm):
             List of paths as string
         """
         paths = self._container.list_files(path)
-        logger.info("Paths are: %s", paths)
         return [path.path for path in paths]
 
     def read_file(self, filepath: Union[str, pathlib.Path]):
