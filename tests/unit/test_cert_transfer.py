@@ -1,14 +1,15 @@
 
 import json
+import pathlib
+import tempfile
 import uuid
 from pathlib import Path
 
 import yaml
 from helpers import k8s_resource_multipatch, patch_lightkube_client
 from ops import pebble
-from ops.testing import Container, Exec, Model, Relation, State, Mount
-import tempfile
-import pathlib
+from ops.testing import Container, Exec, Model, Mount, Relation, State
+
 
 @patch_lightkube_client
 @k8s_resource_multipatch
@@ -88,10 +89,10 @@ def test_ca_cert_removed_from_disk_on_relation_broken(ctx):
         remote_app_data=remote_app_data,
         id=rel_id,
     )
-    
+
     # Creating a dummy fake CA cert file
     # This file will need to be mounted into the container. When the relation is broken, we'll check that the file has been deleted.
-    
+
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         dummy_path = pathlib.Path(tmp.name)
     cert_path = f"{ca_cert_path}/receive-ca-cert-{model_uuid}-{rel_id}-0-ca.crt"
@@ -106,7 +107,7 @@ def test_ca_cert_removed_from_disk_on_relation_broken(ctx):
                 "agent",
                 can_connect=True,
                 execs=[Exec(['update-ca-certificates', '--fresh'])],
-                mounts=mounts,              
+                mounts=mounts,
             ),
         ],
         relations=[certificate_transfer_relation],
@@ -120,5 +121,4 @@ def test_ca_cert_removed_from_disk_on_relation_broken(ctx):
 
     fs = agent.get_filesystem(ctx)
     ca_cert_path = fs.joinpath(*ca_cert_path.strip("/").split("/"))
-    files = [f for f in ca_cert_path.iterdir()]
-    assert files == []
+    assert list(ca_cert_path.iterdir()) == []
