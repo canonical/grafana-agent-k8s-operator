@@ -90,14 +90,14 @@ def test_ca_cert_removed_from_disk_on_relation_broken(ctx):
         id=rel_id,
     )
 
-    # Creating a dummy fake CA cert file
+    # Creating a fake CA cert file
     # This file will need to be mounted into the container. When the relation is broken, we'll check that the file has been deleted.
 
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        dummy_path = pathlib.Path(tmp.name)
+        fake_path = pathlib.Path(tmp.name)
     cert_path = f"{ca_cert_path}/receive-ca-cert-{model_uuid}-{rel_id}-0-ca.crt"
     mounts = {
-        'fake-ca-cert': Mount(location=cert_path, source=dummy_path),
+        'fake-ca-cert': Mount(location=cert_path, source=fake_path),
     }
 
     state = State(
