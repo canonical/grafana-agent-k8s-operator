@@ -51,7 +51,7 @@ def test_ca_cert_removed_from_disk_on_relation_broken(ctx):
         relations=[certificate_transfer_relation],
         model=Model(uuid=str(model_uuid)),
     )
-    # WHEN a relation is joined
+    # WHEN a relation is broken
     state_out = ctx.run(ctx.on.relation_broken(certificate_transfer_relation), state)
 
     # THEN the fake CA cert file should be deleted
