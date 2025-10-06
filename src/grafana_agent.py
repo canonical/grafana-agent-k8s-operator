@@ -461,6 +461,8 @@ class GrafanaAgentCharm(CharmBase):
             cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-{i}-ca.crt"
             self.write_file(cert_filename, cert)
         self.run(["update-ca-certificates", "--fresh"])
+        # Necessary to restart the `agent` Pebble service with the new certificates
+        self.restart()
 
     def _on_cert_transfer_removed(self, event: CertificatesRemovedEvent):
         certs_to_remove = [
