@@ -461,12 +461,14 @@ class GrafanaAgentCharm(CharmBase):
             cert_filename = f"{self._ca_folder_path}/receive-ca-cert-{self.model.uuid}-{event.relation_id}-{i}-ca.crt"
             self.write_file(cert_filename, cert)
         self.run(["update-ca-certificates", "--fresh"])
+        # Necessary to restart the `agent` Pebble service with the new certificates
+        self.restart()
 
     def _on_cert_transfer_removed(self, event: CertificatesRemovedEvent):
         certs_to_remove = [
             filename
-            for filename in os.listdir(self._ca_folder_path)
-            if filename.startswith(f"receive-ca-cert-{self.model.uuid}-{event.relation_id}")
+            for filename in self.list_files(self._ca_folder_path)
+            if f"receive-ca-cert-{self.model.uuid}-{event.relation_id}" in filename
         ]
         for cert in certs_to_remove:
             self.delete_file(cert)
@@ -482,6 +484,14 @@ class GrafanaAgentCharm(CharmBase):
     def is_ready(self):
         """Checks if the charm is ready for configuration."""
         raise NotImplementedError("Please override the is_ready method")
+
+    def list_files(self, path: str):
+        """Get the list of all paths and dirs at path.
+
+        Returns:
+            List of paths of files and dirs at dir path
+        """
+        raise NotImplementedError("Please override the list_files method")
 
     def read_file(self, filepath: Union[str, Path]):
         """Read a file's contents.
