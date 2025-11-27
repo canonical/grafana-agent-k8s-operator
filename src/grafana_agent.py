@@ -215,6 +215,7 @@ class GrafanaAgentCharm(CharmBase):
             forward_alert_rules=self._forward_alert_rules,
             refresh_event=[self.on.config_changed],
             extra_alert_labels=extra_alert_labels,
+            peer_relation_name="peers",
         )
 
         self._loki_consumer = LokiPushApiConsumer(
