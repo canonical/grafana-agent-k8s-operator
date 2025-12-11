@@ -750,8 +750,8 @@ class GrafanaAgentCharm(CharmBase):
         except APIError as e:
             logger.warning(str(e))
             self.status.update_config = WaitingStatus(str(e))
-
-        self.status.update_config = None
+        else:
+            self.status.update_config = None
 
     def _delete_file_if_exists(self, file_path):
         try:
