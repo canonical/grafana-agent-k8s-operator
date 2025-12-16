@@ -730,19 +730,20 @@ class GrafanaAgentCharm(CharmBase):
 
         try:
             old_config = yaml.safe_load(self.read_file(CONFIG_PATH))
-        except (FileNotFoundError, PathError, ParserError):
-            # File does not yet exist? Processing a deferred event?
+        except (FileNotFoundError, PathError, ParserError) as e:
+            logger.debug("failed to read '%s' (Reason: %s). Assuming config file does not yet exist.", CONFIG_PATH, e)
             old_config = None
 
         if config == old_config and not self.is_command_changed():
+            logger.debug("no change in config; leaving as-is and skipping service restart")
             # Nothing changed, possibly new installation. Move on.
             self.status.update_config = None
             return
 
         try:
-            self.write_file(CONFIG_PATH, yaml.dump(config))
+            logger.debug("config changed; overwriting %s and restarting service to pick up the new config", CONFIG_PATH)
+            self.write_file(CONFIG_PATH, yaml.safe_dump(config))
             # FIXME: change this to self._reload_config when #19 is fixed
-            # Restart the service to pick up the new config
             self.restart()
         except GrafanaAgentReloadError as e:
             logger.error(str(e))
