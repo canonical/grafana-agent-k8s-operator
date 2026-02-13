@@ -23,7 +23,7 @@ async def test_deploy_from_local_path(ops_test, grafana_agent_charm):
 
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     await ops_test.model.deploy(
-        grafana_agent_charm, application_name=app_name, resources=resources
+        grafana_agent_charm, application_name=app_name, resources=resources, trust=True,
     )
     await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
 

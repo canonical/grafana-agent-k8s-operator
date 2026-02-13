@@ -28,6 +28,6 @@ async def test_deploy_from_edge_and_upgrade_from_local_path(ops_test, grafana_ag
 
     logger.info("upgrade deployed charm with local charm %s", grafana_agent_charm)
     await ops_test.model.applications[app_name].refresh(
-        path=grafana_agent_charm, resources=resources
+        path=grafana_agent_charm, resources=resources, trust=True,
     )
     await ops_test.model.wait_for_idle(apps=[app_name], timeout=1000)
