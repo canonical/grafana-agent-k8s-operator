@@ -51,7 +51,7 @@ containers:
 resources:
   agent-image:
     type: oci-image
-    upstream-source: ubuntu/grafana-agent:0.44-22.04
+    upstream-source: ubuntu/grafana-agent:0.44-24.04
     description: OCI image for Grafana Agent
 
 requires:
