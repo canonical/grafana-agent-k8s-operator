@@ -18,7 +18,7 @@ def ctx():
 def patch_charm_paths():
     base = Path(tempfile.mkdtemp())
 
-    # Create src/prometheus_alert_rules inside base dir
+    # Create src/prometheus_alert_rules inside base dir.
     rules_src = base / "src" / "prometheus_alert_rules"
     rules_src.mkdir(parents=True)
 
