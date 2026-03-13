@@ -32,7 +32,11 @@ async def test_deploy(ops_test, grafana_agent_charm):
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     resources_arg = f"agent-image={resources['agent-image']}"
     sh.juju.deploy(
-        grafana_agent_charm, agent_name, model=ops_test.model.name, resource=resources_arg
+        grafana_agent_charm,
+        agent_name,
+        model=ops_test.model.name,
+        resource=resources_arg,
+        trust=True,
     )
 
     # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
