@@ -1,7 +1,5 @@
-> ### ℹ️ Deprecation notice
-> While this charm will continue to get security fixes and critical updates for the foreseeable future, it
-> is to be considered deprecated from a feature perspective. New deployments are instead adviced to use
-> the [OpenTelemetry collector for K8s](https://github.com/canonical/opentelemetry-collector-k8s-operator)
+> [!WARNING]
+> This charm reaches end of life July 2026. Consider switching to [opentelemetry-collector](https://github.com/canonical/opentelemetry-collector-operator) for continued support.
 
 ---
 
