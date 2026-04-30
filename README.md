@@ -1,5 +1,5 @@
 > [!WARNING]
-> This charm reaches end of life July 2026. Consider switching to [opentelemetry-collector](https://github.com/canonical/opentelemetry-collector-operator) for continued support.
+> This charm reaches end of life by the end of 2026. Consider switching to [opentelemetry-collector](https://github.com/canonical/opentelemetry-collector-operator) for continued support.
 
 ---
 
