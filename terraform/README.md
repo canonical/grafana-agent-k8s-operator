@@ -8,13 +8,13 @@ This is a Terraform module facilitating the deployment of grafana-agent-k8s char
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
-| <a name="requirement_juju"></a> [juju](#requirement\_juju) | ~> 1.0 |
+| <a name="requirement_juju"></a> [juju](#requirement\_juju) | >= 1.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_juju"></a> [juju](#provider\_juju) | ~> 1.0 |
+| <a name="provider_juju"></a> [juju](#provider\_juju) | >= 1.0 |
 
 ## Modules
 
@@ -38,5 +38,6 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_app_name"></a> [app\_name](#output\_app\_name) | n/a |
-| <a name="output_endpoints"></a> [endpoints](#output\_endpoints) | n/a |
+| <a name="output_provides"></a> [provides](#output\_provides) | n/a |
+| <a name="output_requires"></a> [requires](#output\_requires) | n/a |
 <!-- END_TF_DOCS -->
