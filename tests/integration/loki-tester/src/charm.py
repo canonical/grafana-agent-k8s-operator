@@ -94,21 +94,25 @@ class LokiTesterCharm(CharmBase):
 
     def _on_config_changed(self, _):
         """Handle changed configuration."""
-        self.set_logger()
-        self.log("debug", "Handling configuration change")
+        pass
 
     def _on_update_status(self, _):
         """Handle status updates."""
-        self.set_logger()
-        self.log("debug", "Updating status")
+        pass
 
     def _on_loki_push_api_endpoint_joined(self, _):
-        self.set_logger()
-        self.log("debug", "Loki push API endpoint joined")
+        try:
+            self.set_logger()
+            self.log("debug", "Loki push API endpoint joined")
+        except Exception:
+            pass
 
     def _on_loki_push_api_endpoint_departed(self, _):
-        self.set_logger()
-        self.log("debug", "Loki push API endpoint departed")
+        try:
+            self.set_logger()
+            self.log("debug", "Loki push API endpoint departed")
+        except Exception:
+            pass
 
     def _on_log_error_action(self, event):
         self.set_logger()
