@@ -39,17 +39,35 @@ async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
     return all(get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses)
 
 
-async def loki_rules(ops_test, app_name) -> dict:
-    address = await get_unit_address(ops_test, app_name, 0)
-    url = f"http://{address}:3100"
+async def loki_rules(ops_test, app_name, retries: int = 10) -> dict:
+    """Get alert rules from Loki.
 
-    try:
-        response = urllib.request.urlopen(f"{url}/loki/api/v1/rules", data=None, timeout=2.0)
-        if response.code == 200:
-            return yaml.safe_load(response.read())
-        return {}
-    except urllib.error.HTTPError:
-        return {}
+    Args:
+        ops_test: pytest-operator plugin
+        app_name: string name of Loki application
+        retries: number of retries (with 3s delay between each)
+
+    Returns:
+        a dictionary of rule groups keyed by namespace
+    """
+    address = await get_unit_address(ops_test, app_name, 0)
+    url = f"http://{address}:3100/loki/api/v1/rules"
+
+    # Retry since rules may not be immediately available after relation changes
+    while retries > 0:
+        try:
+            response = urllib.request.urlopen(url, data=None, timeout=2.0)
+            if response.code == 200:
+                rules = yaml.safe_load(response.read())
+                if rules:
+                    return rules
+        except urllib.error.HTTPError:
+            pass
+        retries -= 1
+        if retries > 0:
+            await asyncio.sleep(3)
+
+    return {}
 
 
 async def loki_alerts(ops_test: str, app_name: str, unit_num: int = 0, retries: int = 3) -> dict:
