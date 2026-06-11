@@ -39,7 +39,7 @@ async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
     return all(get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses)
 
 
-async def loki_rules(ops_test, app_name, retries: int = 10) -> dict:
+async def loki_rules(ops_test, app_name, retries: int = 100) -> dict:
     """Get alert rules from Loki.
 
     Args:
