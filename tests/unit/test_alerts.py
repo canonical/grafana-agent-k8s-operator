@@ -168,8 +168,7 @@ class TestPrometheusRules(TestAlertIngestion):
         rules = json.loads(data["alert_rules"])
 
         for group in rules["groups"]:
-            # cosl library uses "_rules" suffix instead of old "_alerts"
-            if "provider_tester" in group["name"] and group["name"].endswith("_rules"):
+            if "provider_tester" in group["name"] and group["name"].endswith("_alerts"):
                 expr = group["rules"][0]["expr"]
                 self.assertIn("juju_model", expr)
                 self.assertIn("juju_model_uuid", expr)
@@ -236,8 +235,7 @@ class TestLokiRules(TestAlertIngestion):
         rules = json.loads(data["alert_rules"])
 
         for group in rules["groups"]:
-            # cosl library uses "_rules" suffix instead of old "_alerts"
-            if "provider_tester" in group["name"] and group["name"].endswith("_rules"):
+            if "provider_tester" in group["name"] and group["name"].endswith("_alerts"):
                 expr = group["rules"][0]["expr"]
                 self.assertIn("juju_model", expr)
                 self.assertIn("juju_model_uuid", expr)

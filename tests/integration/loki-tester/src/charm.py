@@ -142,6 +142,9 @@ class LokiTesterCharm(CharmBase):
             return
 
         tags = self.topology.label_matcher_dict
+        # Add job label - required because cosl's AlertRules replaces %%juju_topology%%
+        # with job=~".+" which requires logs to have a job label present
+        tags["job"] = self.topology.identifier
         log_endpoints = self._loki_consumer.loki_endpoints
 
         loki_handlers = {}
