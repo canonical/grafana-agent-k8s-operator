@@ -36,8 +36,12 @@ async def test_deploy(ops_test, grafana_agent_charm):
         resource=resources_arg,
         trust=True,
     )
-    sh.juju.deploy("flog-k8s", "flog", model=ops_test.model.name, trust=True)
-    sh.juju.deploy("avalanche-k8s", "avalanche", model=ops_test.model.name, trust=True)
+    sh.juju.deploy(
+        "flog-k8s", "flog", channel="latest/edge", model=ops_test.model.name, trust=True
+    )
+    sh.juju.deploy(
+        "avalanche-k8s", "avalanche", channel="dev/edge", model=ops_test.model.name, trust=True
+    )
 
     # # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
     # # address"
@@ -45,9 +49,7 @@ async def test_deploy(ops_test, grafana_agent_charm):
     # await ops_test.model.set_config({"update-status-hook-interval": "10s"})
 
     await ops_test.model.wait_for_idle(apps=[agent_name], status="blocked", timeout=300)
-    await ops_test.model.wait_for_idle(
-        apps=["flog-k8s", "avalanche-k8s"], status="active", timeout=300
-    )
+    await ops_test.model.wait_for_idle(apps=["flog", "avalanche"], status="active", timeout=300)
 
 
 async def test_relate_to_external_apps(ops_test):
