@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import sh
 import yaml
-from helpers import loki_rules, oci_image, prometheus_rules
+from helpers import loki_rules, prometheus_rules
 
 # pyright: reportAttributeAccessIssue = false
 
@@ -18,9 +18,7 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 agent_name = "agent"
 loki_name = "loki"
-loki_tester_name = "loki-tester"
 prometheus_name = "prometheus"
-prometheus_tester_name = "prometheus-tester"
 
 
 @pytest.mark.abort_on_fail
@@ -32,25 +30,35 @@ async def test_deploy(ops_test, grafana_agent_charm):
     resources = {"agent-image": METADATA["resources"]["agent-image"]["upstream-source"]}
     resources_arg = f"agent-image={resources['agent-image']}"
     sh.juju.deploy(
-        grafana_agent_charm, agent_name, model=ops_test.model.name, resource=resources_arg, trust=True
+        grafana_agent_charm,
+        agent_name,
+        model=ops_test.model.name,
+        resource=resources_arg,
+        trust=True,
     )
+    sh.juju.deploy("flog-k8s", "flog", model=ops_test.model.name, trust=True)
+    sh.juju.deploy("avalanche-k8s", "avalanche", model=ops_test.model.name, trust=True)
 
-    # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
-    # address"
-    # issuing placeholder update_status just to trigger an event
-    await ops_test.model.set_config({"update-status-hook-interval": "10s"})
+    # # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
+    # # address"
+    # # issuing placeholder update_status just to trigger an event
+    # await ops_test.model.set_config({"update-status-hook-interval": "10s"})
 
     await ops_test.model.wait_for_idle(apps=[agent_name], status="blocked", timeout=300)
-    assert ops_test.model.applications[agent_name].units[0].workload_status == "blocked"
+    await ops_test.model.wait_for_idle(
+        apps=["flog-k8s", "avalanche-k8s"], status="active", timeout=300
+    )
 
 
 async def test_relate_to_external_apps(ops_test):
-    sh.juju.deploy("loki-k8s", loki_name, model=ops_test.model.name, channel="2/edge", trust=True)
+    sh.juju.deploy(
+        "loki-k8s", loki_name, model=ops_test.model.name, channel="dev/edge", trust=True
+    )
     sh.juju.deploy(
         "prometheus-k8s",
         prometheus_name,
         model=ops_test.model.name,
-        channel="2/edge",
+        channel="dev/edge",
         trust=True,
     )
     sh.juju.relate(f"{loki_name}:logging", agent_name, model=ops_test.model.name)
@@ -70,28 +78,17 @@ async def test_relate_to_external_apps(ops_test):
     )
 
 
-async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_charm):
-    sh.juju.deploy(loki_tester_charm, loki_tester_name, model=ops_test.model.name)
-    sh.juju.relate(agent_name, loki_tester_name, model=ops_test.model.name)
-    await ops_test.model.wait_for_idle(
-        apps=[loki_tester_name, agent_name], status="active", timeout=300
-    )
-
+async def test_relate_to_flog_and_check_alerts(ops_test):
+    sh.juju.relate(agent_name, "flog", model=ops_test.model.name)
+    await ops_test.model.wait_for_idle(apps=["flog", agent_name], status="active", timeout=300)
     loki_alerts = await loki_rules(ops_test, loki_name)
     assert len(loki_alerts) == 1
 
 
-async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus_tester_charm):
-    sh.juju.deploy(
-        prometheus_tester_charm,
-        prometheus_tester_name,
-        model=ops_test.model.name,
-        resource=f"prometheus-tester-image={oci_image('./tests/integration/prometheus-tester/charmcraft.yaml', 'prometheus-tester-image')}",
-    )
-    sh.juju.relate(agent_name, prometheus_tester_name, model=ops_test.model.name)
+async def test_relate_to_prometheus_tester_and_check_alerts(ops_test):
+    sh.juju.relate(agent_name, "avalanche", model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
-        apps=[prometheus_tester_name, agent_name], status="active", timeout=300
+        apps=["avalanche", agent_name], status="active", timeout=300
     )
-
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
     assert len(prometheus_alerts) > 0
