@@ -81,14 +81,14 @@ async def test_relate_to_external_apps(ops_test):
 
 
 async def test_relate_to_flog_and_check_alerts(ops_test):
-    sh.juju.relate(agent_name, "flog", model=ops_test.model.name)
+    sh.juju.relate(agent_name, "flog:log-forwarder", model=ops_test.model.name)
     await ops_test.model.wait_for_idle(apps=["flog", agent_name], status="active", timeout=300)
     loki_alerts = await loki_rules(ops_test, loki_name)
     assert len(loki_alerts) == 1
 
 
 async def test_relate_to_prometheus_tester_and_check_alerts(ops_test):
-    sh.juju.relate(agent_name, "avalanche", model=ops_test.model.name)
+    sh.juju.relate(agent_name, "avalanche:metrics-endpoint", model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
         apps=["avalanche", agent_name], status="active", timeout=300
     )
