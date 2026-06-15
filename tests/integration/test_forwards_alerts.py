@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import sh
 import yaml
-from helpers import loki_rules, prometheus_rules
+from helpers import loki_rules, oci_image, prometheus_rules
 
 # pyright: reportAttributeAccessIssue = false
 
@@ -18,7 +18,9 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 agent_name = "agent"
 loki_name = "loki"
+loki_tester_name = "loki-tester"
 prometheus_name = "prometheus"
+prometheus_tester_name = "prometheus-tester"
 
 
 @pytest.mark.abort_on_fail
@@ -36,20 +38,8 @@ async def test_deploy(ops_test, grafana_agent_charm):
         resource=resources_arg,
         trust=True,
     )
-    sh.juju.deploy(
-        "flog-k8s", "flog", channel="latest/edge", model=ops_test.model.name, trust=True
-    )
-    sh.juju.deploy(
-        "avalanche-k8s", "avalanche", channel="dev/edge", model=ops_test.model.name, trust=True
-    )
-
-    # # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
-    # # address"
-    # # issuing placeholder update_status just to trigger an event
-    # await ops_test.model.set_config({"update-status-hook-interval": "10s"})
 
     await ops_test.model.wait_for_idle(apps=[agent_name], status="blocked", timeout=300)
-    await ops_test.model.wait_for_idle(apps=["flog", "avalanche"], status="active", timeout=300)
 
 
 async def test_relate_to_external_apps(ops_test):
@@ -80,17 +70,28 @@ async def test_relate_to_external_apps(ops_test):
     )
 
 
-async def test_relate_to_flog_and_check_alerts(ops_test):
-    sh.juju.relate(agent_name, "flog:log-forwarder", model=ops_test.model.name)
-    await ops_test.model.wait_for_idle(apps=["flog", agent_name], status="active", timeout=300)
+async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_charm):
+    sh.juju.deploy(loki_tester_charm, loki_tester_name, model=ops_test.model.name)
+    sh.juju.relate(agent_name, loki_tester_name, model=ops_test.model.name)
+    await ops_test.model.wait_for_idle(
+        apps=[loki_tester_name, agent_name], status="active", timeout=300
+    )
+
     loki_alerts = await loki_rules(ops_test, loki_name)
     assert len(loki_alerts) == 1
 
 
-async def test_relate_to_prometheus_tester_and_check_alerts(ops_test):
-    sh.juju.relate(agent_name, "avalanche:metrics-endpoint", model=ops_test.model.name)
-    await ops_test.model.wait_for_idle(
-        apps=["avalanche", agent_name], status="active", timeout=300
+async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus_tester_charm):
+    sh.juju.deploy(
+        prometheus_tester_charm,
+        prometheus_tester_name,
+        model=ops_test.model.name,
+        resource=f"prometheus-tester-image={oci_image('./tests/integration/prometheus-tester/charmcraft.yaml', 'prometheus-tester-image')}",
     )
+    sh.juju.relate(agent_name, prometheus_tester_name, model=ops_test.model.name)
+    await ops_test.model.wait_for_idle(
+        apps=[prometheus_tester_name, agent_name], status="active", timeout=300
+    )
+
     prometheus_alerts = await prometheus_rules(ops_test, prometheus_name, 0)
     assert len(prometheus_alerts) > 0
