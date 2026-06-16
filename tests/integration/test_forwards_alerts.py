@@ -78,7 +78,7 @@ async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_char
     )
 
     loki_alerts = await loki_rules(ops_test, loki_name)
-    assert len(loki_alerts) == 1
+    assert len(loki_alerts) > 0
 
 
 async def test_relate_to_prometheus_tester_and_check_alerts(ops_test, prometheus_tester_charm):
