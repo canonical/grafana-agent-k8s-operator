@@ -70,7 +70,7 @@ async def test_relate_to_external_apps(ops_test):
 
 
 async def test_relate_to_loki_tester_and_check_alerts(ops_test):
-    sh.juju.deploy("flog-k8s", "flog", model=ops_test.model.name)
+    sh.juju.deploy("flog-k8s", "flog", model=ops_test.model.name, channel="latest/edge")
     sh.juju.relate(agent_name, "flog:log-forwarder", model=ops_test.model.name)
     await ops_test.model.wait_for_idle(apps=["flog", agent_name], status="active", timeout=300)
 
