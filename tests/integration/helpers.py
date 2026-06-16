@@ -51,7 +51,7 @@ async def loki_rules(ops_test, app_name, retries: int = 100) -> dict:
         a dictionary of rule groups keyed by namespace
     """
     address = await get_unit_address(ops_test, app_name, 0)
-    url = f"http://{address}:3100/loki/api/v1/rules"
+    url = f"http://{address}:3100/prometheus/api/v1/rules"
 
     # Retry since rules may not be immediately available after relation changes
     while retries > 0:
