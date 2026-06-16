@@ -168,7 +168,7 @@ class TestPrometheusRules(TestAlertIngestion):
         rules = json.loads(data["alert_rules"])
 
         for group in rules["groups"]:
-            if group["name"].endswith("provider_tester_alerts"):
+            if "provider_tester" in group["name"] and group["name"].endswith("_alerts"):
                 expr = group["rules"][0]["expr"]
                 self.assertIn("juju_model", expr)
                 self.assertIn("juju_model_uuid", expr)
@@ -235,7 +235,7 @@ class TestLokiRules(TestAlertIngestion):
         rules = json.loads(data["alert_rules"])
 
         for group in rules["groups"]:
-            if group["name"].endswith("provider-tester_alerts_alerts"):
+            if "provider_tester" in group["name"] and group["name"].endswith("_alerts"):
                 expr = group["rules"][0]["expr"]
                 self.assertIn("juju_model", expr)
                 self.assertIn("juju_model_uuid", expr)
