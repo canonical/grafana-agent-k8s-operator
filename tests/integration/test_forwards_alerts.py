@@ -18,7 +18,6 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 agent_name = "agent"
 loki_name = "loki"
-loki_tester_name = "loki-tester"
 prometheus_name = "prometheus"
 prometheus_tester_name = "prometheus-tester"
 
@@ -70,12 +69,10 @@ async def test_relate_to_external_apps(ops_test):
     )
 
 
-async def test_relate_to_loki_tester_and_check_alerts(ops_test, loki_tester_charm):
-    sh.juju.deploy(loki_tester_charm, loki_tester_name, model=ops_test.model.name)
-    sh.juju.relate(agent_name, loki_tester_name, model=ops_test.model.name)
-    await ops_test.model.wait_for_idle(
-        apps=[loki_tester_name, agent_name], status="active", timeout=300
-    )
+async def test_relate_to_loki_tester_and_check_alerts(ops_test):
+    sh.juju.deploy("flog-k8s", "flog", model=ops_test.model.name)
+    sh.juju.relate(agent_name, "flog:log-forwarder", model=ops_test.model.name)
+    await ops_test.model.wait_for_idle(apps=["flog", agent_name], status="active", timeout=300)
 
     loki_alerts = await loki_rules(ops_test, loki_name)
     assert len(loki_alerts) > 0
