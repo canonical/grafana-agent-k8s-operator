@@ -44,7 +44,7 @@ async def loki_rules(ops_test, app_name) -> dict:
     url = f"http://{address}:3100"
 
     try:
-        response = urllib.request.urlopen(f"{url}/loki/api/v1/rules", data=None, timeout=2.0)
+        response = urllib.request.urlopen(f"{url}/prometheus/api/v1/rules", data=None, timeout=2.0)
         if response.code == 200:
             return yaml.safe_load(response.read())
         return {}
