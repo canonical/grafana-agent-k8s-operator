@@ -6,14 +6,14 @@ This is a Terraform module facilitating the deployment of grafana-agent-k8s char
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 | <a name="requirement_juju"></a> [juju](#requirement\_juju) | >= 1.0 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_juju"></a> [juju](#provider\_juju) | >= 1.0 |
 
 ## Modules
@@ -23,7 +23,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_app_name"></a> [app\_name](#input\_app\_name) | Name to give the deployed application | `string` | `"grafana-agent"` | no |
 | <a name="input_channel"></a> [channel](#input\_channel) | Channel that the charm is deployed from | `string` | n/a | yes |
 | <a name="input_config"></a> [config](#input\_config) | Map of the charm configuration options | `map(string)` | `{}` | no |
@@ -36,7 +36,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_app_name"></a> [app\_name](#output\_app\_name) | n/a |
 | <a name="output_provides"></a> [provides](#output\_provides) | n/a |
 | <a name="output_requires"></a> [requires](#output\_requires) | n/a |
